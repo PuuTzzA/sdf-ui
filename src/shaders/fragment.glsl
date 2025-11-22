@@ -2,23 +2,30 @@
 precision highp float;
 
 #define MAX_OBJECTS 256
+#define EPSILON 1e-6
 
 // ╔══════════════════════════════════════════════════════════╗
 // ║                       UNIFORMS                           ║
 // ╚══════════════════════════════════════════════════════════╝
-layout(std140) uniform GeometryBlock {
+layout (std140) uniform GeometryBlock {
     vec4 geometryData[MAX_OBJECTS];
 };
-layout(std140) uniform ShadingBlock {
+layout (std140) uniform ShadingBlock {
     vec4 shadingData[MAX_OBJECTS];
 };
 uniform vec2 resolution;
 
 // ╔══════════════════════════════════════════════════════════╗
-// ║                 SHADER INPUT, OUTPUT                     ║
+// ║              SHADER INPUT, OUTPUT, STRUCTS               ║
 // ╚══════════════════════════════════════════════════════════╝
 in vec2 vUv;
 out vec4 fragColor;
+
+struct hitInfo {
+    int id;
+    vec3 pos;
+    vec3 normal;
+};
 
 // ╔══════════════════════════════════════════════════════════╗
 // ║                         SDFs                             ║
@@ -27,72 +34,136 @@ float sdSphere(vec3 p, float s) {
     return length(p) - s;
 }
 
-float map(vec3 p) {
-    // custom sphere position + radius
-    vec3 spherePos = vec3(geometryData[0].xy, 10000.);
-    float sphereRadius = 100.0f;
-
-    return sdSphere(p - spherePos, sphereRadius);
+float sdBox(vec3 p, vec3 b) {
+    vec3 q = abs(p) - b;
+    return length(max(q, 0.0f)) + min(max(q.x, max(q.y, q.z)), 0.0f);
 }
 
-vec3 trace(vec3 ro, vec3 rd) {
+float opSmoothUnion(float d1, float d2, float k) {
+    k *= 4.0f;
+    float h = max(k - abs(d1 - d2), 0.0f);
+    return min(d1, d2) - h * h * 0.25f / k;
+}
+
+// ╔══════════════════════════════════════════════════════════╗
+// ║                      RAYMARCHING                         ║
+// ╚══════════════════════════════════════════════════════════╝
+float map(vec3 p) {
+    // custom sphere position + radius
+    vec3 spherePos = vec3(geometryData[0].xyz);
+    float sphereRadius = geometryData[0].w;
+
+    vec3 boxPosition = vec3(0.5f, 0.5f, 0.f);
+
+    float s = sdSphere(p - spherePos, sphereRadius);
+
+    s = opSmoothUnion(s, sdBox(p - boxPosition, vec3(0.45f, 0.45f, 0.01f)), 0.05);
+    return s;
+}
+
+vec3 calcNormal(in vec3 pos) {
+    const float eps = 1e-1f;
+    const vec2 h = vec2(eps, 0.f);
+    return normalize(vec3(map(pos + h.xyy) - map(pos - h.xyy), map(pos + h.yxy) - map(pos - h.yxy), map(pos + h.yyx) - map(pos - h.yyx)));
+}
+
+// https://iquilezles.org/articles/normalsSDF/
+vec3 calcNormalTetrahedron(vec3 p) {
+    // TODO: if perspective camera, make h dependent on the distance to the camera (pixel size)
+    //const float h = 0.1f;
+    float h = max(0.0005f, 0.0005f * length(p));  // adapt with distance
+
+    const vec2 k = vec2(1, -1);
+    return normalize(k.xyy * map(p + k.xyy * h) +
+        k.yyx * map(p + k.yyx * h) +
+        k.yxy * map(p + k.yxy * h) +
+        k.xxx * map(p + k.xxx * h));
+}
+
+hitInfo trace(vec3 ro, vec3 rd) {
     const float tMax = 100000.0f;
     const float eps = 0.001f;
     const int maxSteps = 128;
 
     float t = 0.0f;   // distance traveled along ray
 
-    for(int i = 0; i < maxSteps; i++) {
+    for (int i = 0; i < maxSteps; i++) {
 
         vec3 p = ro + rd * t;   // current sample position
         float d = map(p);       // distance to nearest surface
 
-        if(d < eps) {
+        if (d < eps) {
             // hit — return a basic color (white)
-            return vec3(1.0f);
+            return hitInfo(1, p, calcNormalTetrahedron(p));
+            //return vec3(1.0f);
         }
 
-        t += d;                 // march forward safely
+        t += d;
 
-        if(t > tMax)
-            break;    // escaped (no hit)
+        if (t > tMax)
+            break;
     }
 
     // miss — return background
-    return vec3(0.0f);
+    return hitInfo(-1, vec3(0.0f), vec3(0.f, 0.f, 0.f));
+}
+
+// ╔══════════════════════════════════════════════════════════╗
+// ║                      RAYMARCHING                         ║
+// ╚══════════════════════════════════════════════════════════╝
+vec3 shade(hitInfo hit) {
+    if (hit.id == -1) {
+        return vec3(0.f);
+    }
+
+    const vec3 sundir = normalize(vec3(1.f));
+
+    vec3 colorDiffuse = vec3(0.f, 1.f, 1.f);
+    float kd = 1.f; // diffuse material property
+    float ld = 1.f; // diffuse light intensity (light source dependent)
+
+    vec3 colorAmbient = vec3(1.f, 0.f, 0.f);
+    float ka = 0.1f; // ambient material property
+    float la = 1.f; // ambient light intensity (constant for scene)
+
+    vec3 colorSpecular = vec3(1.f);
+    float ks = 1.f; // specular material property
+    float p = 20.f; // specular exponent, fall of of specular light
+    float ls = 1.f; // specular light intensity (light source dependent)
+
+    float iDiffuse = kd * ld * max(0.f, dot(-sundir, hit.normal));
+    float iAmbient = ka * la;
+    float iSpecular = ks * ls * pow(max(0.f, dot(reflect(sundir, hit.normal), vec3(0.f, 0.f, -1.f))), p);
+
+    //return hit.id != -1 ? vec3(1.f) : vec3(0.f);
+    return iDiffuse * colorDiffuse + iAmbient * colorAmbient + iSpecular * colorSpecular;
 }
 
 // ╔══════════════════════════════════════════════════════════╗
 // ║                         MAIN                             ║
 // ╚══════════════════════════════════════════════════════════╝
 void main(void) {
-/*     const vec2 subPixleOffsets[] = vec2[]( 
-        vec2(0.375,0.125)-vec2(0.5),
-        vec2(0.875,0.375)-vec2(0.5),
-        vec2(0.125,0.625)-vec2(0.5),
-        vec2(0.625,0.875)-vec2(0.5)
-    ); */
+    //fragColor = length(vUv - geometryData[0].xy) < 0.1f ? vec4(1.f, 0.f, 0.f, 1.f) : vec4(1.f);
+    //const vec2 subPixleOffsets[] = vec2[](vec2(0.375f, 0.125f) - vec2(0.5f), vec2(0.875f, 0.375f) - vec2(0.5f), vec2(0.125f, 0.625f) - vec2(0.5f), vec2(0.625f, 0.875f) - vec2(0.5f));
     const vec2 subPixleOffsets[] = vec2[](vec2(0.f, 0.f));
-
-    vec2 pixelSize = vec2(1.f) / resolution;
+    vec2 pixelSize = vec2(1.f) / resolution.x;
 
     vec3 color = vec3(0.f);
 
-    //vec3 pos = vec3(resolution * (vUv * vec2(1.f, -1.f) + vec2(0.f, 1.f)), -10.f);
-    vec3 pos = vec3(resolution * vUv, -100.);
-
+    vec3 pos = vec3(vUv * vec2(1.f, resolution.y / resolution.x), -1.f);
     vec3 dir = vec3(0.f, 0.f, 1.f);
     vec3 posOffset;
 
-    for(int i = 0; i < subPixleOffsets.length(); i++) {
+    for (int i = 0; i < subPixleOffsets.length(); i++) {
         posOffset = pos + vec3(subPixleOffsets[i] * pixelSize, 0.0f);
 
-        color += trace(posOffset, dir);
+        color += shade(trace(posOffset, dir));
     }
 
     color /= float(subPixleOffsets.length());
- 
+
     //color = vec3(vUv, 0.);
 
     fragColor = vec4(color, 1.f);
+    //fragColor = vec4(length(pos.xy) < .1f ? 1.f : 0.f, 0.f, 0.f, 1.f);
 }

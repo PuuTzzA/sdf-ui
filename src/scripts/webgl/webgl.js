@@ -36,7 +36,7 @@ function loadShader(gl, type, source) {
 
     // See if it compiled successfully
     if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-        console.log(
+        alert(
             `An error occurred compiling the shaders: ${gl.getShaderInfoLog(shader)}`,
         );
         gl.deleteShader(shader);
@@ -125,9 +125,13 @@ async function initWebgl() {
     const maxFragBlocks = gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_BLOCKS);
     console.log("max fragment blocks:", maxFragBlocks)
 
+    let dpr = window.devicePixelRatio || 1;
+    dpr = 1.;
+    console.log("aa;", window.devicePixelRatio)
+    console.log("bb;", [Math.round(canvas.clientWidth * dpr / 2), Math.round(canvas.clientHeight * dpr / 2)])
     //requestAnimationFrame(() => drawScene(gl, programInfo, buffers));
-    drawScene(gl, programInfo, buffers, [0, 0]);
-    window.addEventListener("resize", () => { resizeCanvasToDisplaySize(canvas, gl); drawScene(gl, programInfo, buffers, [0, 0]) });
+    drawScene(gl, programInfo, buffers, [Math.round(canvas.clientWidth * dpr / 2), Math.round(canvas.clientHeight * dpr / 2)]);
+    window.addEventListener("resize", () => { resizeCanvasToDisplaySize(canvas, gl); drawScene(gl, programInfo, buffers, [Math.round(canvas.clientWidth * dpr / 2), Math.round(canvas.clientHeight * dpr / 2)]) });
 
     document.addEventListener("mousemove", (e) => {
         let x = e.clientX;

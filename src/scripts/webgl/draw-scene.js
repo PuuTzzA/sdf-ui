@@ -23,8 +23,13 @@ function drawScene(gl, programInfo, buffers, mousepos) {
     gl.uniform2f(programInfo.uniformLocations.resolution, programInfo.canvas.offsetWidth, programInfo.canvas.offsetHeight);
 
     let geometryBuffer = new Float32Array(programInfo.maxBufferSize * 4);
-    geometryBuffer[0] = mousepos[0];
-    geometryBuffer[1] = mousepos[1];
+    let resolution = [canvas.clientWidth, canvas.clienHeight];
+    geometryBuffer[0] = 300 / resolution[0];
+    geometryBuffer[1] = 300 / resolution[0];
+    geometryBuffer[0] = mousepos[0] / resolution[0];
+    geometryBuffer[1] = mousepos[1] / resolution[0];
+    geometryBuffer[2] = 0;
+    geometryBuffer[3] = 300 / resolution[0];
 
     //console.log(mousepos[0], mousepos[1])
     //console.log(programInfo.canvas.offsetWidth, programInfo.canvas.offsetHeight)
