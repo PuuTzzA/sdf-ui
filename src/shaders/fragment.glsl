@@ -21,10 +21,22 @@ uniform vec2 resolution;
 in vec2 vUv;
 out vec4 fragColor;
 
-struct hitInfo {
+struct Surface {
+    vec3 colorDiffuse;
+    vec3 colorSpecular;
+    vec3 colorAmbient;
+    float kd; // diffuse material property
+    float ks; // specular material property
+    float p; // specular exponent (specular fall off)
+    float ka; // ambient material property
+    float distance;
+};
+
+struct HitInfo {
     int id;
     vec3 pos;
     vec3 normal;
+    Surface surface;
 };
 
 // ╔══════════════════════════════════════════════════════════╗
@@ -45,6 +57,29 @@ float opSmoothUnion(float d1, float d2, float k) {
     return min(d1, d2) - h * h * 0.25f / k;
 }
 
+vec2 smin(float a, float b, float k) { // ret.a = distnce, ret.b = blendfactor
+    k *= 6.0f;
+    float h = max(k - abs(a - b), 0.0f) / k;
+    float m = h * h * h * 0.5f;
+    float s = m * k * (1.0f / 3.0f);
+    return (a < b) ? vec2(a - s, m) : vec2(b - s, 1.0f - m);
+}
+
+Surface smin(Surface a, Surface b, float smoothness) {
+
+    vec2 blend = smin(a.distance, b.distance, smoothness);
+
+    return Surface(//
+    mix(a.colorDiffuse, b.colorDiffuse, blend.y),//
+    mix(a.colorSpecular, b.colorSpecular, blend.y),//
+    mix(a.colorAmbient, b.colorAmbient, blend.y),//
+    mix(a.kd, b.kd, blend.y),//
+    mix(a.ks, b.ks, blend.y),//
+    mix(a.p, b.p, blend.y),//
+    mix(a.ka, b.ka, blend.y),//
+    blend.x);//
+}
+
 // ╔══════════════════════════════════════════════════════════╗
 // ║                      RAYMARCHING                         ║
 // ╚══════════════════════════════════════════════════════════╝
@@ -57,8 +92,38 @@ float map(vec3 p) {
 
     float s = sdSphere(p - spherePos, sphereRadius);
 
-    s = opSmoothUnion(s, sdBox(p - boxPosition, vec3(0.45f, 0.45f, 0.01f)), 0.05);
+    s = opSmoothUnion(s, sdBox(p - boxPosition, vec3(0.45f, 0.45f, 0.01f)), 0.05f);
     return s;
+}
+
+Surface mapWithMaterial(vec3 p) {
+    Surface sphereSurface;
+    sphereSurface.colorDiffuse = vec3(0.f, 1.f, 1.f);
+    sphereSurface.colorSpecular = vec3(1.f);
+    sphereSurface.colorAmbient = vec3(1.f, 0.f, 0.f);
+    sphereSurface.kd = 1.f; // diffuse material property
+    sphereSurface.ks = 1.f; // specular material property
+    sphereSurface.p = 20.f; // specular exponent, fall of of specular light
+    sphereSurface.ka = 0.1f; // ambient material property
+
+    Surface boxSurface;
+    boxSurface.colorDiffuse = vec3(1.f, 0.f, 0.f);
+    boxSurface.colorSpecular = vec3(1.f);
+    boxSurface.colorAmbient = vec3(1.f, 0.f, 0.f);
+    boxSurface.kd = 1.f; // diffuse material property
+    boxSurface.ks = 1.f; // specular material property
+    boxSurface.p = 20.f; // specular exponent, fall of of specular light
+    boxSurface.ka = 0.1f; // ambient material property
+
+    vec3 spherePos = vec3(geometryData[0].xyz);
+    float sphereRadius = geometryData[0].w;
+
+    vec3 boxPosition = vec3(0.5f, 0.5f, 0.f);
+
+    sphereSurface.distance = sdSphere(p - spherePos, sphereRadius);
+    boxSurface.distance = sdBox(p - boxPosition, vec3(0.45f, 0.45f, 0.01f));
+
+    return smin(sphereSurface, boxSurface, 0.05f);
 }
 
 vec3 calcNormal(in vec3 pos) {
@@ -80,7 +145,7 @@ vec3 calcNormalTetrahedron(vec3 p) {
         k.xxx * map(p + k.xxx * h));
 }
 
-hitInfo trace(vec3 ro, vec3 rd) {
+HitInfo trace(vec3 ro, vec3 rd) {
     const float tMax = 100000.0f;
     const float eps = 0.001f;
     const int maxSteps = 128;
@@ -94,7 +159,10 @@ hitInfo trace(vec3 ro, vec3 rd) {
 
         if (d < eps) {
             // hit — return a basic color (white)
-            return hitInfo(1, p, calcNormalTetrahedron(p));
+            Surface surface = mapWithMaterial(p);
+            vec3 normal = calcNormalTetrahedron(p);
+
+            return HitInfo(i > 10 ? -2 : 1, p, normal, surface);
             //return vec3(1.0f);
         }
 
@@ -105,38 +173,34 @@ hitInfo trace(vec3 ro, vec3 rd) {
     }
 
     // miss — return background
-    return hitInfo(-1, vec3(0.0f), vec3(0.f, 0.f, 0.f));
+    return HitInfo(-1, vec3(0.0f), vec3(0.f, 0.f, 0.f), Surface(vec3(0.f), vec3(0.f), vec3(0.f), 0.f, 0.f, 0.f, 0.f, 0.f));
 }
 
 // ╔══════════════════════════════════════════════════════════╗
 // ║                      RAYMARCHING                         ║
 // ╚══════════════════════════════════════════════════════════╝
-vec3 shade(hitInfo hit) {
+vec3 shade(HitInfo hit) {
     if (hit.id == -1) {
         return vec3(0.f);
+    }
+    if (hit.id == -2) {
+        return vec3(1.f, 0.f, 1.f);
     }
 
     const vec3 sundir = normalize(vec3(1.f));
 
-    vec3 colorDiffuse = vec3(0.f, 1.f, 1.f);
-    float kd = 1.f; // diffuse material property
+    Surface surface = hit.surface;
+
     float ld = 1.f; // diffuse light intensity (light source dependent)
-
-    vec3 colorAmbient = vec3(1.f, 0.f, 0.f);
-    float ka = 0.1f; // ambient material property
     float la = 1.f; // ambient light intensity (constant for scene)
-
-    vec3 colorSpecular = vec3(1.f);
-    float ks = 1.f; // specular material property
-    float p = 20.f; // specular exponent, fall of of specular light
     float ls = 1.f; // specular light intensity (light source dependent)
 
-    float iDiffuse = kd * ld * max(0.f, dot(-sundir, hit.normal));
-    float iAmbient = ka * la;
-    float iSpecular = ks * ls * pow(max(0.f, dot(reflect(sundir, hit.normal), vec3(0.f, 0.f, -1.f))), p);
+    float iDiffuse = surface.kd * ld * max(0.f, dot(-sundir, hit.normal));
+    float iAmbient = surface.ka * la;
+    float iSpecular = surface.ks * ls * pow(max(0.f, dot(reflect(sundir, hit.normal), vec3(0.f, 0.f, -1.f))), surface.p);
 
     //return hit.id != -1 ? vec3(1.f) : vec3(0.f);
-    return iDiffuse * colorDiffuse + iAmbient * colorAmbient + iSpecular * colorSpecular;
+    return iDiffuse * surface.colorDiffuse + iAmbient * surface.colorAmbient + iSpecular * surface.colorSpecular;
 }
 
 // ╔══════════════════════════════════════════════════════════╗
