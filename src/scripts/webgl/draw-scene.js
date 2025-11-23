@@ -35,8 +35,8 @@ function drawScene(gl, programInfo, buffers, mousepos) {
     let resolution = [canvas.clientWidth, canvas.clienHeight];
     geometryBuffer[0] = 300 / resolution[0];
     geometryBuffer[1] = 300 / resolution[0];
-    geometryBuffer[0] = mouse.x / resolution[0];
-    geometryBuffer[1] = mouse.y / resolution[0];
+    geometryBuffer[0] = 500 / resolution[0];
+    geometryBuffer[1] = 500 / resolution[0];
     geometryBuffer[2] = parseFloat(getComputedStyle(testDiv).getPropertyValue("--depth"));
     geometryBuffer[3] = 300 / resolution[0];
 

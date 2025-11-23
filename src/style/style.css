@@ -34,7 +34,7 @@ html,
     transition: background-color 0.3s, --depth .3s;
 }
 
-#test-div:hover{
+#test-div:active{
     background-color: green;
-    --depth: .2;
+    --depth: .3;
 }

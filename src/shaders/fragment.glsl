@@ -29,6 +29,7 @@ struct Surface {
     float ks; // specular material property
     float p; // specular exponent (specular fall off)
     float ka; // ambient material property
+    float mix; // mix factor
     float distance;
 };
 
@@ -51,9 +52,12 @@ float sdBox(vec3 p, vec3 b) {
     return length(max(q, 0.0f)) + min(max(q.x, max(q.y, q.z)), 0.0f);
 }
 
-float smin2(float a, float b, float k) { // ret.a = distnce, ret.b = blendfactor
-    // return min(a, b);
+float sdRoundBox(vec3 p, vec3 b, float r) {
+    vec3 q = abs(p) - b + r;
+    return length(max(q, 0.0f)) + min(max(q.x, max(q.y, q.z)), 0.0f) - r;
+}
 
+float smin2(float a, float b, float k) { // ret.a = distnce, ret.b = blendfactor
     k *= 6.0f;
     float h = max(k - abs(a - b), 0.0f) / k;
     float m = h * h * h * 0.5f;
@@ -62,7 +66,7 @@ float smin2(float a, float b, float k) { // ret.a = distnce, ret.b = blendfactor
 }
 
 vec2 smin(float a, float b, float k) { // ret.a = distnce, ret.b = blendfactor
-    // return vec2(min(a, b), a);
+    //return vec2(min(a, b), a);
     k *= 6.0f;
     float h = max(k - abs(a - b), 0.0f) / k;
     float m = h * h * h * 0.5f;
@@ -70,8 +74,7 @@ vec2 smin(float a, float b, float k) { // ret.a = distnce, ret.b = blendfactor
     return (a < b) ? vec2(a - s, m) : vec2(b - s, 1.0f - m);
 }
 
-Surface smin(Surface a, Surface b, float smoothness) {
-
+Surface opSmoothUnion(Surface a, Surface b, float smoothness) {
     vec2 blend = smin(a.distance, b.distance, smoothness);
 
     return Surface(//
@@ -82,6 +85,23 @@ Surface smin(Surface a, Surface b, float smoothness) {
     mix(a.ks, b.ks, blend.y),//
     mix(a.p, b.p, blend.y),//
     mix(a.ka, b.ka, blend.y),//
+    blend.y,//
+    blend.x);//
+}
+
+Surface opSmoothSubtraction(Surface a, Surface b, float smoothness) {
+    vec2 blend = smin(a.distance, -b.distance, smoothness);
+    blend.x *= -1.f;
+
+    return Surface(//
+    mix(a.colorDiffuse, b.colorDiffuse, blend.y),//
+    mix(a.colorSpecular, b.colorSpecular, blend.y),//
+    mix(a.colorAmbient, b.colorAmbient, blend.y),//
+    mix(a.kd, b.kd, blend.y),//
+    mix(a.ks, b.ks, blend.y),//
+    mix(a.p, b.p, blend.y),//
+    mix(a.ka, b.ka, blend.y),//
+    blend.y,//
     blend.x);//
 }
 
@@ -112,7 +132,7 @@ Surface mapWithMaterial(vec3 p) {
     sphereSurface.ka = 0.1f; // ambient material property
 
     Surface boxSurface;
-    boxSurface.colorDiffuse = vec3(1.f, 0.f, 0.f);
+    boxSurface.colorDiffuse = vec3(1.f, 1.f, 1.f);
     boxSurface.colorSpecular = vec3(1.f);
     boxSurface.colorAmbient = vec3(1.f, 0.f, 0.f);
     boxSurface.kd = 1.f; // diffuse material property
@@ -120,15 +140,22 @@ Surface mapWithMaterial(vec3 p) {
     boxSurface.p = 20.f; // specular exponent, fall of of specular light
     boxSurface.ka = 0.1f; // ambient material property
 
-    vec3 spherePos = vec3(geometryData[0].xyz);
-    float sphereRadius = geometryData[0].w;
+    vec3 boxPosition = vec3(0.5f, 0.5f, .5f);
+    boxSurface.distance = sdBox(p - boxPosition, vec3(0.45f, 0.45f, .5f));
 
-    vec3 boxPosition = vec3(0.5f, 0.5f, 0.f);
+    vec3 spherePos = vec3(geometryData[0].xyz); // first box
+    // float sphereRadius = geometryData[0].w;
+    sphereSurface.distance = sdRoundBox(p - spherePos, vec3(0.1f, 0.1f, .1f), 0.01f);
 
-    sphereSurface.distance = sdSphere(p - spherePos, sphereRadius);
-    boxSurface.distance = sdBox(p - boxPosition, vec3(0.45f, 0.45f, 0.01f));
+    Surface union_ = opSmoothUnion(sphereSurface, boxSurface, 0.007f);
 
-    return smin(sphereSurface, boxSurface, 0.05f);
+    vec3 negBoxPos = vec3(geometryData[0].xyz - vec3(0.f, 0.f, 0.3f));
+    Surface negBoxSurface;
+    negBoxSurface = sphereSurface;
+    negBoxSurface.colorDiffuse = vec3(1.f, 0.f, 0.f);
+    negBoxSurface.distance = sdRoundBox(p - negBoxPos, vec3(.1f, .1f, .1f), 0.01f);
+
+    return opSmoothSubtraction(negBoxSurface, union_, 0.007f);
 }
 
 vec3 calcNormal(in vec3 pos) {
@@ -144,10 +171,10 @@ vec3 calcNormalTetrahedron(vec3 p) {
     float h = max(0.0005f, 0.0005f * length(p));  // adapt with distance
 
     const vec2 k = vec2(1, -1);
-    return normalize(k.xyy * map(p + k.xyy * h) +
-        k.yyx * map(p + k.yyx * h) +
-        k.yxy * map(p + k.yxy * h) +
-        k.xxx * map(p + k.xxx * h));
+    return normalize(k.xyy * mapWithMaterial(p + k.xyy * h).distance +
+        k.yyx * mapWithMaterial(p + k.yyx * h).distance +
+        k.yxy * mapWithMaterial(p + k.yxy * h).distance +
+        k.xxx * mapWithMaterial(p + k.xxx * h).distance);
 }
 
 HitInfo trace(vec3 ro, vec3 rd) {
@@ -159,7 +186,7 @@ HitInfo trace(vec3 ro, vec3 rd) {
     for (int i = 0; i < maxSteps; i++) {
 
         vec3 p = ro + rd * t;   // current sample position
-        float d = map(p);       // distance to nearest surface
+        float d = mapWithMaterial(p).distance;       // distance to nearest surface
 
         if (d < EPSILON) {
             // hit — return a basic color (white)
@@ -177,7 +204,7 @@ HitInfo trace(vec3 ro, vec3 rd) {
     }
 
     // miss — return background
-    return HitInfo(-1, vec3(0.0f), vec3(0.f, 0.f, 0.f), Surface(vec3(0.f), vec3(0.f), vec3(0.f), 0.f, 0.f, 0.f, 0.f, 0.f));
+    return HitInfo(-1, vec3(0.0f), vec3(0.f, 0.f, 0.f), Surface(vec3(0.f), vec3(0.f), vec3(0.f), 0.f, 0.f, 0.f, 0.f, 0.f, 0.f));
 }
 
 // ╔══════════════════════════════════════════════════════════╗
@@ -186,7 +213,7 @@ HitInfo trace(vec3 ro, vec3 rd) {
 float shadow(in vec3 ro, in vec3 rd, float mint, float maxt) {
     float t = mint;
     for (int i = 0; i < 256 && t < maxt; i++) {
-        float h = map(ro + rd * t);
+        float h = mapWithMaterial(ro + rd * t).distance;
         if (h < EPSILON)
             return 0.0f;
         t += h;
@@ -199,7 +226,7 @@ float softshadow(in vec3 ro, in vec3 rd, float mint, float maxt, float w) {
     float res = 1.0f;
     float t = mint;
     for (int i = 0; i < 256 && t < maxt; i++) {
-        float h = map(ro + t * rd);
+        float h = mapWithMaterial(ro + t * rd).distance;
         res = min(res, h / (w * t));
         t += clamp(h, 0.005f, 0.50f);
         if (res < -1.0f || t > maxt)
@@ -209,17 +236,25 @@ float softshadow(in vec3 ro, in vec3 rd, float mint, float maxt, float w) {
     return 0.25f * (1.0f + res) * (1.0f + res) * (2.0f - res);
 }
 
+float gaussian(float x, float mu, float sigma) {
+    return exp(-1.f * ((x - mu) * (x - mu)) / (2.f * sigma * sigma));
+}
+
 vec3 shade(HitInfo hit) {
     if (hit.id == -1) {
         return vec3(0.f);
     }
     /* if (hit.id == -2) {
         return vec3(1.f, 0.f, 1.f);
-    }
- */
+    } */
+
     const vec3 sundir = normalize(vec3(1.f, 1.f, 0.5f));
 
     Surface surface = hit.surface;
+
+    float mixFacotr = gaussian(surface.mix, 0.5f, 0.07f);
+
+    //return vec3(mixFacotr);
 
     float ld = 1.f; // diffuse light intensity (light source dependent)
     float la = 1.f; // ambient light intensity (constant for scene)
@@ -231,7 +266,7 @@ vec3 shade(HitInfo hit) {
 
     //float shadow = shadow(hit.pos, -sundir, 0.001f, 5.f);
     float shadow = softshadow(hit.pos, -sundir, 0.001f, 5.f, .05f);
-    //float shadow = 1.;
+    //float shadow = 1.f;
 
     //return vec3(shadow);
     //return hit.id != -1 ? vec3(1.f) : vec3(0.f);
@@ -249,7 +284,7 @@ void main(void) {
 
     vec3 color = vec3(0.f);
 
-    vec3 pos = vec3(vUv * vec2(1.f, resolution.y / resolution.x), -1.f);
+    vec3 pos = vec3(vUv * vec2(1.f, resolution.y / resolution.x), -2.f);
     vec3 dir = vec3(0.f, 0.f, 1.f);
     vec3 posOffset;
 
