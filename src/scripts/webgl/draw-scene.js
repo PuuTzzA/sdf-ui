@@ -1,3 +1,10 @@
+let mouse = { x: 0, y: 0 };
+
+window.addEventListener("mousemove", (e) => {
+    mouse.x = e.clientX;
+    mouse.y = e.clientY;
+});
+
 function drawScene(gl, programInfo, buffers, mousepos) {
     gl.clearColor(1.0, 0.0, 1.0, 1.0); // Clear to black, fully opaque
     gl.clearDepth(1.0); // Clear everything
@@ -22,13 +29,15 @@ function drawScene(gl, programInfo, buffers, mousepos) {
     // Set the shader uniforms
     gl.uniform2f(programInfo.uniformLocations.resolution, programInfo.canvas.offsetWidth, programInfo.canvas.offsetHeight);
 
+    const testDiv = document.querySelector("#test-div");
+
     let geometryBuffer = new Float32Array(programInfo.maxBufferSize * 4);
     let resolution = [canvas.clientWidth, canvas.clienHeight];
     geometryBuffer[0] = 300 / resolution[0];
     geometryBuffer[1] = 300 / resolution[0];
-    geometryBuffer[0] = mousepos[0] / resolution[0];
-    geometryBuffer[1] = mousepos[1] / resolution[0];
-    geometryBuffer[2] = 0;
+    geometryBuffer[0] = mouse.x / resolution[0];
+    geometryBuffer[1] = mouse.y / resolution[0];
+    geometryBuffer[2] = parseFloat(getComputedStyle(testDiv).getPropertyValue("--depth"));
     geometryBuffer[3] = 300 / resolution[0];
 
     //console.log(mousepos[0], mousepos[1])

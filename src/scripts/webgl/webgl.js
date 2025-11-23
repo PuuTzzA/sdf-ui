@@ -133,11 +133,22 @@ async function initWebgl() {
     drawScene(gl, programInfo, buffers, [Math.round(canvas.clientWidth * dpr / 2), Math.round(canvas.clientHeight * dpr / 2)]);
     window.addEventListener("resize", () => { resizeCanvasToDisplaySize(canvas, gl); drawScene(gl, programInfo, buffers, [Math.round(canvas.clientWidth * dpr / 2), Math.round(canvas.clientHeight * dpr / 2)]) });
 
-    document.addEventListener("mousemove", (e) => {
-        let x = e.clientX;
-        let y = e.clientY;
-        drawScene(gl, programInfo, buffers, [x, y]);
-    })
+
+
+    function loop() {
+        drawScene(gl, programInfo, buffers, [Math.round(canvas.clientWidth * dpr / 2), Math.round(canvas.clientHeight * dpr / 2)]);
+        requestAnimationFrame(loop);
+    }
+
+    requestAnimationFrame(loop);
+
+    /*     document.addEventListener("mousemove", (e) => {
+            let x = e.clientX;
+            let y = e.clientY;
+            drawScene(gl, programInfo, buffers, [x, y]);
+        }) */
 }
+
+
 
 export { initWebgl }

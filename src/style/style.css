@@ -26,15 +26,15 @@ html,
 #test-div{
     position: absolute;
     width: 300px;
-    top: 300px;
-    left: 300px;
+    top: 50vh;
+    left: 50%;
     transform: translate(-50%, -50%);
     background-color: red;
-    --depth: 1;
-    transition: background-color 1s, --depth 1s;
+    --depth: 0;
+    transition: background-color 0.3s, --depth .3s;
 }
 
 #test-div:hover{
     background-color: green;
-    --depth: 10;
+    --depth: .2;
 }

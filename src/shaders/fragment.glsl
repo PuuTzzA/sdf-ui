@@ -51,13 +51,18 @@ float sdBox(vec3 p, vec3 b) {
     return length(max(q, 0.0f)) + min(max(q.x, max(q.y, q.z)), 0.0f);
 }
 
-float opSmoothUnion(float d1, float d2, float k) {
-    k *= 4.0f;
-    float h = max(k - abs(d1 - d2), 0.0f);
-    return min(d1, d2) - h * h * 0.25f / k;
+float smin2(float a, float b, float k) { // ret.a = distnce, ret.b = blendfactor
+    // return min(a, b);
+
+    k *= 6.0f;
+    float h = max(k - abs(a - b), 0.0f) / k;
+    float m = h * h * h * 0.5f;
+    float s = m * k * (1.0f / 3.0f);
+    return (a < b) ? a - s : b - s;
 }
 
 vec2 smin(float a, float b, float k) { // ret.a = distnce, ret.b = blendfactor
+    // return vec2(min(a, b), a);
     k *= 6.0f;
     float h = max(k - abs(a - b), 0.0f) / k;
     float m = h * h * h * 0.5f;
@@ -92,7 +97,7 @@ float map(vec3 p) {
 
     float s = sdSphere(p - spherePos, sphereRadius);
 
-    s = opSmoothUnion(s, sdBox(p - boxPosition, vec3(0.45f, 0.45f, 0.01f)), 0.05f);
+    s = smin2(s, sdBox(p - boxPosition, vec3(0.45f, 0.45f, 0.01f)), 0.05f);
     return s;
 }
 
@@ -147,7 +152,6 @@ vec3 calcNormalTetrahedron(vec3 p) {
 
 HitInfo trace(vec3 ro, vec3 rd) {
     const float tMax = 100000.0f;
-    const float eps = 0.001f;
     const int maxSteps = 128;
 
     float t = 0.0f;   // distance traveled along ray
@@ -157,7 +161,7 @@ HitInfo trace(vec3 ro, vec3 rd) {
         vec3 p = ro + rd * t;   // current sample position
         float d = map(p);       // distance to nearest surface
 
-        if (d < eps) {
+        if (d < EPSILON) {
             // hit — return a basic color (white)
             Surface surface = mapWithMaterial(p);
             vec3 normal = calcNormalTetrahedron(p);
@@ -177,17 +181,43 @@ HitInfo trace(vec3 ro, vec3 rd) {
 }
 
 // ╔══════════════════════════════════════════════════════════╗
-// ║                      RAYMARCHING                         ║
+// ║                         SHADING                          ║
 // ╚══════════════════════════════════════════════════════════╝
+float shadow(in vec3 ro, in vec3 rd, float mint, float maxt) {
+    float t = mint;
+    for (int i = 0; i < 256 && t < maxt; i++) {
+        float h = map(ro + rd * t);
+        if (h < EPSILON)
+            return 0.0f;
+        t += h;
+    }
+    return 1.0f;
+}
+
+// https://iquilezles.org/articles/rmshadows
+float softshadow(in vec3 ro, in vec3 rd, float mint, float maxt, float w) {
+    float res = 1.0f;
+    float t = mint;
+    for (int i = 0; i < 256 && t < maxt; i++) {
+        float h = map(ro + t * rd);
+        res = min(res, h / (w * t));
+        t += clamp(h, 0.005f, 0.50f);
+        if (res < -1.0f || t > maxt)
+            break;
+    }
+    res = max(res, -1.0f);
+    return 0.25f * (1.0f + res) * (1.0f + res) * (2.0f - res);
+}
+
 vec3 shade(HitInfo hit) {
     if (hit.id == -1) {
         return vec3(0.f);
     }
-    if (hit.id == -2) {
+    /* if (hit.id == -2) {
         return vec3(1.f, 0.f, 1.f);
     }
-
-    const vec3 sundir = normalize(vec3(1.f));
+ */
+    const vec3 sundir = normalize(vec3(1.f, 1.f, 0.5f));
 
     Surface surface = hit.surface;
 
@@ -199,12 +229,17 @@ vec3 shade(HitInfo hit) {
     float iAmbient = surface.ka * la;
     float iSpecular = surface.ks * ls * pow(max(0.f, dot(reflect(sundir, hit.normal), vec3(0.f, 0.f, -1.f))), surface.p);
 
+    //float shadow = shadow(hit.pos, -sundir, 0.001f, 5.f);
+    float shadow = softshadow(hit.pos, -sundir, 0.001f, 5.f, .05f);
+    //float shadow = 1.;
+
+    //return vec3(shadow);
     //return hit.id != -1 ? vec3(1.f) : vec3(0.f);
-    return iDiffuse * surface.colorDiffuse + iAmbient * surface.colorAmbient + iSpecular * surface.colorSpecular;
+    return shadow * (iDiffuse * surface.colorDiffuse + iSpecular * surface.colorSpecular) + iAmbient * surface.colorAmbient;
 }
 
 // ╔══════════════════════════════════════════════════════════╗
-// ║                         MAIN                             ║
+// ║                           MAIN                           ║
 // ╚══════════════════════════════════════════════════════════╝
 void main(void) {
     //fragColor = length(vUv - geometryData[0].xy) < 0.1f ? vec4(1.f, 0.f, 0.f, 1.f) : vec4(1.f);
