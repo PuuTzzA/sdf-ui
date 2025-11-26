@@ -2,6 +2,7 @@
 precision highp float;
 
 #define MAX_OBJECTS 256
+#define VEC4_PER_OBJECT 2
 #define EPSILON 1e-6
 
 // ╔══════════════════════════════════════════════════════════╗
@@ -127,7 +128,7 @@ Surface mapWithMaterial(vec3 p) {
     sphereSurface.colorSpecular = vec3(1.f);
     sphereSurface.colorAmbient = vec3(1.f, 0.f, 0.f);
     sphereSurface.kd = 1.f; // diffuse material property
-    sphereSurface.ks = 1.f; // specular material property
+    sphereSurface.ks = .0f; // specular material property
     sphereSurface.p = 20.f; // specular exponent, fall of of specular light
     sphereSurface.ka = 0.1f; // ambient material property
 
@@ -136,16 +137,29 @@ Surface mapWithMaterial(vec3 p) {
     boxSurface.colorSpecular = vec3(1.f);
     boxSurface.colorAmbient = vec3(1.f, 0.f, 0.f);
     boxSurface.kd = 1.f; // diffuse material property
-    boxSurface.ks = 1.f; // specular material property
+    boxSurface.ks = .0f; // specular material property
     boxSurface.p = 20.f; // specular exponent, fall of of specular light
     boxSurface.ka = 0.1f; // ambient material property
 
     vec3 boxPosition = vec3(0.5f, 0.5f, .5f);
     boxSurface.distance = sdBox(p - boxPosition, vec3(0.45f, 0.45f, .5f));
 
-    vec3 spherePos = vec3(geometryData[0].xyz); // first box
-    // float sphereRadius = geometryData[0].w;
-    sphereSurface.distance = sdRoundBox(p - spherePos, vec3(0.1f, 0.1f, .1f), 0.01f);
+    int elementIdx = 0;
+    for (int i = 0; i < 1; i++) {
+        elementIdx = i * VEC4_PER_OBJECT;
+
+        vec3 pos = geometryData[elementIdx].xyz;
+
+        switch (int(geometryData[elementIdx].w)) {
+            case 0:
+                sphereSurface.distance = sdRoundBox(p - pos, geometryData[elementIdx + 1].xyz, geometryData[elementIdx + 1].w);
+                break;
+            case 1:
+                sphereSurface.distance = 0.f;
+                //result = cubicOut();
+                break;
+        }
+    }
 
     Surface union_ = opSmoothUnion(sphereSurface, boxSurface, 0.007f);
 
@@ -183,17 +197,25 @@ HitInfo trace(vec3 ro, vec3 rd) {
 
     float t = 0.0f;   // distance traveled along ray
 
+    float last = -1.f;
+    int howOften = 0;
+
     for (int i = 0; i < maxSteps; i++) {
 
         vec3 p = ro + rd * t;   // current sample position
         float d = mapWithMaterial(p).distance;       // distance to nearest surface
 
-        if (d < EPSILON) {
+        if (abs(d - last) < EPSILON) {
+            howOften++;
+        }
+        last = d;
+
+        if (d < EPSILON || howOften > 1000) {
             // hit — return a basic color (white)
             Surface surface = mapWithMaterial(p);
             vec3 normal = calcNormalTetrahedron(p);
 
-            return HitInfo(i > 10 ? -2 : 1, p, normal, surface);
+            return HitInfo(i > 20 ? -2 : 1, p, normal, surface);
             //return vec3(1.0f);
         }
 
@@ -243,6 +265,7 @@ float gaussian(float x, float mu, float sigma) {
 vec3 shade(HitInfo hit) {
     if (hit.id == -1) {
         return vec3(0.f);
+        return vec3(0.f, 1.f, 1.f);
     }
     /* if (hit.id == -2) {
         return vec3(1.f, 0.f, 1.f);

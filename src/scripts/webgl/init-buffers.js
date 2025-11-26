@@ -1,5 +1,4 @@
-const GEOMETRY_BLOCK_UNIFORM_BUFFER_BINDING_INDEX = 0;
-const SHADING_BLOCK_UNIFORM_BUFFER_BINDING_INDEX = 1;
+import { SdfCanvas } from "./webgl.js";
 
 function initPositionBuffer(gl, programInfo) {
     const positionBuffer = gl.createBuffer();
@@ -51,18 +50,18 @@ function initGeometryBufferObject(gl, programInfo) {
     gl.uniformBlockBinding(
         programInfo.program,
         programInfo.uniformLocations.geometryBlock,
-        GEOMETRY_BLOCK_UNIFORM_BUFFER_BINDING_INDEX
+        SdfCanvas.GEOMETRY_BLOCK_UNIFORM_BUFFER_BINDING_INDEX
     );
 
     gl.bindBufferBase(
         gl.UNIFORM_BUFFER,
-        GEOMETRY_BLOCK_UNIFORM_BUFFER_BINDING_INDEX,
+        SdfCanvas.GEOMETRY_BLOCK_UNIFORM_BUFFER_BINDING_INDEX,
         geometryBuffer
     );
 
     gl.bufferData(
         gl.UNIFORM_BUFFER,
-        programInfo.maxBufferSize * 4 * Float32Array.BYTES_PER_ELEMENT,
+        SdfCanvas.MAX_UNIFORM_BUFFER_SIZE * 4 * Float32Array.BYTES_PER_ELEMENT,
         gl.DYNAMIC_DRAW
     );
 
@@ -75,18 +74,18 @@ function initShadingBufferObject(gl, programInfo) {
     gl.uniformBlockBinding(
         programInfo.program,
         programInfo.uniformLocations.shadingBlock,
-        SHADING_BLOCK_UNIFORM_BUFFER_BINDING_INDEX
+        SdfCanvas.SHADING_BLOCK_UNIFORM_BUFFER_BINDING_INDEX
     );
 
     gl.bindBufferBase(
         gl.UNIFORM_BUFFER,
-        SHADING_BLOCK_UNIFORM_BUFFER_BINDING_INDEX,
+        SdfCanvas.SHADING_BLOCK_UNIFORM_BUFFER_BINDING_INDEX,
         shadingBuffer
     );
 
     gl.bufferData(
         gl.UNIFORM_BUFFER,
-        programInfo.maxBufferSize * 4 * Float32Array.BYTES_PER_ELEMENT,
+        SdfCanvas.MAX_UNIFORM_BUFFER_SIZE * 4 * Float32Array.BYTES_PER_ELEMENT,
         gl.DYNAMIC_DRAW
     );
 
@@ -102,7 +101,6 @@ function initBuffers(gl, programInfo) {
     const geometryBuffer = initGeometryBufferObject(gl, programInfo);
     const shadingBuffer = initShadingBufferObject(gl, programInfo);
 
-    // Unbind the VAO when done
     gl.bindVertexArray(null);
 
     return {

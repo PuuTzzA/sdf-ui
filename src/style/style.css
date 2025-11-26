@@ -18,23 +18,50 @@ html,
 }
 
 @property --depth {
-  syntax: "<number>";
-  inherits: false;
-  initial-value: 0;
+    syntax: "<number>";
+    inherits: false;
+    initial-value: 0;
 }
 
-#test-div{
+@property --specular-color {
+    syntax: "<color>";
+    inherits: false;
+    initial-value: 0;
+}
+
+@property --ambient-color {
+    syntax: "<color>";
+    inherits: false;
+    initial-value: 0;
+}
+
+/* @property --depth {
+    syntax: "<number>";
+    inherits: false;
+    initial-value: 0;
+}
+
+@property --depth {
+    syntax: "<number>";
+    inherits: false;
+    initial-value: 0;
+} */
+
+#test-div {
     position: absolute;
     width: 300px;
+    height: 300px;
     top: 50vh;
     left: 50%;
     transform: translate(-50%, -50%);
     background-color: red;
     --depth: 0;
     transition: background-color 0.3s, --depth .3s;
+
+    opacity: 0.5;
 }
 
-#test-div:active{
+#test-div:active {
     background-color: green;
     --depth: .3;
 }

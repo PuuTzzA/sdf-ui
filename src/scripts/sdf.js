@@ -1,26 +1,42 @@
-import { initWebgl } from "./webgl/webgl.js";
+import { SdfCanvas } from "./webgl/webgl.js";
 
-initWebgl();
-
+const sdfCanvas = new SdfCanvas("canvas");
+sdfCanvas.initWebgl();
 
 const testDiv = document.querySelector("#test-div");
-console.log(testDiv)
+const testDiv2 = document.querySelector("#test-div2");
 
+SdfCanvas.addTrackedElement(testDiv);
+SdfCanvas.addTrackedElement(testDiv2);
+
+
+let mousePos = [0, 0];
+window.addEventListener("mousemove", (e) => {
+    mousePos = [e.clientX, e.clientY];
+    testDiv.style.left = e.clientX + "px";
+    testDiv.style.top = e.clientY + "px";
+});
 
 let lastTime = performance.now();
 let fps = 0;
 
-function testDivFun(now) {
+function gameLoop(now) {
+
+    // FPS counter
     const delta = now - lastTime;
     fps = 1000 / delta;     // frames per second
     lastTime = now;
-
     testDiv.innerHTML = fps.toFixed(1);  // show FPS with 1 decimal
 
-    requestAnimationFrame(testDivFun);
+    // Draw Scene
+    if (sdfCanvas.ready) {
+        sdfCanvas.draw();
+    }
+
+    requestAnimationFrame(gameLoop);
 }
 
-requestAnimationFrame(testDivFun);
+requestAnimationFrame(gameLoop);
 
-
+console.log(testDiv.dataset.layerIndex)
 console.log("moin");
