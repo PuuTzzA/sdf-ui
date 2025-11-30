@@ -4,11 +4,6 @@ const sdfCanvas = new SdfCanvas("canvas");
 sdfCanvas.initWebgl();
 
 const testDiv = document.querySelector("#test-div");
-const testDiv2 = document.querySelector("#test-div2");
-
-SdfCanvas.addTrackedElement(testDiv);
-SdfCanvas.addTrackedElement(testDiv2);
-
 
 let mousePos = [0, 0];
 window.addEventListener("mousemove", (e) => {

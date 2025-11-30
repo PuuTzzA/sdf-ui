@@ -58,10 +58,23 @@ html,
     --depth: 0;
     transition: background-color 0.3s, --depth .3s;
 
-    opacity: 0.5;
+    opacity: 0.1;
 }
 
 #test-div:active {
     background-color: green;
     --depth: .3;
+}
+
+
+.test-class {
+    background-color: red;
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 10;
+}
+
+.test-class:hover{
+    background-color: green;
 }

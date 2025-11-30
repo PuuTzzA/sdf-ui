@@ -7,14 +7,20 @@ class SdfCanvas {
     static GEOMETRY_BLOCK_UNIFORM_BUFFER_BINDING_INDEX = 0;
     static SHADING_BLOCK_UNIFORM_BUFFER_BINDING_INDEX = 1;
 
+    static ElementType = Object.freeze({
+        SPHERE: 0,
+        BOX: 1,
+        ROUND_BOX: 2,
+    });
+
     static LayerOperation = Object.freeze({
-        UNION: 0,
-        SUBTRACTION: 1,
-        INTERSECTION: 2,
-        XOR: 3,
-        SMOOTH_UNION: 4,
-        SMOOTH_SUBTRACTION: 5,
-        SMOOTH_INTERSECTION: 6,
+        UNION: "UNION",
+        SUBTRACTION: "SUBTRACTION",
+        INTERSECTION: "INTERSECTION",
+        XOR: "XOR",
+        SMOOTH_UNION: "SMOOTH_UNION",
+        SMOOTH_SUBTRACTION: "SMOOTH_SUBTRACTION",
+        SMOOTH_INTERSECTION: "SMOOTH_INTERSECTION",
     })
 
     static trackedElements = []
@@ -24,6 +30,12 @@ class SdfCanvas {
         this.trackedElements.sort((a, b) => (a.dataset.layerIndex - b.dataset.layerIndex));
 
         console.log(this.trackedElements);
+    }
+
+    static sortTrackedElements() {
+        this.trackedElements.sort((a, b) => (a.dataset.layerIndex - b.dataset.layerIndex));
+
+        console.log("sorted elements", this.trackedElements);
     }
 
     constructor(canvasName) {
@@ -151,7 +163,7 @@ class SdfCanvas {
 
     updateUniformBuffers() {
         const resolution = [this.canvas.clientWidth, this.canvas.clienHeight];
-        const oneOverresX = 1 / resolution[0];
+        const oneOverX = 1 / resolution[0];
 
         for (let i = 0; i < SdfCanvas.trackedElements.length; i++) {
             const elementIdx = i * SdfCanvas.VEC4_PER_ELEMENT * 4;
@@ -159,18 +171,38 @@ class SdfCanvas {
 
             // Geometry Information
             const rect = element.getBoundingClientRect();
-            const halfWidth = element.offsetWidth * oneOverresX / 2;
-            const halfHeight = element.offsetHeight * oneOverresX / 2;
+            const halfWidth = element.offsetWidth * oneOverX / 2;
+            const halfHeight = element.offsetHeight * oneOverX / 2;
 
-            this.geometryBuffer[elementIdx + 0] = rect.left * oneOverresX + halfWidth; // x
-            this.geometryBuffer[elementIdx + 1] = rect.top * oneOverresX + halfHeight; // y
+            this.geometryBuffer[elementIdx + 0] = rect.left * oneOverX + halfWidth; // x
+            this.geometryBuffer[elementIdx + 1] = rect.top * oneOverX + halfHeight; // y
             this.geometryBuffer[elementIdx + 2] = parseFloat(getComputedStyle(element).getPropertyValue("--depth")); // z
-            this.geometryBuffer[elementIdx + 3] = 0; // Element id
+            this.geometryBuffer[elementIdx + 3] = parseInt(element.dataset.elementType); // Element id
 
-            this.geometryBuffer[elementIdx + 4] = halfWidth; // width 
-            this.geometryBuffer[elementIdx + 5] = halfHeight; // height 
-            this.geometryBuffer[elementIdx + 6] = 0.1; // depth
-            this.geometryBuffer[elementIdx + 7] = 0.005; // corner radius
+            switch (parseInt(element.dataset.elementType)) {
+                case SdfCanvas.ElementType.SPHERE:
+                    break;
+                case SdfCanvas.ElementType.BOX:
+                    this.geometryBuffer[elementIdx + 4] = halfWidth; // width 
+                    this.geometryBuffer[elementIdx + 5] = halfHeight; // height 
+                    this.geometryBuffer[elementIdx + 6] = 0.1; // depth
+                    this.geometryBuffer[elementIdx + 7] = 0; // depth
+                    break;
+                case SdfCanvas.ElementType.ROUND_BOX:
+                    break;
+            }
+
+
+            /* this.geometryBuffer[elementIdx + 0] = 500 * oneOverX;
+                        this.geometryBuffer[elementIdx + 1] = 500 * oneOverX;
+                        this.geometryBuffer[elementIdx + 2] = parseFloat(getComputedStyle(element).getPropertyValue("--depth")); // z
+                        this.geometryBuffer[elementIdx + 3] = 1; // Element id
+            
+                        this.geometryBuffer[elementIdx + 4] = 300 * oneOverX; // width 
+                        this.geometryBuffer[elementIdx + 5] = 300 * oneOverX; // height 
+                        this.geometryBuffer[elementIdx + 6] = 0.1; // depth
+                        this.geometryBuffer[elementIdx + 7] = 0.005; // corner radius */
+
 
             // Shading Information
             this.shadingBuffer[elementIdx + 0] = 0.; // unused for now

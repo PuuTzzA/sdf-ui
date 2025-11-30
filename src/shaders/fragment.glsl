@@ -141,10 +141,11 @@ Surface mapWithMaterial(vec3 p) {
     boxSurface.p = 20.f; // specular exponent, fall of of specular light
     boxSurface.ka = 0.1f; // ambient material property
 
-    vec3 boxPosition = vec3(0.5f, 0.5f, .5f);
-    boxSurface.distance = sdBox(p - boxPosition, vec3(0.45f, 0.45f, .5f));
+    vec3 boxPosition = vec3(0.5f, 0.5f, .0f);
+    boxSurface.distance = sdBox(p - boxPosition, vec3(0.45f, 0.45f, .1f));
 
     int elementIdx = 0;
+
     for (int i = 0; i < 1; i++) {
         elementIdx = i * VEC4_PER_OBJECT;
 
@@ -152,24 +153,26 @@ Surface mapWithMaterial(vec3 p) {
 
         switch (int(geometryData[elementIdx].w)) {
             case 0:
-                sphereSurface.distance = sdRoundBox(p - pos, geometryData[elementIdx + 1].xyz, geometryData[elementIdx + 1].w);
-                break;
-            case 1:
                 sphereSurface.distance = 0.f;
                 //result = cubicOut();
+                break;
+            case 1: // BOX
+                sphereSurface.distance = sdBox(p - pos, geometryData[elementIdx + 1].xyz);
+                //sphereSurface.distance = 1.;
                 break;
         }
     }
 
-    Surface union_ = opSmoothUnion(sphereSurface, boxSurface, 0.007f);
+     Surface union_ = opSmoothUnion(sphereSurface, boxSurface, 0.005f);
 
-    vec3 negBoxPos = vec3(geometryData[0].xyz - vec3(0.f, 0.f, 0.3f));
+/*    vec3 negBoxPos = vec3(geometryData[0].xyz - vec3(0.f, 0.f, 0.3f));
     Surface negBoxSurface;
     negBoxSurface = sphereSurface;
     negBoxSurface.colorDiffuse = vec3(1.f, 0.f, 0.f);
-    negBoxSurface.distance = sdRoundBox(p - negBoxPos, vec3(.1f, .1f, .1f), 0.01f);
+    negBoxSurface.distance = sdRoundBox(p - negBoxPos, vec3(.1f, .1f, .1f), 0.01f); */
 
-    return opSmoothSubtraction(negBoxSurface, union_, 0.007f);
+    //return opSmoothSubtraction(negBoxSurface, union_, 0.005f);
+    return union_;
 }
 
 vec3 calcNormal(in vec3 pos) {
@@ -192,7 +195,7 @@ vec3 calcNormalTetrahedron(vec3 p) {
 }
 
 HitInfo trace(vec3 ro, vec3 rd) {
-    const float tMax = 100000.0f;
+    const float tMax = 100.0f;
     const int maxSteps = 128;
 
     float t = 0.0f;   // distance traveled along ray
@@ -288,7 +291,7 @@ vec3 shade(HitInfo hit) {
     float iSpecular = surface.ks * ls * pow(max(0.f, dot(reflect(sundir, hit.normal), vec3(0.f, 0.f, -1.f))), surface.p);
 
     //float shadow = shadow(hit.pos, -sundir, 0.001f, 5.f);
-    float shadow = softshadow(hit.pos, -sundir, 0.001f, 5.f, .05f);
+    float shadow = softshadow(hit.pos, -sundir, 0.001f, 5.f, 0.1f);
     //float shadow = 1.f;
 
     //return vec3(shadow);
@@ -300,7 +303,8 @@ vec3 shade(HitInfo hit) {
 // ║                           MAIN                           ║
 // ╚══════════════════════════════════════════════════════════╝
 void main(void) {
-    //fragColor = length(vUv - geometryData[0].xy) < 0.1f ? vec4(1.f, 0.f, 0.f, 1.f) : vec4(1.f);
+    fragColor = length(vUv - geometryData[0].xy) < 0.1f ? vec4(1.f, 0.f, 0.f, 1.f) : vec4(1.f);
+    //return;
     //const vec2 subPixleOffsets[] = vec2[](vec2(0.375f, 0.125f) - vec2(0.5f), vec2(0.875f, 0.375f) - vec2(0.5f), vec2(0.125f, 0.625f) - vec2(0.5f), vec2(0.625f, 0.875f) - vec2(0.5f));
     const vec2 subPixleOffsets[] = vec2[](vec2(0.f, 0.f));
     vec2 pixelSize = vec2(1.f) / resolution.x;
