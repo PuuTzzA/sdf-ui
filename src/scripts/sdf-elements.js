@@ -1,4 +1,4 @@
-import { SdfCanvas } from "./webgl/webgl.js";
+import { SdfCanvas } from "./webgl/sdf-canvas.js";
 
 class ASdfElement extends HTMLElement {
     static observedAttributes = ["data-layer-index", "data-element-type"];

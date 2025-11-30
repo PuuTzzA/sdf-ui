@@ -1,4 +1,4 @@
-import { SdfCanvas } from "./webgl.js";
+import { SdfCanvas } from "./sdf-canvas.js";
 
 function initPositionBuffer(gl, programInfo) {
     const positionBuffer = gl.createBuffer();
@@ -61,7 +61,7 @@ function initGeometryBufferObject(gl, programInfo) {
 
     gl.bufferData(
         gl.UNIFORM_BUFFER,
-        SdfCanvas.MAX_UNIFORM_BUFFER_SIZE * 4 * Float32Array.BYTES_PER_ELEMENT,
+        SdfCanvas.MAX_TRACKED_ELEMENTS * SdfCanvas.VEC4_PER_ELEMENT * 4 * Float32Array.BYTES_PER_ELEMENT,
         gl.DYNAMIC_DRAW
     );
 
@@ -85,7 +85,7 @@ function initShadingBufferObject(gl, programInfo) {
 
     gl.bufferData(
         gl.UNIFORM_BUFFER,
-        SdfCanvas.MAX_UNIFORM_BUFFER_SIZE * 4 * Float32Array.BYTES_PER_ELEMENT,
+        SdfCanvas.MAX_TRACKED_ELEMENTS * SdfCanvas.VEC4_PER_ELEMENT * 4 * Float32Array.BYTES_PER_ELEMENT,
         gl.DYNAMIC_DRAW
     );
 

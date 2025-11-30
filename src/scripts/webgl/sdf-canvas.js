@@ -1,8 +1,10 @@
 import { initBuffers } from "./init-buffers.js";
 
 class SdfCanvas {
-    static MAX_UNIFORM_BUFFER_SIZE = 256;
+    static MAX_TRACKED_ELEMENTS = 256;
     static VEC4_PER_ELEMENT = 2;
+
+    static MAX_LAYERS = 16;
 
     static GEOMETRY_BLOCK_UNIFORM_BUFFER_BINDING_INDEX = 0;
     static SHADING_BLOCK_UNIFORM_BUFFER_BINDING_INDEX = 1;
@@ -14,31 +16,47 @@ class SdfCanvas {
     });
 
     static LayerOperation = Object.freeze({
-        UNION: "UNION",
-        SUBTRACTION: "SUBTRACTION",
-        INTERSECTION: "INTERSECTION",
-        XOR: "XOR",
-        SMOOTH_UNION: "SMOOTH_UNION",
-        SMOOTH_SUBTRACTION: "SMOOTH_SUBTRACTION",
-        SMOOTH_INTERSECTION: "SMOOTH_INTERSECTION",
+        UNION: 0,
+        SUBTRACTION: 1,
+        INTERSECTION: 2,
+        XOR: 3,
+        SMOOTH_UNION: 4,
+        SMOOTH_SUBTRACTION: 5,
+        SMOOTH_INTERSECTION: 6,
     })
 
-    static trackedElements = []
+    static instantiatedCanvases = [];
+
+    static trackedElements = [];
 
     static addTrackedElement(element) {
+        if (this.trackedElements.length > SdfCanvas.MAX_TRACKED_ELEMENTS) {
+            throw f`Cannot track more elemtns than the maximum amount (${SdfCanvas.MAX_TRACKED_ELEMENTS}).`;
+        }
+
         this.trackedElements.push(element);
         this.trackedElements.sort((a, b) => (a.dataset.layerIndex - b.dataset.layerIndex));
 
-        console.log(this.trackedElements);
+        this.instantiatedCanvases.forEach((c) => {
+            c.updateLayers();
+        });
+
+        console.log("addtrackedelements", this.trackedElements);
     }
 
     static sortTrackedElements() {
         this.trackedElements.sort((a, b) => (a.dataset.layerIndex - b.dataset.layerIndex));
 
-        console.log("sorted elements", this.trackedElements);
+        this.instantiatedCanvases.forEach((c) => {
+            c.updateLayers();
+        });
+
+        console.log("sort, sorted elements", this.trackedElements);
     }
 
     constructor(canvasName) {
+        SdfCanvas.instantiatedCanvases.push(this);
+
         this.canvasName = canvasName;
         this.ready = false;
 
@@ -46,8 +64,14 @@ class SdfCanvas {
         this.gl;
         this.programInfo;
         this.buffers;
-        this.geometryBuffer = new Float32Array(SdfCanvas.MAX_UNIFORM_BUFFER_SIZE * 4);
-        this.shadingBuffer = new Float32Array(SdfCanvas.MAX_UNIFORM_BUFFER_SIZE * 4);
+        this.geometryBuffer = new Float32Array(SdfCanvas.MAX_TRACKED_ELEMENTS * 4);
+        this.shadingBuffer = new Float32Array(SdfCanvas.MAX_TRACKED_ELEMENTS * 4);
+
+        this.layers = [
+            { layerOperation: SdfCanvas.LayerOperation.UNION, elementsInLayer: 0, smoothingFactor: 0 },
+            { layerOperation: SdfCanvas.LayerOperation.SMOOTH_UNION, elementsInLayer: 0, smoothingFactor: 10 },
+            { layerOperation: SdfCanvas.LayerOperation.SUBTRACTION, elementsInLayer: 0, smoothingFactor: 0 }
+        ];
     }
 
     async initWebgl() {
@@ -88,7 +112,14 @@ class SdfCanvas {
                 vertexUv: this.gl.getAttribLocation(shaderProgram, "aVertexUv"),
             },
             uniformLocations: {
-                resolution: this.gl.getUniformLocation(shaderProgram, "resolution"),
+                resolution: this.gl.getUniformLocation(shaderProgram, "uResolution"),
+                numElements: this.gl.getUniformLocation(shaderProgram, "uNumElements"),
+
+                layerOperations: this.gl.getUniformLocation(shaderProgram, 'uLayerOperations'),
+                elementsInLayer: this.gl.getUniformLocation(shaderProgram, 'uElementsInLayer'),
+                smoothingFactors: this.gl.getUniformLocation(shaderProgram, 'uSmoothingFactors'),
+                numLayers: this.gl.getUniformLocation(shaderProgram, 'uNumLayers'),
+
                 geometryBlock: this.gl.getUniformBlockIndex(shaderProgram, "GeometryBlock"),
                 shadingBlock: this.gl.getUniformBlockIndex(shaderProgram, "ShadingBlock")
             },
@@ -107,17 +138,20 @@ class SdfCanvas {
         const maxFragBlocks = this.gl.getParameter(this.gl.MAX_FRAGMENT_UNIFORM_BLOCKS);
         console.log("max fragment blocks:", maxFragBlocks) */
 
-        let dpr = window.devicePixelRatio || 1;
-        dpr = 1.;
-        console.log("aa;", window.devicePixelRatio)
-        console.log("bb;", [Math.round(this.canvas.clientWidth * dpr / 2), Math.round(this.canvas.clientHeight * dpr / 2)])
-        //requestAnimationFrame(() => drawScene(gl, programInfo, buffers));
+        /*         let dpr = window.devicePixelRatio || 1;
+                dpr = 1.;
+                console.log("aa;", window.devicePixelRatio)
+                console.log("bb;", [Math.round(this.canvas.clientWidth * dpr / 2), Math.round(this.canvas.clientHeight * dpr / 2)])
+         */        //requestAnimationFrame(() => drawScene(gl, programInfo, buffers));
 
         window.addEventListener("resize", () => {
             this.resizeCanvasToDisplaySize();
-            this.draw([0, 0]);
+            this.updateUniforms();
+            this.draw();
         });
 
+        this.updateLayers();
+        this.updateUniforms();
         this.ready = true;
     }
 
@@ -141,9 +175,6 @@ class SdfCanvas {
         // Tell WebGL to use our program when drawing
         this.gl.useProgram(this.programInfo.program);
 
-        // Set the shader uniforms
-        this.gl.uniform2f(this.programInfo.uniformLocations.resolution, this.programInfo.canvas.offsetWidth, this.programInfo.canvas.offsetHeight);
-
         // Set uniform buffer values
         this.updateUniformBuffers();
 
@@ -161,23 +192,105 @@ class SdfCanvas {
         }
     }
 
+    static intToFloatBits(i) {
+        const buf = new ArrayBuffer(4);         // buf is just raw memory: 4 bytes; to read/write numbers, you need a view like Uint32Array or Float32Array.
+        new Uint32Array(buf)[0] = i >>> 0;      // This creates a typed array view over buf; it does not copy memory; modifying the typed array directly modifies the underlying buffer
+        return new Float32Array(buf)[0];        // reinterpret as float
+    }
+
+    static parseCSSColor(css) {
+        const m = css.match(/rgba?\(([^)]+)\)/);
+        if (!m) return null;
+
+        const parts = m[1].split(",").map(v => v.trim());
+
+        const r = parseInt(parts[0]);
+        const g = parseInt(parts[1]);
+        const b = parseInt(parts[2]);
+        const a = parts[3] !== undefined ? parseFloat(parts[3]) : 1.0;
+
+        return { r, g, b, a };
+    }
+
+    static packRGBA(r, g, b, a = 255) {
+        return (
+            (r & 0xFF) << 24 |
+            (g & 0xFF) << 16 |
+            (b & 0xFF) << 8 |
+            (a & 0xFF)
+        ) >>> 0; // force uint32
+    }
+
+    static cssColorToUint32(css) {
+        const { r, g, b, a } = SdfCanvas.parseCSSColor(css);
+        const A = Math.round(a * 255);
+        return SdfCanvas.packRGBA(r, g, b, A);
+    }
+
+    updateLayers() {
+        let currentIdx = 0;
+        let currentNum = 0;
+
+        SdfCanvas.trackedElements.forEach((e) => {
+            if (e.dataset.layerIndex == currentIdx) {
+                console.log("hallo", currentIdx)
+                currentNum++;
+            } else {
+                this.layers[currentIdx].elementsInLayer = currentNum;
+
+                for (let i = currentIdx + 1; i < e.dataset.layerIndex; i++) {
+                    this.layers[i].elementsInLayer = 0;
+                }
+
+                currentIdx = e.dataset.layerIndex;
+                currentNum = 1;
+            }
+        });
+        this.layers[currentIdx].elementsInLayer = currentNum;
+
+        for (let i = currentIdx + 1; i < this.layers.length; i++) {
+            this.layers[i].elementsInLayer = 0;
+        }
+
+        this.updateUniforms();
+        console.log("sort, layers", this.layers);
+    }
+
+    updateUniforms() {
+        this.gl.useProgram(this.programInfo.program);
+
+        this.gl.uniform2f(this.programInfo.uniformLocations.resolution, this.canvas.offsetWidth, this.canvas.offsetHeight);
+        this.gl.uniform1i(this.programInfo.uniformLocations.numElements, SdfCanvas.trackedElements.length);
+
+        const operations = this.layers.map(l => l.layerOperation);
+        const elements = this.layers.map(l => l.elementsInLayer);
+        const smoothing = this.layers.map(l => l.smoothingFactor);
+        this.gl.uniform1iv(this.programInfo.uniformLocations.layerOperations, operations);
+        this.gl.uniform1iv(this.programInfo.uniformLocations.elementsInLayer, elements);
+        this.gl.uniform1fv(this.programInfo.uniformLocations.smoothingFactors, smoothing);
+        this.gl.uniform1i(this.programInfo.uniformLocations.numLayers, this.layers.length);
+    }
+
     updateUniformBuffers() {
         const resolution = [this.canvas.clientWidth, this.canvas.clienHeight];
         const oneOverX = 1 / resolution[0];
 
         for (let i = 0; i < SdfCanvas.trackedElements.length; i++) {
-            const elementIdx = i * SdfCanvas.VEC4_PER_ELEMENT * 4;
+            let elementIdx = i * SdfCanvas.VEC4_PER_ELEMENT * 4;
             const element = SdfCanvas.trackedElements[i];
 
             // Geometry Information
             const rect = element.getBoundingClientRect();
+            const computedStyle = getComputedStyle(element);
             const halfWidth = element.offsetWidth * oneOverX / 2;
             const halfHeight = element.offsetHeight * oneOverX / 2;
 
             this.geometryBuffer[elementIdx + 0] = rect.left * oneOverX + halfWidth; // x
             this.geometryBuffer[elementIdx + 1] = rect.top * oneOverX + halfHeight; // y
-            this.geometryBuffer[elementIdx + 2] = parseFloat(getComputedStyle(element).getPropertyValue("--depth")); // z
-            this.geometryBuffer[elementIdx + 3] = parseInt(element.dataset.elementType); // Element id
+            this.geometryBuffer[elementIdx + 2] = parseFloat(computedStyle.getPropertyValue("--z")); // z (computedStyleMap has limited availability)
+            this.geometryBuffer[elementIdx + 3] = SdfCanvas.intToFloatBits(parseInt(element.dataset.elementType)); // Element id
+
+            // console.log(parseFloat(getComputedStyle(element).getPropertyValue("--z")) * oneOverX);
 
             switch (parseInt(element.dataset.elementType)) {
                 case SdfCanvas.ElementType.SPHERE:
@@ -191,6 +304,11 @@ class SdfCanvas {
                 case SdfCanvas.ElementType.ROUND_BOX:
                     break;
             }
+
+            /*             this.geometryBuffer[elementIdx + 4] = 2 * oneOverX; // width 
+                        this.geometryBuffer[elementIdx + 5] = 1 * oneOverX; // height 
+                        this.geometryBuffer[elementIdx + 6] = 1 * oneOverX; // depth
+                        this.geometryBuffer[elementIdx + 7] = 0; // depth */
 
 
             /* this.geometryBuffer[elementIdx + 0] = 500 * oneOverX;
@@ -215,6 +333,25 @@ class SdfCanvas {
             this.shadingBuffer[elementIdx + 6] = 0.; // unused for now
             this.shadingBuffer[elementIdx + 7] = 0.; // unused for now
         }
+
+        let elementIdx = 0 * SdfCanvas.VEC4_PER_ELEMENT * 4;
+
+        const element = SdfCanvas.trackedElements[0];
+
+        const css = getComputedStyle(element).backgroundColor;
+        const packed = SdfCanvas.cssColorToUint32(css);
+
+        console.log(css, packed.toString(16), SdfCanvas.intToFloatBits(packed));
+
+        this.shadingBuffer[elementIdx + 0] = SdfCanvas.intToFloatBits(packed); // unused for now
+        this.shadingBuffer[elementIdx + 1] = 0.; // unused for now
+        this.shadingBuffer[elementIdx + 2] = 0.; // unused for now
+        this.shadingBuffer[elementIdx + 3] = 0.; // unused for now
+
+        this.shadingBuffer[elementIdx + 4] = 0.; // unused for now
+        this.shadingBuffer[elementIdx + 5] = 0.; // unused for now
+        this.shadingBuffer[elementIdx + 6] = 0.; // unused for now
+        this.shadingBuffer[elementIdx + 7] = 0.; // unused for now
     }
 
     resizeCanvasToDisplaySize() {

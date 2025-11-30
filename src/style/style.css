@@ -17,10 +17,16 @@ html,
     height: 100vh;
 }
 
+@property --z {
+    syntax: "<length>";
+    inherits: false;
+    initial-value: 0;
+}
+
 @property --depth {
     syntax: "<number>";
     inherits: false;
-    initial-value: 0;
+    initial-value: 1px;
 }
 
 @property --specular-color {
@@ -56,25 +62,33 @@ html,
     transform: translate(-50%, -50%);
     background-color: red;
     --depth: 0;
-    transition: background-color 0.3s, --depth .3s;
+    --z: -0rem;
+    transition: background-color 0.3s, --z .3s;
 
-    opacity: 0.1;
+    opacity: 1;
 }
 
 #test-div:active {
     background-color: green;
-    --depth: .3;
+    --z: 1;
 }
 
 
 .test-class {
     background-color: red;
+    opacity: 0.1;
     position: absolute;
     top: 0;
     left: 0;
-    z-index: 10;
+    z-index: 100;
 }
 
 .test-class:hover{
-    background-color: green;
+    background-color: blue;
+}
+
+
+.cc{
+    top: 100px;
+    left: 100px;
 }

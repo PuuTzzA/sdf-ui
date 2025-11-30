@@ -1,4 +1,4 @@
-import { SdfCanvas } from "./webgl/webgl.js";
+import { SdfCanvas } from "./webgl/sdf-canvas.js";
 
 const sdfCanvas = new SdfCanvas("canvas");
 sdfCanvas.initWebgl();

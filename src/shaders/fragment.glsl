@@ -2,6 +2,7 @@
 precision highp float;
 
 #define MAX_OBJECTS 256
+#define MAX_LAYERS 16
 #define VEC4_PER_OBJECT 2
 #define EPSILON 1e-6
 
@@ -14,7 +15,15 @@ layout (std140) uniform GeometryBlock {
 layout (std140) uniform ShadingBlock {
     vec4 shadingData[MAX_OBJECTS];
 };
-uniform vec2 resolution;
+
+uniform vec2 uResolution;
+
+uniform int uNumElements;
+
+uniform int uLayerOperations[MAX_LAYERS];
+uniform int uElementsInLayer[MAX_LAYERS];
+uniform float uSmoothingFactors[MAX_LAYERS];
+uniform int uNumLayers;
 
 // ╔══════════════════════════════════════════════════════════╗
 // ║              SHADER INPUT, OUTPUT, STRUCTS               ║
@@ -66,8 +75,7 @@ float smin2(float a, float b, float k) { // ret.a = distnce, ret.b = blendfactor
     return (a < b) ? a - s : b - s;
 }
 
-vec2 smin(float a, float b, float k) { // ret.a = distnce, ret.b = blendfactor
-    //return vec2(min(a, b), a);
+vec2 smin(float a, float b, float k) { // ret.a = distnce, ret.b = blendfactor //return vec2(min(a, b), a);
     k *= 6.0f;
     float h = max(k - abs(a - b), 0.0f) / k;
     float m = h * h * h * 0.5f;
@@ -109,6 +117,28 @@ Surface opSmoothSubtraction(Surface a, Surface b, float smoothness) {
 // ╔══════════════════════════════════════════════════════════╗
 // ║                      RAYMARCHING                         ║
 // ╚══════════════════════════════════════════════════════════╝
+/* vec4 unpackColor(float f) {
+    // reinterpret float bits as uint
+    uint u = floatBitsToUint(f);
+
+    float r = float((u >> 24u) & 0xFFu) / 255.0f;
+    float g = float((u >> 16u) & 0xFFu) / 255.0f;
+    float b = float((u >> 8u) & 0xFFu) / 255.0f;
+    float a = float(u & 0xFFu) / 255.0f;
+
+    return vec4(r, g, b, a);
+} */
+
+vec4 unpackColor(float f) {
+    uint u = floatBitsToUint(f);
+    return vec4(//
+    float((u >> 24u) & 255u), //
+    float((u >> 16u) & 255u), //
+    float((u >> 8u) & 255u), //
+    float(u & 255u) //
+    ) / 255.0f;
+}
+
 float map(vec3 p) {
     // custom sphere position + radius
     vec3 spherePos = vec3(geometryData[0].xyz);
@@ -144,26 +174,60 @@ Surface mapWithMaterial(vec3 p) {
     vec3 boxPosition = vec3(0.5f, 0.5f, .0f);
     boxSurface.distance = sdBox(p - boxPosition, vec3(0.45f, 0.45f, .1f));
 
+    int elementSeen = 0;
     int elementIdx = 0;
 
-    for (int i = 0; i < 1; i++) {
-        elementIdx = i * VEC4_PER_OBJECT;
+    float dist = 1000000.f;
 
-        vec3 pos = geometryData[elementIdx].xyz;
+    for (int layer = 0; layer < uNumLayers; layer++) {
+        int layerOperation = uLayerOperations[layer];
+        int numElements = uElementsInLayer[layer];
+        float smoothness = uSmoothingFactors[layer];
 
-        switch (int(geometryData[elementIdx].w)) {
-            case 0:
-                sphereSurface.distance = 0.f;
-                //result = cubicOut();
-                break;
-            case 1: // BOX
-                sphereSurface.distance = sdBox(p - pos, geometryData[elementIdx + 1].xyz);
-                //sphereSurface.distance = 1.;
-                break;
+        for (int i = 0; i < numElements; i++) {
+            elementIdx = elementSeen * VEC4_PER_OBJECT;
+            //elementIdx = 2 * VEC4_PER_OBJECT;
+            elementSeen++;
+
+            vec3 pos = geometryData[elementIdx].xyz;
+
+            float sdValue;
+
+            switch (floatBitsToInt(geometryData[elementIdx].w)) {
+                case 0: // Sphere
+                    sdValue = 0.f;
+                    break;
+                case 1: // Box
+                    sdValue = sdBox(p - pos, geometryData[elementIdx + 1].xyz);
+                    break;
+            }
+
+            switch (layerOperation) {
+                case 0: // Union
+                    dist = min(dist, sdValue);
+                    break;
+                case 1: // Subtraction
+                    break;
+                case 2: // Intersection
+                    break;
+                case 3: // Xor
+                    break;
+                case 4: // Smooth union
+                    dist = smin(dist, sdValue, smoothness / uResolution.x).x;
+                    break;
+                case 5: // Smooth subtraction 
+                    break;
+                case 6: // Smooth intersection
+                    break;
+            }
         }
     }
 
-     Surface union_ = opSmoothUnion(sphereSurface, boxSurface, 0.005f);
+    sphereSurface.distance = dist;
+
+/*     vec3 pos = geometryData[0].xyz;
+    sphereSurface.distance = sdBox(p - pos, geometryData[1].xyz);
+ */
 
 /*    vec3 negBoxPos = vec3(geometryData[0].xyz - vec3(0.f, 0.f, 0.3f));
     Surface negBoxSurface;
@@ -172,7 +236,7 @@ Surface mapWithMaterial(vec3 p) {
     negBoxSurface.distance = sdRoundBox(p - negBoxPos, vec3(.1f, .1f, .1f), 0.01f); */
 
     //return opSmoothSubtraction(negBoxSurface, union_, 0.005f);
-    return union_;
+    return sphereSurface;
 }
 
 vec3 calcNormal(in vec3 pos) {
@@ -303,15 +367,19 @@ vec3 shade(HitInfo hit) {
 // ║                           MAIN                           ║
 // ╚══════════════════════════════════════════════════════════╝
 void main(void) {
-    fragColor = length(vUv - geometryData[0].xy) < 0.1f ? vec4(1.f, 0.f, 0.f, 1.f) : vec4(1.f);
+
+    fragColor = unpackColor(shadingData[0].x);
+    return;
+
+    //fragColor = length(vUv - geometryData[0].xy) < 0.1f ? vec4(1.f, 0.f, 0.f, 1.f) : vec4(1.f);
     //return;
-    //const vec2 subPixleOffsets[] = vec2[](vec2(0.375f, 0.125f) - vec2(0.5f), vec2(0.875f, 0.375f) - vec2(0.5f), vec2(0.125f, 0.625f) - vec2(0.5f), vec2(0.625f, 0.875f) - vec2(0.5f));
-    const vec2 subPixleOffsets[] = vec2[](vec2(0.f, 0.f));
-    vec2 pixelSize = vec2(1.f) / resolution.x;
+    const vec2 subPixleOffsets[] = vec2[](vec2(0.375f, 0.125f) - vec2(0.5f), vec2(0.875f, 0.375f) - vec2(0.5f), vec2(0.125f, 0.625f) - vec2(0.5f), vec2(0.625f, 0.875f) - vec2(0.5f));
+    //const vec2 subPixleOffsets[] = vec2[](vec2(0.f, 0.f));
+    vec2 pixelSize = vec2(1.f) / uResolution.x;
 
     vec3 color = vec3(0.f);
 
-    vec3 pos = vec3(vUv * vec2(1.f, resolution.y / resolution.x), -2.f);
+    vec3 pos = vec3(vUv * vec2(1.f, uResolution.y / uResolution.x), -2.f);
     vec3 dir = vec3(0.f, 0.f, 1.f);
     vec3 posOffset;
 
