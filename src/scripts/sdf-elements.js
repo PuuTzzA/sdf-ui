@@ -8,8 +8,6 @@ class ASdfElement extends HTMLElement {
     }
 
     connectedCallback() {
-        console.log("Custom element added to page.");
-
         if (this.dataset.layerIndex == undefined) {
             this.dataset.layerIndex = 0;
         }
@@ -40,10 +38,18 @@ class ASdfElement extends HTMLElement {
             SdfCanvas.sortTrackedElements();
         }
 
-        console.log(`Attribute ${name} has changed from ${oldValue} to ${newValue}.`);
+        // console.log(`Attribute ${name} has changed from ${oldValue} to ${newValue}.`);
         const test = newValue * 22;
     }
 }
+
+class SdfSphere extends ASdfElement {
+    getElementType() {
+        return SdfCanvas.ElementType.SPHERE;
+    }
+}
+
+customElements.define("sdf-sphere", SdfSphere);
 
 class SdfBox extends ASdfElement {
     getElementType() {
@@ -51,4 +57,4 @@ class SdfBox extends ASdfElement {
     }
 }
 
-customElements.define("my-custom-element", SdfBox);
+customElements.define("sdf-box", SdfBox);

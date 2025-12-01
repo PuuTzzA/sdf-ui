@@ -18,8 +18,6 @@ layout (std140) uniform ShadingBlock {
 
 uniform vec2 uResolution;
 
-uniform int uNumElements;
-
 uniform int uLayerOperations[MAX_LAYERS];
 uniform int uElementsInLayer[MAX_LAYERS];
 uniform float uSmoothingFactors[MAX_LAYERS];
@@ -98,6 +96,37 @@ Surface opUnion(Surface a, Surface b) {
     a.distance < b.distance ? a.distance : b.distance);//
 }
 
+Surface opSubtraction(Surface a, Surface b) {
+    float t = a.distance > -b.distance ? 0.f : 1.f;
+
+    return Surface(mix(a.colorDiffuse, b.colorDiffuse, t),//
+    mix(a.colorSpecular, b.colorSpecular, t), //
+    mix(a.colorAmbient, b.colorAmbient, t), //
+    mix(a.kd, b.kd, t), //
+    mix(a.ks, b.ks, t), //
+    mix(a.p, b.p, t), //
+    mix(a.ka, b.ka, t), //
+    t, //
+    max(a.distance, -b.distance)); //
+}
+
+/* Surface opSubtraction(Surface a, Surface b) {
+    float dist = max(a.distance, -b.distance);
+    float t = smoothstep(-0.01, 0.01, a.distance + b.distance);
+    
+    return Surface(
+        mix(a.colorDiffuse, b.colorDiffuse, t),
+        mix(a.colorSpecular, b.colorSpecular, t),
+        mix(a.colorAmbient, b.colorAmbient, t),
+        mix(a.kd, b.kd, t),
+        mix(a.ks, b.ks, t),
+        mix(a.p, b.p, t),
+        mix(a.ka, b.ka, t),
+        t,
+        dist
+    );
+} */
+
 Surface opSmoothUnion(Surface a, Surface b, float smoothness) {
     vec2 blend = smin(a.distance, b.distance, smoothness);
 
@@ -114,7 +143,7 @@ Surface opSmoothUnion(Surface a, Surface b, float smoothness) {
 }
 
 Surface opSmoothSubtraction(Surface a, Surface b, float smoothness) {
-    vec2 blend = smin(a.distance, -b.distance, smoothness);
+    vec2 blend = smin(-a.distance, b.distance, smoothness);
     blend.x *= -1.f;
 
     return Surface(//
@@ -203,7 +232,7 @@ Surface mapWithMaterial(vec3 p) {
 
             switch (floatBitsToInt(geometryData[elementIdx].w)) {
                 case 0: // Sphere
-                    sdValue = 0.f;
+                    sdValue = sdSphere(p - pos, geometryData[elementIdx + 1].x);
                     break;
                 case 1: // Box
                     sdValue = sdBox(p - pos, geometryData[elementIdx + 1].xyz);
@@ -217,6 +246,7 @@ Surface mapWithMaterial(vec3 p) {
                     combinedSurface = opUnion(combinedSurface, surface);
                     break;
                 case 1: // Subtraction
+                    combinedSurface = opSubtraction(combinedSurface, surface);
                     break;
                 case 2: // Intersection
                     break;
@@ -226,6 +256,7 @@ Surface mapWithMaterial(vec3 p) {
                     combinedSurface = opSmoothUnion(combinedSurface, surface, smoothness / uResolution.x);
                     break;
                 case 5: // Smooth subtraction 
+                    combinedSurface = opSmoothSubtraction(combinedSurface, surface, smoothness / uResolution.x);
                     break;
                 case 6: // Smooth intersection
                     break;
@@ -333,6 +364,19 @@ float softshadow(in vec3 ro, in vec3 rd, float mint, float maxt, float w) {
     return 0.25f * (1.0f + res) * (1.0f + res) * (2.0f - res);
 }
 
+float calcSoftshadow(in vec3 ro, in vec3 rd, float tmin, float tmax, const float k) {
+    float res = 1.0f;
+    float t = tmin;
+    for (int i = 0; i < 50; i++) {
+        float h = mapWithMaterial(ro + rd * t).distance;
+        res = min(res, k * h / t);
+        t += clamp(h, 0.02f, 0.20f);
+        if (res < 0.005f || t > tmax)
+            break;
+    }
+    return clamp(res, 0.0f, 1.0f);
+}
+
 float gaussian(float x, float mu, float sigma) {
     return exp(-1.f * ((x - mu) * (x - mu)) / (2.f * sigma * sigma));
 }
@@ -346,12 +390,13 @@ vec3 shade(HitInfo hit) {
         return vec3(1.f, 0.f, 1.f);
     } */
 
-    const vec3 sundir = normalize(vec3(1.f, 1.f, 0.5f));
+    const vec3 sundir = normalize(vec3(1.f, 1.f, -1.5f));
 
     Surface surface = hit.surface;
 
     float mixFacotr = gaussian(surface.mix, 0.5f, 0.07f);
 
+    //return hit.normal;
     //return vec3(mixFacotr);
 
     float ld = 1.f; // diffuse light intensity (light source dependent)
@@ -364,7 +409,8 @@ vec3 shade(HitInfo hit) {
 
     //float shadow = shadow(hit.pos, -sundir, 0.001f, 5.f);
     float shadow = softshadow(hit.pos, -sundir, 0.001f, 5.f, 0.1f);
-    //float shadow = 1.f;
+    //float shadow = calcSoftshadow(hit.pos, -sundir, 0.01f, 5.0f, 16.0f);
+    //shadow = max(shadow, 0.1f);
 
     //return vec3(shadow);
     //return hit.id != -1 ? vec3(1.f) : vec3(0.f);
@@ -386,8 +432,8 @@ void main(void) {
 
     vec3 color = vec3(0.f);
 
-    vec3 pos = vec3(vUv * vec2(1.f, uResolution.y / uResolution.x), -2.f);
-    vec3 dir = vec3(0.f, 0.f, 1.f);
+    vec3 pos = vec3(vUv * vec2(1.f, uResolution.y / uResolution.x), 5.f);
+    vec3 dir = vec3(0.f, 0.f, -1.f);
     vec3 posOffset;
 
     for (int i = 0; i < subPixleOffsets.length(); i++) {

@@ -20,13 +20,13 @@ html,
 @property --z {
     syntax: "<length>";
     inherits: false;
-    initial-value: 0;
+    initial-value: 0px;
 }
 
 @property --depth {
-    syntax: "<number>";
+    syntax: "<length>";
     inherits: false;
-    initial-value: 0.1;
+    initial-value: 0.1px;
 }
 
 @property --specular-color {
@@ -80,14 +80,14 @@ html,
 
 #test-div {
     position: absolute;
-    width: 300px;
+    width: 10rem;
     height: 300px;
     top: 50vh;
     left: 50%;
     transform: translate(-50%, -50%);
-    background-color: red;
-    --z: -0rem;
-    --depth: 0.1;
+    background-color: orange;
+    --z: 5rem;
+    --depth: 10rem;
 
     --kd: 1;
     --ks: 1;
@@ -96,7 +96,7 @@ html,
 
     --specular-color: rgb(100, 100, 200);
     transition: background-color 0.3s, --z .3s, --specular-color .3s, --kd .3s;
-    opacity: 0;
+    opacity: 0.05;
 }
 
 /* #test-div:hover {
@@ -104,13 +104,13 @@ html,
 } */
 
 #test-div:active {
-    background-color: green;
+    background-color: red;
 
     --specular-color: rgb(255, 255, 200);
-    --z: -1;
-    --kd: 0;
-    --ks: 0;
-    --ka: 0;
+    --z: 0.1rem;
+    --kd: 0.1;
+    --ks: 0.1;
+    --ka: 0.1;
 }
 
 .test-class {
@@ -122,8 +122,21 @@ html,
     z-index: 100;
 }
 
-
 .cc {
     top: 100px;
     left: 100px;
+}
+
+#background {
+    width: 600px;
+    height: 600px;
+    background-color: blue;
+    position: absolute;
+    top: 150px;
+    left: 150px;
+
+    opacity: 0;
+
+    --z: 0;
+    --depth: 100rem;
 }

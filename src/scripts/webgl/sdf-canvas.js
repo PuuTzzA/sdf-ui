@@ -13,6 +13,7 @@ class SdfCanvas {
         SPHERE: 0,
         BOX: 1,
         ROUND_BOX: 2,
+        BORDER: 3,
     });
 
     static LayerOperation = Object.freeze({
@@ -40,8 +41,6 @@ class SdfCanvas {
         this.instantiatedCanvases.forEach((c) => {
             c.updateLayers();
         });
-
-        console.log("addtrackedelements", this.trackedElements);
     }
 
     static sortTrackedElements() {
@@ -50,8 +49,6 @@ class SdfCanvas {
         this.instantiatedCanvases.forEach((c) => {
             c.updateLayers();
         });
-
-        console.log("sort, sorted elements", this.trackedElements);
     }
 
     constructor(canvasName) {
@@ -70,7 +67,7 @@ class SdfCanvas {
         this.layers = [
             { layerOperation: SdfCanvas.LayerOperation.UNION, elementsInLayer: 0, smoothingFactor: 0 },
             { layerOperation: SdfCanvas.LayerOperation.SMOOTH_UNION, elementsInLayer: 0, smoothingFactor: 10 },
-            { layerOperation: SdfCanvas.LayerOperation.SUBTRACTION, elementsInLayer: 0, smoothingFactor: 0 }
+            { layerOperation: SdfCanvas.LayerOperation.SUBTRACTION, elementsInLayer: 0, smoothingFactor: 10 }
         ];
     }
 
@@ -113,7 +110,6 @@ class SdfCanvas {
             },
             uniformLocations: {
                 resolution: this.gl.getUniformLocation(shaderProgram, "uResolution"),
-                numElements: this.gl.getUniformLocation(shaderProgram, "uNumElements"),
 
                 layerOperations: this.gl.getUniformLocation(shaderProgram, 'uLayerOperations'),
                 elementsInLayer: this.gl.getUniformLocation(shaderProgram, 'uElementsInLayer'),
@@ -232,17 +228,19 @@ class SdfCanvas {
         let currentNum = 0;
 
         SdfCanvas.trackedElements.forEach((e) => {
-            if (e.dataset.layerIndex == currentIdx) {
+            if (parseInt(e.dataset.layerIndex) == currentIdx) {
                 console.log("hallo", currentIdx)
                 currentNum++;
             } else {
                 this.layers[currentIdx].elementsInLayer = currentNum;
 
-                for (let i = currentIdx + 1; i < e.dataset.layerIndex; i++) {
+                console.log(e.dataset.layerIndex)
+
+                for (let i = currentIdx + 1; i < parseInt(e.dataset.layerIndex); i++) {
                     this.layers[i].elementsInLayer = 0;
                 }
 
-                currentIdx = e.dataset.layerIndex;
+                currentIdx = parseInt(e.dataset.layerIndex);
                 currentNum = 1;
             }
         });
@@ -253,14 +251,13 @@ class SdfCanvas {
         }
 
         this.updateUniforms();
-        console.log("sort, layers", this.layers);
+        //console.log("sort, layers", this.layers);
     }
 
     updateUniforms() {
         this.gl.useProgram(this.programInfo.program);
 
         this.gl.uniform2f(this.programInfo.uniformLocations.resolution, this.canvas.offsetWidth, this.canvas.offsetHeight);
-        this.gl.uniform1i(this.programInfo.uniformLocations.numElements, SdfCanvas.trackedElements.length);
 
         const operations = this.layers.map(l => l.layerOperation);
         const elements = this.layers.map(l => l.elementsInLayer);
@@ -284,21 +281,28 @@ class SdfCanvas {
             const computedStyle = getComputedStyle(element);
             const halfWidth = element.offsetWidth * oneOverX * 0.5;
             const halfHeight = element.offsetHeight * oneOverX * 0.5;
-            const halfDepth = computedStyle.getPropertyValue("--depth") * 0.5;
+            const halfDepth = parseFloat(computedStyle.getPropertyValue("--depth")) * oneOverX * 0.5;
 
             this.geometryBuffer[elementIdx + 0] = rect.left * oneOverX + halfWidth; // x
             this.geometryBuffer[elementIdx + 1] = rect.top * oneOverX + halfHeight; // y
-            this.geometryBuffer[elementIdx + 2] = parseFloat(computedStyle.getPropertyValue("--z")) + halfDepth; // z (computedStyleMap has limited availability)
+            this.geometryBuffer[elementIdx + 2] = parseFloat(computedStyle.getPropertyValue("--z")) - halfDepth; // z (computedStyleMap has limited availability)
             this.geometryBuffer[elementIdx + 3] = SdfCanvas.intToFloatBits(parseInt(element.dataset.elementType)); // Element id
 
             switch (parseInt(element.dataset.elementType)) {
                 case SdfCanvas.ElementType.SPHERE:
+
+                    this.geometryBuffer[elementIdx + 2] = parseFloat(computedStyle.getPropertyValue("--z")) * oneOverX - halfDepth; // z (computedStyleMap has limited availability)
+
+                    this.geometryBuffer[elementIdx + 4] = halfDepth; // radius 
+                    this.geometryBuffer[elementIdx + 5] = 0; // unused
+                    this.geometryBuffer[elementIdx + 6] = 0; // unused
+                    this.geometryBuffer[elementIdx + 7] = 0; // unused
                     break;
                 case SdfCanvas.ElementType.BOX:
                     this.geometryBuffer[elementIdx + 4] = halfWidth; // width 
                     this.geometryBuffer[elementIdx + 5] = halfHeight; // height 
                     this.geometryBuffer[elementIdx + 6] = halfDepth; // depth
-                    this.geometryBuffer[elementIdx + 7] = 0; // depth
+                    this.geometryBuffer[elementIdx + 7] = 0; // unused
                     break;
                 case SdfCanvas.ElementType.ROUND_BOX:
                     break;
@@ -320,7 +324,7 @@ class SdfCanvas {
         const bgc = getComputedStyle(element).backgroundColor;
         const specular = getComputedStyle(element).getPropertyValue("--specular-color");
         const packedS = SdfCanvas.cssColorToUint32(specular);
-        console.log(parseFloat(getComputedStyle(element).getPropertyValue("--kd"))); */
+        console.log((getComputedStyle(element).getPropertyValue("--z"))); */
     }
 
     resizeCanvasToDisplaySize() {
