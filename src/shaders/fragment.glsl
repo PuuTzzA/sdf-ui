@@ -83,6 +83,21 @@ vec2 smin(float a, float b, float k) { // ret.a = distnce, ret.b = blendfactor /
     return (a < b) ? vec2(a - s, m) : vec2(b - s, 1.0f - m);
 }
 
+Surface opUnion(Surface a, Surface b) {
+    float t = a.distance < b.distance ? 0.f : 1.f;
+
+    return Surface(//
+    mix(a.colorDiffuse, b.colorDiffuse, t),//
+    mix(a.colorSpecular, b.colorSpecular, t),//
+    mix(a.colorAmbient, b.colorAmbient, t),//
+    mix(a.kd, b.kd, t),//
+    mix(a.ks, b.ks, t),//
+    mix(a.p, b.p, t),//
+    mix(a.ka, b.ka, t),//
+    t,//
+    a.distance < b.distance ? a.distance : b.distance);//
+}
+
 Surface opSmoothUnion(Surface a, Surface b, float smoothness) {
     vec2 blend = smin(a.distance, b.distance, smoothness);
 
@@ -129,13 +144,12 @@ Surface opSmoothSubtraction(Surface a, Surface b, float smoothness) {
     return vec4(r, g, b, a);
 } */
 
-vec4 unpackColor(float f) {
+vec3 unpackColor(float f) {
     uint u = floatBitsToUint(f);
-    return vec4(//
+    return vec3(//
     float((u >> 24u) & 255u), //
     float((u >> 16u) & 255u), //
-    float((u >> 8u) & 255u), //
-    float(u & 255u) //
+    float((u >> 8u) & 255u) //
     ) / 255.0f;
 }
 
@@ -153,31 +167,18 @@ float map(vec3 p) {
 }
 
 Surface mapWithMaterial(vec3 p) {
-    Surface sphereSurface;
-    sphereSurface.colorDiffuse = vec3(0.f, 1.f, 1.f);
-    sphereSurface.colorSpecular = vec3(1.f);
-    sphereSurface.colorAmbient = vec3(1.f, 0.f, 0.f);
-    sphereSurface.kd = 1.f; // diffuse material property
-    sphereSurface.ks = .0f; // specular material property
-    sphereSurface.p = 20.f; // specular exponent, fall of of specular light
-    sphereSurface.ka = 0.1f; // ambient material property
-
-    Surface boxSurface;
-    boxSurface.colorDiffuse = vec3(1.f, 1.f, 1.f);
-    boxSurface.colorSpecular = vec3(1.f);
-    boxSurface.colorAmbient = vec3(1.f, 0.f, 0.f);
-    boxSurface.kd = 1.f; // diffuse material property
-    boxSurface.ks = .0f; // specular material property
-    boxSurface.p = 20.f; // specular exponent, fall of of specular light
-    boxSurface.ka = 0.1f; // ambient material property
-
-    vec3 boxPosition = vec3(0.5f, 0.5f, .0f);
-    boxSurface.distance = sdBox(p - boxPosition, vec3(0.45f, 0.45f, .1f));
+    Surface combinedSurface;
+    combinedSurface.colorDiffuse = vec3(0.f);
+    combinedSurface.colorSpecular = vec3(0.f);
+    combinedSurface.colorAmbient = vec3(0.f);
+    combinedSurface.kd = 0.f; // diffuse material property
+    combinedSurface.ks = 0.f; // specular material property
+    combinedSurface.p = 0.f; // specular exponent, fall of of specular light
+    combinedSurface.ka = 0.1f; // ambient material property
+    combinedSurface.distance = 3.402823466e+38f;
 
     int elementSeen = 0;
     int elementIdx = 0;
-
-    float dist = 1000000.f;
 
     for (int layer = 0; layer < uNumLayers; layer++) {
         int layerOperation = uLayerOperations[layer];
@@ -186,12 +187,19 @@ Surface mapWithMaterial(vec3 p) {
 
         for (int i = 0; i < numElements; i++) {
             elementIdx = elementSeen * VEC4_PER_OBJECT;
-            //elementIdx = 2 * VEC4_PER_OBJECT;
             elementSeen++;
 
             vec3 pos = geometryData[elementIdx].xyz;
-
             float sdValue;
+
+            Surface surface;
+            surface.colorDiffuse = unpackColor(shadingData[elementIdx].x);
+            surface.colorSpecular = unpackColor(shadingData[elementIdx].y);
+            surface.colorAmbient = unpackColor(shadingData[elementIdx].z);
+            surface.kd = shadingData[elementIdx].w; // diffuse material property
+            surface.ks = shadingData[elementIdx + 1].x; // specular material property
+            surface.p = shadingData[elementIdx + 1].y; // specular exponent, fall of of specular light
+            surface.ka = shadingData[elementIdx + 1].z; // ambient material property
 
             switch (floatBitsToInt(geometryData[elementIdx].w)) {
                 case 0: // Sphere
@@ -202,9 +210,11 @@ Surface mapWithMaterial(vec3 p) {
                     break;
             }
 
+            surface.distance = sdValue;
+
             switch (layerOperation) {
                 case 0: // Union
-                    dist = min(dist, sdValue);
+                    combinedSurface = opUnion(combinedSurface, surface);
                     break;
                 case 1: // Subtraction
                     break;
@@ -213,7 +223,7 @@ Surface mapWithMaterial(vec3 p) {
                 case 3: // Xor
                     break;
                 case 4: // Smooth union
-                    dist = smin(dist, sdValue, smoothness / uResolution.x).x;
+                    combinedSurface = opSmoothUnion(combinedSurface, surface, smoothness / uResolution.x);
                     break;
                 case 5: // Smooth subtraction 
                     break;
@@ -222,8 +232,6 @@ Surface mapWithMaterial(vec3 p) {
             }
         }
     }
-
-    sphereSurface.distance = dist;
 
 /*     vec3 pos = geometryData[0].xyz;
     sphereSurface.distance = sdBox(p - pos, geometryData[1].xyz);
@@ -236,7 +244,7 @@ Surface mapWithMaterial(vec3 p) {
     negBoxSurface.distance = sdRoundBox(p - negBoxPos, vec3(.1f, .1f, .1f), 0.01f); */
 
     //return opSmoothSubtraction(negBoxSurface, union_, 0.005f);
-    return sphereSurface;
+    return combinedSurface;
 }
 
 vec3 calcNormal(in vec3 pos) {
@@ -367,14 +375,13 @@ vec3 shade(HitInfo hit) {
 // ║                           MAIN                           ║
 // ╚══════════════════════════════════════════════════════════╝
 void main(void) {
-
-    fragColor = unpackColor(shadingData[0].x);
-    return;
-
-    //fragColor = length(vUv - geometryData[0].xy) < 0.1f ? vec4(1.f, 0.f, 0.f, 1.f) : vec4(1.f);
+    fragColor = vec4(vec3(shadingData[0].w), 1.f);
     //return;
-    const vec2 subPixleOffsets[] = vec2[](vec2(0.375f, 0.125f) - vec2(0.5f), vec2(0.875f, 0.375f) - vec2(0.5f), vec2(0.125f, 0.625f) - vec2(0.5f), vec2(0.625f, 0.875f) - vec2(0.5f));
-    //const vec2 subPixleOffsets[] = vec2[](vec2(0.f, 0.f));
+
+    fragColor = length(vUv - geometryData[0].xy) < 0.1f ? vec4(1.f, 0.f, 0.f, 1.f) : vec4(1.f);
+    //return;
+    //const vec2 subPixleOffsets[] = vec2[](vec2(0.375f, 0.125f) - vec2(0.5f), vec2(0.875f, 0.375f) - vec2(0.5f), vec2(0.125f, 0.625f) - vec2(0.5f), vec2(0.625f, 0.875f) - vec2(0.5f));
+    const vec2 subPixleOffsets[] = vec2[](vec2(0.f, 0.f));
     vec2 pixelSize = vec2(1.f) / uResolution.x;
 
     vec3 color = vec3(0.f);

@@ -200,7 +200,7 @@ class SdfCanvas {
 
     static parseCSSColor(css) {
         const m = css.match(/rgba?\(([^)]+)\)/);
-        if (!m) return null;
+        if (!m) return { r: 0, g: 0, b: 0, a: 0 };
 
         const parts = m[1].split(",").map(v => v.trim());
 
@@ -282,15 +282,14 @@ class SdfCanvas {
             // Geometry Information
             const rect = element.getBoundingClientRect();
             const computedStyle = getComputedStyle(element);
-            const halfWidth = element.offsetWidth * oneOverX / 2;
-            const halfHeight = element.offsetHeight * oneOverX / 2;
+            const halfWidth = element.offsetWidth * oneOverX * 0.5;
+            const halfHeight = element.offsetHeight * oneOverX * 0.5;
+            const halfDepth = computedStyle.getPropertyValue("--depth") * 0.5;
 
             this.geometryBuffer[elementIdx + 0] = rect.left * oneOverX + halfWidth; // x
             this.geometryBuffer[elementIdx + 1] = rect.top * oneOverX + halfHeight; // y
-            this.geometryBuffer[elementIdx + 2] = parseFloat(computedStyle.getPropertyValue("--z")); // z (computedStyleMap has limited availability)
+            this.geometryBuffer[elementIdx + 2] = parseFloat(computedStyle.getPropertyValue("--z")) + halfDepth; // z (computedStyleMap has limited availability)
             this.geometryBuffer[elementIdx + 3] = SdfCanvas.intToFloatBits(parseInt(element.dataset.elementType)); // Element id
-
-            // console.log(parseFloat(getComputedStyle(element).getPropertyValue("--z")) * oneOverX);
 
             switch (parseInt(element.dataset.elementType)) {
                 case SdfCanvas.ElementType.SPHERE:
@@ -298,60 +297,30 @@ class SdfCanvas {
                 case SdfCanvas.ElementType.BOX:
                     this.geometryBuffer[elementIdx + 4] = halfWidth; // width 
                     this.geometryBuffer[elementIdx + 5] = halfHeight; // height 
-                    this.geometryBuffer[elementIdx + 6] = 0.1; // depth
+                    this.geometryBuffer[elementIdx + 6] = halfDepth; // depth
                     this.geometryBuffer[elementIdx + 7] = 0; // depth
                     break;
                 case SdfCanvas.ElementType.ROUND_BOX:
                     break;
             }
 
-            /*             this.geometryBuffer[elementIdx + 4] = 2 * oneOverX; // width 
-                        this.geometryBuffer[elementIdx + 5] = 1 * oneOverX; // height 
-                        this.geometryBuffer[elementIdx + 6] = 1 * oneOverX; // depth
-                        this.geometryBuffer[elementIdx + 7] = 0; // depth */
-
-
-            /* this.geometryBuffer[elementIdx + 0] = 500 * oneOverX;
-                        this.geometryBuffer[elementIdx + 1] = 500 * oneOverX;
-                        this.geometryBuffer[elementIdx + 2] = parseFloat(getComputedStyle(element).getPropertyValue("--depth")); // z
-                        this.geometryBuffer[elementIdx + 3] = 1; // Element id
-            
-                        this.geometryBuffer[elementIdx + 4] = 300 * oneOverX; // width 
-                        this.geometryBuffer[elementIdx + 5] = 300 * oneOverX; // height 
-                        this.geometryBuffer[elementIdx + 6] = 0.1; // depth
-                        this.geometryBuffer[elementIdx + 7] = 0.005; // corner radius */
-
-
             // Shading Information
-            this.shadingBuffer[elementIdx + 0] = 0.; // unused for now
-            this.shadingBuffer[elementIdx + 1] = 0.; // unused for now
-            this.shadingBuffer[elementIdx + 2] = 0.; // unused for now
-            this.shadingBuffer[elementIdx + 3] = 0.; // unused for now
+            this.shadingBuffer[elementIdx + 0] = SdfCanvas.intToFloatBits(SdfCanvas.cssColorToUint32(computedStyle.backgroundColor)); // diffuse color
+            this.shadingBuffer[elementIdx + 1] = SdfCanvas.intToFloatBits(SdfCanvas.cssColorToUint32(computedStyle.getPropertyValue("--specular-color"))); // specular color
+            this.shadingBuffer[elementIdx + 2] = SdfCanvas.intToFloatBits(SdfCanvas.cssColorToUint32(computedStyle.getPropertyValue("--ambient-color"))); // ambient color
+            this.shadingBuffer[elementIdx + 3] = parseFloat(computedStyle.getPropertyValue("--kd")); // diffuse material property
 
-            this.shadingBuffer[elementIdx + 4] = 0.; // unused for now
-            this.shadingBuffer[elementIdx + 5] = 0.; // unused for now
-            this.shadingBuffer[elementIdx + 6] = 0.; // unused for now
-            this.shadingBuffer[elementIdx + 7] = 0.; // unused for now
+            this.shadingBuffer[elementIdx + 4] = parseFloat(computedStyle.getPropertyValue("--ks")); // specular material property
+            this.shadingBuffer[elementIdx + 5] = parseFloat(computedStyle.getPropertyValue("--p")); // specular exponent
+            this.shadingBuffer[elementIdx + 6] = parseFloat(computedStyle.getPropertyValue("--ka")); // ambient material property
+            this.shadingBuffer[elementIdx + 7] = 1.; // unused for now
         }
 
-        let elementIdx = 0 * SdfCanvas.VEC4_PER_ELEMENT * 4;
-
-        const element = SdfCanvas.trackedElements[0];
-
-        const css = getComputedStyle(element).backgroundColor;
-        const packed = SdfCanvas.cssColorToUint32(css);
-
-        console.log(css, packed.toString(16), SdfCanvas.intToFloatBits(packed));
-
-        this.shadingBuffer[elementIdx + 0] = SdfCanvas.intToFloatBits(packed); // unused for now
-        this.shadingBuffer[elementIdx + 1] = 0.; // unused for now
-        this.shadingBuffer[elementIdx + 2] = 0.; // unused for now
-        this.shadingBuffer[elementIdx + 3] = 0.; // unused for now
-
-        this.shadingBuffer[elementIdx + 4] = 0.; // unused for now
-        this.shadingBuffer[elementIdx + 5] = 0.; // unused for now
-        this.shadingBuffer[elementIdx + 6] = 0.; // unused for now
-        this.shadingBuffer[elementIdx + 7] = 0.; // unused for now
+        /* const element = SdfCanvas.trackedElements[0];
+        const bgc = getComputedStyle(element).backgroundColor;
+        const specular = getComputedStyle(element).getPropertyValue("--specular-color");
+        const packedS = SdfCanvas.cssColorToUint32(specular);
+        console.log(parseFloat(getComputedStyle(element).getPropertyValue("--kd"))); */
     }
 
     resizeCanvasToDisplaySize() {

@@ -26,19 +26,43 @@ html,
 @property --depth {
     syntax: "<number>";
     inherits: false;
-    initial-value: 1px;
+    initial-value: 0.1;
 }
 
 @property --specular-color {
     syntax: "<color>";
     inherits: false;
-    initial-value: 0;
+    initial-value: rgb(0, 0, 0);
 }
 
 @property --ambient-color {
     syntax: "<color>";
     inherits: false;
-    initial-value: 0;
+    initial-value: rgb(0, 0, 0);
+}
+
+@property --kd {
+    syntax: "<number>";
+    inherits: false;
+    initial-value: 1;
+}
+
+@property --ks {
+    syntax: "<number>";
+    inherits: false;
+    initial-value: 1;
+}
+
+@property --ka {
+    syntax: "<number>";
+    inherits: false;
+    initial-value: 1;
+}
+
+@property --p {
+    syntax: "<number>";
+    inherits: false;
+    initial-value: 1;
 }
 
 /* @property --depth {
@@ -53,6 +77,7 @@ html,
     initial-value: 0;
 } */
 
+
 #test-div {
     position: absolute;
     width: 300px;
@@ -61,18 +86,32 @@ html,
     left: 50%;
     transform: translate(-50%, -50%);
     background-color: red;
-    --depth: 0;
     --z: -0rem;
-    transition: background-color 0.3s, --z .3s;
+    --depth: 0.1;
 
-    opacity: 1;
+    --kd: 1;
+    --ks: 1;
+    --ka: 1;
+    --p: 20;
+
+    --specular-color: rgb(100, 100, 200);
+    transition: background-color 0.3s, --z .3s, --specular-color .3s, --kd .3s;
+    opacity: 0;
 }
+
+/* #test-div:hover {
+    background-color: rgb(100, 100, 200);
+} */
 
 #test-div:active {
     background-color: green;
-    --z: 1;
-}
 
+    --specular-color: rgb(255, 255, 200);
+    --z: -1;
+    --kd: 0;
+    --ks: 0;
+    --ka: 0;
+}
 
 .test-class {
     background-color: red;
@@ -83,12 +122,8 @@ html,
     z-index: 100;
 }
 
-.test-class:hover{
-    background-color: blue;
-}
 
-
-.cc{
+.cc {
     top: 100px;
     left: 100px;
 }
