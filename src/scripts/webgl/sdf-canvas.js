@@ -1,8 +1,7 @@
 import { initBuffers } from "./init-buffers.js";
 
 class SdfCanvas {
-    static MAX_TRACKED_ELEMENTS = 256;
-    static VEC4_PER_ELEMENT = 2;
+    static MAX_SIZE_ELEMENT_BUFFER = 512; // number of vec4 in the buffer
 
     static MAX_LAYERS = 16;
 
@@ -11,9 +10,10 @@ class SdfCanvas {
 
     static ElementType = Object.freeze({
         SPHERE: 0,
-        BOX: 1,
-        ROUND_BOX: 2,
-        BORDER: 3,
+        BOX_SIMPLE: 1,
+        BOX: 2,
+        ROUND_BOX: 3,
+        BORDER: 30,
     });
 
     static LayerOperation = Object.freeze({
@@ -29,14 +29,32 @@ class SdfCanvas {
     static instantiatedCanvases = [];
 
     static trackedElements = [];
+    static trackedElementsSize = 0;
+
+    static getElementSize(elementType) {
+        switch (elementType) {
+            case SdfCanvas.ElementType.SPHERE:
+                return 2;
+            case SdfCanvas.ElementType.BOX_SIMPLE:
+                return 3;
+            case SdfCanvas.ElementType.BOX:
+                return 4;
+            case SdfCanvas.ElementType.ROUND_BOX:
+                return 3;
+        }
+    }
 
     static addTrackedElement(element) {
-        if (this.trackedElements.length > SdfCanvas.MAX_TRACKED_ELEMENTS) {
-            throw f`Cannot track more elemtns than the maximum amount (${SdfCanvas.MAX_TRACKED_ELEMENTS}).`;
+        const size = this.getElementSize(element.getElementType());
+
+        if (this.trackedElementsSize + size > SdfCanvas.MAX_SIZE_ELEMENT_BUFFER) {
+            throw f`Cannot track more elemtns than the maximum amount (${SdfCanvas.MAX_SIZE_ELEMENT_BUFFER}).`;
         }
 
         this.trackedElements.push(element);
         this.trackedElements.sort((a, b) => (a.dataset.layerIndex - b.dataset.layerIndex));
+
+        this.trackedElementsSize += size;
 
         this.instantiatedCanvases.forEach((c) => {
             c.updateLayers();
@@ -61,13 +79,13 @@ class SdfCanvas {
         this.gl;
         this.programInfo;
         this.buffers;
-        this.geometryBuffer = new Float32Array(SdfCanvas.MAX_TRACKED_ELEMENTS * 4);
-        this.shadingBuffer = new Float32Array(SdfCanvas.MAX_TRACKED_ELEMENTS * 4);
+        this.geometryBuffer = new Float32Array(SdfCanvas.MAX_SIZE_ELEMENT_BUFFER * 4);
+        this.shadingBuffer = new Float32Array(SdfCanvas.MAX_SIZE_ELEMENT_BUFFER * 4);
 
         this.layers = [
             { layerOperation: SdfCanvas.LayerOperation.UNION, elementsInLayer: 0, smoothingFactor: 0 },
             { layerOperation: SdfCanvas.LayerOperation.SMOOTH_UNION, elementsInLayer: 0, smoothingFactor: 10 },
-            { layerOperation: SdfCanvas.LayerOperation.SUBTRACTION, elementsInLayer: 0, smoothingFactor: 10 }
+            { layerOperation: SdfCanvas.LayerOperation.SMOOTH_UNION, elementsInLayer: 0, smoothingFactor: 10 }
         ];
     }
 
@@ -271,10 +289,11 @@ class SdfCanvas {
     updateUniformBuffers() {
         const resolution = [this.canvas.clientWidth, this.canvas.clienHeight];
         const oneOverX = 1 / resolution[0];
+        let elementIdx = 0;
 
         for (let i = 0; i < SdfCanvas.trackedElements.length; i++) {
-            let elementIdx = i * SdfCanvas.VEC4_PER_ELEMENT * 4;
             const element = SdfCanvas.trackedElements[i];
+            const elementType = parseInt(element.dataset.elementType);
 
             // Geometry Information
             const rect = element.getBoundingClientRect();
@@ -285,24 +304,38 @@ class SdfCanvas {
 
             this.geometryBuffer[elementIdx + 0] = rect.left * oneOverX + halfWidth; // x
             this.geometryBuffer[elementIdx + 1] = rect.top * oneOverX + halfHeight; // y
-            this.geometryBuffer[elementIdx + 2] = parseFloat(computedStyle.getPropertyValue("--z")) - halfDepth; // z (computedStyleMap has limited availability)
+            this.geometryBuffer[elementIdx + 2] = parseFloat(computedStyle.getPropertyValue("--z")) * oneOverX - halfDepth; // z (computedStyleMap has limited availability)
             this.geometryBuffer[elementIdx + 3] = SdfCanvas.intToFloatBits(parseInt(element.dataset.elementType)); // Element id
 
-            switch (parseInt(element.dataset.elementType)) {
+            switch (elementType) {
                 case SdfCanvas.ElementType.SPHERE:
-
-                    this.geometryBuffer[elementIdx + 2] = parseFloat(computedStyle.getPropertyValue("--z")) * oneOverX - halfDepth; // z (computedStyleMap has limited availability)
-
-                    this.geometryBuffer[elementIdx + 4] = halfDepth; // radius 
+                    this.geometryBuffer[elementIdx + 4] = parseFloat(computedStyle.getPropertyValue("--r")) * oneOverX * 0.5; // radius 
                     this.geometryBuffer[elementIdx + 5] = 0; // unused
                     this.geometryBuffer[elementIdx + 6] = 0; // unused
+                    this.geometryBuffer[elementIdx + 7] = 0; // unused
+                    break;
+                case SdfCanvas.ElementType.BOX_SIMPLE:
+                    this.geometryBuffer[elementIdx + 4] = halfWidth; // width 
+                    this.geometryBuffer[elementIdx + 5] = halfHeight; // height 
+                    this.geometryBuffer[elementIdx + 6] = halfDepth; // depth
                     this.geometryBuffer[elementIdx + 7] = 0; // unused
                     break;
                 case SdfCanvas.ElementType.BOX:
                     this.geometryBuffer[elementIdx + 4] = halfWidth; // width 
                     this.geometryBuffer[elementIdx + 5] = halfHeight; // height 
                     this.geometryBuffer[elementIdx + 6] = halfDepth; // depth
-                    this.geometryBuffer[elementIdx + 7] = 0; // unused
+                    this.geometryBuffer[elementIdx + 7] = SdfCanvas.intToFloatBits(parseInt(computedStyle.getPropertyValue("--border-radius-type"))); // border radius
+
+                    this.geometryBuffer[elementIdx + 8] = parseFloat(computedStyle.borderBottomRightRadius) * oneOverX;
+                    this.geometryBuffer[elementIdx + 9] = parseFloat(computedStyle.borderTopRightRadius) * oneOverX;
+                    this.geometryBuffer[elementIdx + 10] = parseFloat(computedStyle.borderBottomLeftRadius) * oneOverX;
+                    this.geometryBuffer[elementIdx + 11] = parseFloat(computedStyle.borderTopLeftRadius) * oneOverX;
+                    break;
+                case SdfCanvas.ElementType.ROUND_BOX:
+                    this.geometryBuffer[elementIdx + 4] = halfWidth; // width 
+                    this.geometryBuffer[elementIdx + 5] = halfHeight; // height 
+                    this.geometryBuffer[elementIdx + 6] = halfDepth; // depth
+                    this.geometryBuffer[elementIdx + 7] = parseFloat(computedStyle.getPropertyValue("--r")) * oneOverX * 0.5; // border radius
                     break;
                 case SdfCanvas.ElementType.ROUND_BOX:
                     break;
@@ -310,6 +343,7 @@ class SdfCanvas {
 
             // Shading Information
             this.shadingBuffer[elementIdx + 0] = SdfCanvas.intToFloatBits(SdfCanvas.cssColorToUint32(computedStyle.backgroundColor)); // diffuse color
+            this.shadingBuffer[elementIdx + 0] = SdfCanvas.intToFloatBits(SdfCanvas.cssColorToUint32("rgb(255,255,255)")); // diffuse color
             this.shadingBuffer[elementIdx + 1] = SdfCanvas.intToFloatBits(SdfCanvas.cssColorToUint32(computedStyle.getPropertyValue("--specular-color"))); // specular color
             this.shadingBuffer[elementIdx + 2] = SdfCanvas.intToFloatBits(SdfCanvas.cssColorToUint32(computedStyle.getPropertyValue("--ambient-color"))); // ambient color
             this.shadingBuffer[elementIdx + 3] = parseFloat(computedStyle.getPropertyValue("--kd")); // diffuse material property
@@ -318,6 +352,8 @@ class SdfCanvas {
             this.shadingBuffer[elementIdx + 5] = parseFloat(computedStyle.getPropertyValue("--p")); // specular exponent
             this.shadingBuffer[elementIdx + 6] = parseFloat(computedStyle.getPropertyValue("--ka")); // ambient material property
             this.shadingBuffer[elementIdx + 7] = 1.; // unused for now
+
+            elementIdx += SdfCanvas.getElementSize(elementType) * 4;
         }
 
         /* const element = SdfCanvas.trackedElements[0];

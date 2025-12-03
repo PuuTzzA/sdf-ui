@@ -1,19 +1,18 @@
 #version 300 es
 precision highp float;
 
-#define MAX_OBJECTS 256
+#define MAX_SIZE_ELEMENT_BUFFER 512
 #define MAX_LAYERS 16
-#define VEC4_PER_OBJECT 2
 #define EPSILON 1e-6
 
 // ╔══════════════════════════════════════════════════════════╗
 // ║                       UNIFORMS                           ║
 // ╚══════════════════════════════════════════════════════════╝
 layout (std140) uniform GeometryBlock {
-    vec4 geometryData[MAX_OBJECTS];
+    vec4 geometryData[MAX_SIZE_ELEMENT_BUFFER];
 };
 layout (std140) uniform ShadingBlock {
-    vec4 shadingData[MAX_OBJECTS];
+    vec4 shadingData[MAX_SIZE_ELEMENT_BUFFER];
 };
 
 uniform vec2 uResolution;
@@ -65,6 +64,90 @@ float sdRoundBox(vec3 p, vec3 b, float r) {
     return length(max(q, 0.0f)) + min(max(q.x, max(q.y, q.z)), 0.0f) - r;
 }
 
+float sdCornerCircle(in vec2 uv) {
+    return length(uv - vec2(0.0f, -1.0f)) - sqrt(2.0f);
+}
+
+float sdCornerParabola(in vec2 uv) {
+    // https://www.shadertoy.com/view/ws3GD7
+    float y = (0.5f + uv.y) * (2.0f / 3.0f);
+    float h = uv.x * uv.x + y * y * y;
+    float w = pow(uv.x + sqrt(abs(h)), 1.0f / 3.0f);
+    float x = w - y / w;
+    vec2 q = vec2(x, 0.5f * (1.0f - x * x));
+    return length(uv - q) * sign(uv.y - q.y);
+}
+
+const float kT = 6.28318531f;
+
+float sdCornerCosine(in vec2 uv) {
+    // https://www.shadertoy.com/view/3t23WG
+    uv *= (kT / 4.0f);
+
+    float ta = 0.0f, tb = kT / 4.0f;
+    for (int i = 0; i < 8; i++) {
+        float t = 0.5f * (ta + tb);
+        float y = t - uv.x + sin(t) * (uv.y - cos(t));
+        if (y < 0.0f)
+            ta = t;
+        else
+            tb = t;
+    }
+    vec2 qa = vec2(ta, cos(ta)), qb = vec2(tb, cos(tb));
+    vec2 pa = uv - qa, di = qb - qa;
+    float h = clamp(dot(pa, di) / dot(di, di), 0.0f, 1.0f);
+    return length(pa - di * h) * sign(pa.y * di.x - pa.x * di.y) * (4.0f / kT);
+}
+
+float sdCornerCubic(in vec2 uv) {
+    float ta = 0.0f, tb = 1.0f;
+    for (int i = 0; i < 12; i++) {
+        float t = 0.5f * (ta + tb);
+        float c = (t * t * (t - 3.0f) + 2.0f) / 3.0f;
+        float dc = t * (t - 2.0f);
+        float y = (uv.x - t) + (uv.y - c) * dc;
+        if (y > 0.0f)
+            ta = t;
+        else
+            tb = t;
+    }
+    vec2 qa = vec2(ta, (ta * ta * (ta - 3.0f) + 2.0f) / 3.0f);
+    vec2 qb = vec2(tb, (tb * tb * (tb - 3.0f) + 2.0f) / 3.0f);
+    vec2 pa = uv - qa, di = qb - qa;
+    float h = clamp(dot(pa, di) / dot(di, di), 0.0f, 1.0f);
+    return length(pa - di * h) * sign(pa.y * di.x - pa.x * di.y);
+}
+
+float sdRoundBox2d(in vec2 p, in vec2 b, in vec4 r, int type) {
+    // select corner radius
+    r.xy = (p.x > 0.0f) ? r.xy : r.zw;
+    r.x = (p.y > 0.0f) ? r.x : r.y;
+
+    // box coordinates
+    vec2 q = abs(p) - b + r.x;
+
+    // distance to sides
+    if (min(q.x, q.y) < 0.0f)
+        return max(q.x, q.y) - r.x;
+
+    // rotate 45 degrees, offset by r and scale by r*sqrt(0.5)
+    // to canonical corner coordinates
+    vec2 uv = vec2(abs(q.x - q.y), q.x + q.y - r.x) / r.x;
+
+    // compute distance to corner shape
+    float d;
+    if (type == 0)
+        d = sdCornerCircle(uv);
+    else if (type == 1)
+        d = sdCornerParabola(uv);
+    else if (type == 2)
+        d = sdCornerCosine(uv);
+    else if (type == 3)
+        d = sdCornerCubic(uv);
+    // undo scale
+    return d * r.x * sqrt(0.5f);
+}
+
 float smin2(float a, float b, float k) { // ret.a = distnce, ret.b = blendfactor
     k *= 6.0f;
     float h = max(k - abs(a - b), 0.0f) / k;
@@ -73,6 +156,18 @@ float smin2(float a, float b, float k) { // ret.a = distnce, ret.b = blendfactor
     return (a < b) ? a - s : b - s;
 }
 
+// ╔══════════════════════════════════════════════════════════╗
+// ║                    SDF OPERATIONS                        ║
+// ╚══════════════════════════════════════════════════════════╝
+float opExtrusion(in vec3 p, in float sdf, in float h) {
+    // https://iquilezles.org/articles/distfunctions
+    vec2 w = vec2(sdf, abs(p.z) - h);
+    return min(max(w.x, w.y), 0.0f) + length(max(w, 0.0f));
+}
+
+// ╔══════════════════════════════════════════════════════════╗
+// ║                 SDF COMBINING OPERATIONS                 ║
+// ╚══════════════════════════════════════════════════════════╝
 vec2 smin(float a, float b, float k) { // ret.a = distnce, ret.b = blendfactor //return vec2(min(a, b), a);
     k *= 6.0f;
     float h = max(k - abs(a - b), 0.0f) / k;
@@ -110,22 +205,34 @@ Surface opSubtraction(Surface a, Surface b) {
     max(a.distance, -b.distance)); //
 }
 
-/* Surface opSubtraction(Surface a, Surface b) {
-    float dist = max(a.distance, -b.distance);
-    float t = smoothstep(-0.01, 0.01, a.distance + b.distance);
-    
-    return Surface(
-        mix(a.colorDiffuse, b.colorDiffuse, t),
-        mix(a.colorSpecular, b.colorSpecular, t),
-        mix(a.colorAmbient, b.colorAmbient, t),
-        mix(a.kd, b.kd, t),
-        mix(a.ks, b.ks, t),
-        mix(a.p, b.p, t),
-        mix(a.ka, b.ka, t),
-        t,
-        dist
-    );
-} */
+Surface opIntersection(Surface a, Surface b) {
+    float t = a.distance > b.distance ? 0.f : 1.f;
+
+    return Surface(mix(a.colorDiffuse, b.colorDiffuse, t),//
+    mix(a.colorSpecular, b.colorSpecular, t), //
+    mix(a.colorAmbient, b.colorAmbient, t), //
+    mix(a.kd, b.kd, t), //
+    mix(a.ks, b.ks, t), //
+    mix(a.p, b.p, t), //
+    mix(a.ka, b.ka, t), //
+    t, //
+    max(a.distance, b.distance)); //
+}
+
+Surface opXor(Surface a, Surface b) {
+    float dist = max(min(a.distance, b.distance), -max(a.distance, b.distance));
+    float t = dist == a.distance ? 0.f : 1.f;
+
+    return Surface(mix(a.colorDiffuse, b.colorDiffuse, t),//
+    mix(a.colorSpecular, b.colorSpecular, t), //
+    mix(a.colorAmbient, b.colorAmbient, t), //
+    mix(a.kd, b.kd, t), //
+    mix(a.ks, b.ks, t), //
+    mix(a.p, b.p, t), //
+    mix(a.ka, b.ka, t), //
+    t, //
+    dist); //
+}
 
 Surface opSmoothUnion(Surface a, Surface b, float smoothness) {
     vec2 blend = smin(a.distance, b.distance, smoothness);
@@ -144,6 +251,22 @@ Surface opSmoothUnion(Surface a, Surface b, float smoothness) {
 
 Surface opSmoothSubtraction(Surface a, Surface b, float smoothness) {
     vec2 blend = smin(-a.distance, b.distance, smoothness);
+    blend.x *= -1.f;
+
+    return Surface(//
+    mix(a.colorDiffuse, b.colorDiffuse, blend.y),//
+    mix(a.colorSpecular, b.colorSpecular, blend.y),//
+    mix(a.colorAmbient, b.colorAmbient, blend.y),//
+    mix(a.kd, b.kd, blend.y),//
+    mix(a.ks, b.ks, blend.y),//
+    mix(a.p, b.p, blend.y),//
+    mix(a.ka, b.ka, blend.y),//
+    blend.y,//
+    blend.x);//
+}
+
+Surface opSmoothIntersection(Surface a, Surface b, float smoothness) {
+    vec2 blend = smin(-a.distance, -b.distance, smoothness);
     blend.x *= -1.f;
 
     return Surface(//
@@ -206,7 +329,6 @@ Surface mapWithMaterial(vec3 p) {
     combinedSurface.ka = 0.1f; // ambient material property
     combinedSurface.distance = 3.402823466e+38f;
 
-    int elementSeen = 0;
     int elementIdx = 0;
 
     for (int layer = 0; layer < uNumLayers; layer++) {
@@ -215,9 +337,6 @@ Surface mapWithMaterial(vec3 p) {
         float smoothness = uSmoothingFactors[layer];
 
         for (int i = 0; i < numElements; i++) {
-            elementIdx = elementSeen * VEC4_PER_OBJECT;
-            elementSeen++;
-
             vec3 pos = geometryData[elementIdx].xyz;
             float sdValue;
 
@@ -233,9 +352,20 @@ Surface mapWithMaterial(vec3 p) {
             switch (floatBitsToInt(geometryData[elementIdx].w)) {
                 case 0: // Sphere
                     sdValue = sdSphere(p - pos, geometryData[elementIdx + 1].x);
+                    elementIdx += 2;
                     break;
-                case 1: // Box
+                case 1: // Simple Box
                     sdValue = sdBox(p - pos, geometryData[elementIdx + 1].xyz);
+                    elementIdx += 3;
+                    break;
+                case 2: // Box (with optional rounded corners)
+                    float val = sdRoundBox2d((p - pos).xy, geometryData[elementIdx + 1].xy, geometryData[elementIdx + 2], floatBitsToInt(geometryData[elementIdx + 1].w));
+                    sdValue = opExtrusion(p - pos, val, geometryData[elementIdx + 1].z);
+                    elementIdx += 4;
+                    break;
+                case 3: // Round Box
+                    sdValue = sdRoundBox(p - pos, geometryData[elementIdx + 1].xyz, geometryData[elementIdx + 1].w);
+                    elementIdx += 3;
                     break;
             }
 
@@ -249,8 +379,10 @@ Surface mapWithMaterial(vec3 p) {
                     combinedSurface = opSubtraction(combinedSurface, surface);
                     break;
                 case 2: // Intersection
+                    combinedSurface = opIntersection(combinedSurface, surface);
                     break;
                 case 3: // Xor
+                    combinedSurface = opXor(combinedSurface, surface);
                     break;
                 case 4: // Smooth union
                     combinedSurface = opSmoothUnion(combinedSurface, surface, smoothness / uResolution.x);
@@ -259,6 +391,7 @@ Surface mapWithMaterial(vec3 p) {
                     combinedSurface = opSmoothSubtraction(combinedSurface, surface, smoothness / uResolution.x);
                     break;
                 case 6: // Smooth intersection
+                    combinedSurface = opSmoothIntersection(combinedSurface, surface, smoothness / uResolution.x);
                     break;
             }
         }
@@ -396,7 +529,6 @@ vec3 shade(HitInfo hit) {
 
     float mixFacotr = gaussian(surface.mix, 0.5f, 0.07f);
 
-    //return hit.normal;
     //return vec3(mixFacotr);
 
     float ld = 1.f; // diffuse light intensity (light source dependent)
@@ -410,7 +542,7 @@ vec3 shade(HitInfo hit) {
     //float shadow = shadow(hit.pos, -sundir, 0.001f, 5.f);
     float shadow = softshadow(hit.pos, -sundir, 0.001f, 5.f, 0.1f);
     //float shadow = calcSoftshadow(hit.pos, -sundir, 0.01f, 5.0f, 16.0f);
-    //shadow = max(shadow, 0.1f);
+    shadow = max(shadow, 0.1f);
 
     //return vec3(shadow);
     //return hit.id != -1 ? vec3(1.f) : vec3(0.f);

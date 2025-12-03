@@ -11,13 +11,18 @@
 <body>
     <canvas id="canvas"></canvas>
 
-    <sdf-sphere id="test-div" data-layer-index="2">asdfasdf</sdf-sphere>
+    <!--     <sdf-sphere id="test-div" data-layer-index="2">asdfasdf</sdf-sphere>
+ -->
 
-    <sdf-box class="test-class" data-layer-index="0" onclick="((e)=>console.log(e.target.dataset.layerIndex=0))(event)">22</sdf-box>
+    <sdf-box id="test-div" data-layer-index="2">asdfasdf</sdf-box>
 
-    <sdf-box class="test-class cc" data-layer-index="0" onclick="((e)=>console.log(e.target.dataset.layerIndex= e.target.dataset.layerIndex == 0 ? 1 : 0))(event)">22</sdf-box>
 
-    <sdf-box id="background" data-layer-index="0"></sdf-box>
+    <!--     <sdf-box class="test-class" data-layer-index="2" onclick="((e)=>console.log(e.target.dataset.layerIndex=0))(event)">22</sdf-box>
+
+    <sdf-box class="test-class cc" data-layer-index="2" onclick="((e)=>console.log(e.target.dataset.layerIndex= e.target.dataset.layerIndex == 0 ? 1 : 0))(event)">22</sdf-box>
+ -->
+
+    <sdf-box-simple id="background" data-layer-index="0"></sdf-box-simple>
 
     <!--  <div id="test-div" data-layer-index="0">Moin</div>
     <div id="test-div2" data-layer-index="1">Servus</div> -->

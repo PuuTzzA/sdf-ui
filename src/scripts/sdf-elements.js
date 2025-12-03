@@ -51,6 +51,14 @@ class SdfSphere extends ASdfElement {
 
 customElements.define("sdf-sphere", SdfSphere);
 
+class SdfBoxSimple extends ASdfElement {
+    getElementType() {
+        return SdfCanvas.ElementType.BOX_SIMPLE;
+    }
+}
+
+customElements.define("sdf-box-simple", SdfBoxSimple);
+
 class SdfBox extends ASdfElement {
     getElementType() {
         return SdfCanvas.ElementType.BOX;
@@ -58,3 +66,12 @@ class SdfBox extends ASdfElement {
 }
 
 customElements.define("sdf-box", SdfBox);
+
+class SdfRoundBox extends ASdfElement {
+    getElementType() {
+        return SdfCanvas.ElementType.ROUND_BOX;
+    }
+}
+
+customElements.define("sdf-round-box", SdfRoundBox);
+

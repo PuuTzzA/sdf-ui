@@ -12,6 +12,8 @@ window.addEventListener("mousemove", (e) => {
     testDiv.style.top = e.clientY + "px";
 });
 
+let cs = getComputedStyle(testDiv);
+
 let lastTime = performance.now();
 let fps = 0;
 

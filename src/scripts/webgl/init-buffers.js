@@ -61,7 +61,7 @@ function initGeometryBufferObject(gl, programInfo) {
 
     gl.bufferData(
         gl.UNIFORM_BUFFER,
-        SdfCanvas.MAX_TRACKED_ELEMENTS * SdfCanvas.VEC4_PER_ELEMENT * 4 * Float32Array.BYTES_PER_ELEMENT,
+        SdfCanvas.MAX_SIZE_ELEMENT_BUFFER * 4 * Float32Array.BYTES_PER_ELEMENT,
         gl.DYNAMIC_DRAW
     );
 
@@ -85,7 +85,7 @@ function initShadingBufferObject(gl, programInfo) {
 
     gl.bufferData(
         gl.UNIFORM_BUFFER,
-        SdfCanvas.MAX_TRACKED_ELEMENTS * SdfCanvas.VEC4_PER_ELEMENT * 4 * Float32Array.BYTES_PER_ELEMENT,
+        SdfCanvas.MAX_SIZE_ELEMENT_BUFFER * 4 * Float32Array.BYTES_PER_ELEMENT,
         gl.DYNAMIC_DRAW
     );
 
