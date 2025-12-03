@@ -32,6 +32,7 @@ function initUvBuffer(gl, programInfo) {
 
     const textureCoordinates = [
         0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0, // triangle strip
+        // 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 1.0, 0.0, // origin bottom left
     ];
 
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(textureCoordinates), gl.STATIC_DRAW);

@@ -93,22 +93,26 @@ html,
 #test-div {
     position: absolute;
     width: 20rem;
-    height: 300px;
+    height: 500px;
     top: 50vh;
     left: 50%;
-    transform: translate(-50%, -50%);
-    background-color: red;
-    --z: 5rem;
+    transform: translate(-50%, -50%) rotateY(45deg) skewX(10deg);
 
-    --depth: 10rem;
+    transform-origin: 0px 70px;
+
+    background-color: red;
+    --z: 10rem;
+
+    --depth: 5rem;
     --r: 2rem;
 
-    border-top-left-radius: 2rem; 
+    border-top-left-radius: 2rem;
     border-top-right-radius: 4rem;
     border-bottom-left-radius: 6rem;
     border-bottom-right-radius: 10rem;
 
-    --border-radius-type: 3;
+    --border-radius-type: 0;
+
 
     --kd: 1;
     --ks: 1;
@@ -116,8 +120,8 @@ html,
     --p: 20;
 
     --specular-color: rgb(100, 100, 200);
-    transition: background-color 0.3s, --z .3s, --specular-color .3s, --kd .3s;
-    opacity: 0.5;
+    transition: background-color 0.3s, --z .3s, --specular-color .3s, --kd .3s, transform 1s;
+    opacity: 0.2;
 
     z-index: 1999;
 }
@@ -126,14 +130,17 @@ html,
     background-color: rgb(100, 100, 200);
 } */
 
-#test-div:active {
+#test-div:hover {
     background-color: red;
+    transform: translate(-50%, -50%) rotate(100deg);
 
-    --specular-color: rgb(255, 255, 200);
-    --z: -2rem;
+    --z: 10;
+
+    /*     --specular-color: rgb(255, 255, 200);
+    --z: 0rem;
     --kd: 0.1;
     --ks: 0.1;
-    --ka: 0.1;
+    --ka: 0.1; */
 }
 
 .test-class {
@@ -158,8 +165,16 @@ html,
     top: 150px;
     left: 150px;
 
-    opacity: 0;
+    transform: rotateY(20deg);
+
+    opacity: 0.2;
 
     --z: 0rem;
-    --depth: 100rem;
+    --depth: 10rem;
+}
+
+#rect-vis {
+    position: absolute;
+    background-color: yellow;
+    opacity: 0.2;
 }

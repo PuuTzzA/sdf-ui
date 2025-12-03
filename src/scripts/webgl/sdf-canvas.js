@@ -1,4 +1,5 @@
 import { initBuffers } from "./init-buffers.js";
+import { Matrix } from "../helper/matrix.js";
 
 class SdfCanvas {
     static MAX_SIZE_ELEMENT_BUFFER = 512; // number of vec4 in the buffer
@@ -34,13 +35,13 @@ class SdfCanvas {
     static getElementSize(elementType) {
         switch (elementType) {
             case SdfCanvas.ElementType.SPHERE:
-                return 2;
-            case SdfCanvas.ElementType.BOX_SIMPLE:
-                return 3;
-            case SdfCanvas.ElementType.BOX:
                 return 4;
+            case SdfCanvas.ElementType.BOX_SIMPLE:
+                return 4;
+            case SdfCanvas.ElementType.BOX:
+                return 6;
             case SdfCanvas.ElementType.ROUND_BOX:
-                return 3;
+                return 5;
         }
     }
 
@@ -287,7 +288,8 @@ class SdfCanvas {
     }
 
     updateUniformBuffers() {
-        const resolution = [this.canvas.clientWidth, this.canvas.clienHeight];
+        const resolution = [this.canvas.clientWidth, this.canvas.clientHeight];
+        const aspect = resolution[1] / resolution[0];
         const oneOverX = 1 / resolution[0];
         let elementIdx = 0;
 
@@ -298,52 +300,82 @@ class SdfCanvas {
             // Geometry Information
             const rect = element.getBoundingClientRect();
             const computedStyle = getComputedStyle(element);
+            let mat = Matrix.parseMatrix(computedStyle.transform);
+
             const halfWidth = element.offsetWidth * oneOverX * 0.5;
             const halfHeight = element.offsetHeight * oneOverX * 0.5;
             const halfDepth = parseFloat(computedStyle.getPropertyValue("--depth")) * oneOverX * 0.5;
 
-            this.geometryBuffer[elementIdx + 0] = rect.left * oneOverX + halfWidth; // x
-            this.geometryBuffer[elementIdx + 1] = rect.top * oneOverX + halfHeight; // y
-            this.geometryBuffer[elementIdx + 2] = parseFloat(computedStyle.getPropertyValue("--z")) * oneOverX - halfDepth; // z (computedStyleMap has limited availability)
-            this.geometryBuffer[elementIdx + 3] = SdfCanvas.intToFloatBits(parseInt(element.dataset.elementType)); // Element id
+            const offsetX = (rect.left + (rect.right - rect.left) * 0.5) * oneOverX;
+            const offsetY = (rect.top + (rect.bottom - rect.top) * 0.5) * oneOverX;
+            const offsetZ = parseFloat(computedStyle.getPropertyValue("--z")) * oneOverX;
+
+            // calculate computedStyle.transform @ T(offsetX, offsetY, offsetZ)
+            mat[12] = offsetX; // + mat[12] * oneOverX;
+            mat[13] = offsetY; // + mat[13] * oneOverX;
+            mat[14] = offsetZ + mat[14] * oneOverX; // for tx and ty this is covered by the boundingClientRect
+            mat[15] = 1;
+
+            // if I want the surface to be the top surface
+            /* mat[12] -= mat[8] * halfDepth;
+            mat[13] -= mat[9] * halfDepth;
+            mat[14] -= mat[10] * halfDepth; */
+
+            // invert the matrix
+            mat = Matrix.invertMat4(mat);
+
+            // Inverse affine modelview matrix = computedStyle.transform @ T(offsetX, offsetY, offsetZ), computedStyle.transform used without translation since that is already in boundingclientrect
+            this.geometryBuffer[elementIdx + 0] = mat[0];
+            this.geometryBuffer[elementIdx + 1] = mat[1];
+            this.geometryBuffer[elementIdx + 2] = mat[2];
+            this.geometryBuffer[elementIdx + 3] = mat[4];
+
+            this.geometryBuffer[elementIdx + 4] = mat[5];
+            this.geometryBuffer[elementIdx + 5] = mat[6];
+            this.geometryBuffer[elementIdx + 6] = mat[8];
+            this.geometryBuffer[elementIdx + 7] = mat[9];
+
+            this.geometryBuffer[elementIdx + 8] = mat[10];
+            this.geometryBuffer[elementIdx + 9] = mat[12]; // tx
+            this.geometryBuffer[elementIdx + 10] = mat[13]; // ty
+            this.geometryBuffer[elementIdx + 11] = mat[14]; // tz
+
+            // Element Properties
+            this.geometryBuffer[elementIdx + 12] = SdfCanvas.intToFloatBits(parseInt(element.dataset.elementType)); // Element id
 
             switch (elementType) {
                 case SdfCanvas.ElementType.SPHERE:
-                    this.geometryBuffer[elementIdx + 4] = parseFloat(computedStyle.getPropertyValue("--r")) * oneOverX * 0.5; // radius 
-                    this.geometryBuffer[elementIdx + 5] = 0; // unused
-                    this.geometryBuffer[elementIdx + 6] = 0; // unused
-                    this.geometryBuffer[elementIdx + 7] = 0; // unused
+                    this.geometryBuffer[elementIdx + 13] = parseFloat(computedStyle.getPropertyValue("--r")) * oneOverX * 0.5; // radius 
                     break;
                 case SdfCanvas.ElementType.BOX_SIMPLE:
-                    this.geometryBuffer[elementIdx + 4] = halfWidth; // width 
-                    this.geometryBuffer[elementIdx + 5] = halfHeight; // height 
-                    this.geometryBuffer[elementIdx + 6] = halfDepth; // depth
-                    this.geometryBuffer[elementIdx + 7] = 0; // unused
+                    this.geometryBuffer[elementIdx + 13] = halfWidth; // width 
+                    this.geometryBuffer[elementIdx + 14] = halfHeight; // height 
+                    this.geometryBuffer[elementIdx + 15] = halfDepth; // depth
                     break;
                 case SdfCanvas.ElementType.BOX:
-                    this.geometryBuffer[elementIdx + 4] = halfWidth; // width 
-                    this.geometryBuffer[elementIdx + 5] = halfHeight; // height 
-                    this.geometryBuffer[elementIdx + 6] = halfDepth; // depth
-                    this.geometryBuffer[elementIdx + 7] = SdfCanvas.intToFloatBits(parseInt(computedStyle.getPropertyValue("--border-radius-type"))); // border radius
+                    this.geometryBuffer[elementIdx + 13] = halfWidth; // width 
+                    this.geometryBuffer[elementIdx + 14] = halfHeight; // height 
+                    this.geometryBuffer[elementIdx + 15] = halfDepth; // depth
 
-                    this.geometryBuffer[elementIdx + 8] = parseFloat(computedStyle.borderBottomRightRadius) * oneOverX;
-                    this.geometryBuffer[elementIdx + 9] = parseFloat(computedStyle.borderTopRightRadius) * oneOverX;
-                    this.geometryBuffer[elementIdx + 10] = parseFloat(computedStyle.borderBottomLeftRadius) * oneOverX;
-                    this.geometryBuffer[elementIdx + 11] = parseFloat(computedStyle.borderTopLeftRadius) * oneOverX;
+                    this.geometryBuffer[elementIdx + 16] = parseFloat(computedStyle.borderBottomRightRadius) * oneOverX;
+                    this.geometryBuffer[elementIdx + 17] = parseFloat(computedStyle.borderTopRightRadius) * oneOverX;
+                    this.geometryBuffer[elementIdx + 18] = parseFloat(computedStyle.borderBottomLeftRadius) * oneOverX;
+                    this.geometryBuffer[elementIdx + 19] = parseFloat(computedStyle.borderTopLeftRadius) * oneOverX;
+
+                    this.geometryBuffer[elementIdx + 20] = SdfCanvas.intToFloatBits(parseInt(computedStyle.getPropertyValue("--border-radius-type"))); // border radius
                     break;
                 case SdfCanvas.ElementType.ROUND_BOX:
-                    this.geometryBuffer[elementIdx + 4] = halfWidth; // width 
-                    this.geometryBuffer[elementIdx + 5] = halfHeight; // height 
-                    this.geometryBuffer[elementIdx + 6] = halfDepth; // depth
-                    this.geometryBuffer[elementIdx + 7] = parseFloat(computedStyle.getPropertyValue("--r")) * oneOverX * 0.5; // border radius
-                    break;
-                case SdfCanvas.ElementType.ROUND_BOX:
+                    this.geometryBuffer[elementIdx + 13] = halfWidth; // width 
+                    this.geometryBuffer[elementIdx + 14] = halfHeight; // height 
+                    this.geometryBuffer[elementIdx + 15] = halfDepth; // depth
+
+                    this.geometryBuffer[elementIdx + 16] = parseFloat(computedStyle.getPropertyValue("--r")) * oneOverX * 0.5; // border radius
                     break;
             }
 
             // Shading Information
             this.shadingBuffer[elementIdx + 0] = SdfCanvas.intToFloatBits(SdfCanvas.cssColorToUint32(computedStyle.backgroundColor)); // diffuse color
-            this.shadingBuffer[elementIdx + 0] = SdfCanvas.intToFloatBits(SdfCanvas.cssColorToUint32("rgb(255,255,255)")); // diffuse color
+            this.shadingBuffer[elementIdx + 0] = SdfCanvas.intToFloatBits(SdfCanvas.cssColorToUint32("rgb(255, 255, 255)")); // diffuse color
             this.shadingBuffer[elementIdx + 1] = SdfCanvas.intToFloatBits(SdfCanvas.cssColorToUint32(computedStyle.getPropertyValue("--specular-color"))); // specular color
             this.shadingBuffer[elementIdx + 2] = SdfCanvas.intToFloatBits(SdfCanvas.cssColorToUint32(computedStyle.getPropertyValue("--ambient-color"))); // ambient color
             this.shadingBuffer[elementIdx + 3] = parseFloat(computedStyle.getPropertyValue("--kd")); // diffuse material property
@@ -356,11 +388,18 @@ class SdfCanvas {
             elementIdx += SdfCanvas.getElementSize(elementType) * 4;
         }
 
-        /* const element = SdfCanvas.trackedElements[0];
-        const bgc = getComputedStyle(element).backgroundColor;
-        const specular = getComputedStyle(element).getPropertyValue("--specular-color");
-        const packedS = SdfCanvas.cssColorToUint32(specular);
-        console.log((getComputedStyle(element).getPropertyValue("--z"))); */
+        /* const rectvis = document.getElementById("rect-vis");
+
+        const element = SdfCanvas.trackedElements[0];
+        const rect = element.getBoundingClientRect();
+        const cs = getComputedStyle(element);
+
+        rectvis.style.top = rect.top + "px";
+        rectvis.style.left = rect.left + "px";
+        rectvis.style.width = (rect.right - rect.left) + "px";
+        rectvis.style.height = (rect.bottom - rect.top) + "px";
+
+        console.log(cs.transform); */
     }
 
     resizeCanvasToDisplaySize() {

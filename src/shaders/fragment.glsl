@@ -337,8 +337,6 @@ Surface mapWithMaterial(vec3 p) {
         float smoothness = uSmoothingFactors[layer];
 
         for (int i = 0; i < numElements; i++) {
-            vec3 pos = geometryData[elementIdx].xyz;
-            float sdValue;
 
             Surface surface;
             surface.colorDiffuse = unpackColor(shadingData[elementIdx].x);
@@ -349,23 +347,34 @@ Surface mapWithMaterial(vec3 p) {
             surface.p = shadingData[elementIdx + 1].y; // specular exponent, fall of of specular light
             surface.ka = shadingData[elementIdx + 1].z; // ambient material property
 
-            switch (floatBitsToInt(geometryData[elementIdx].w)) {
+            float sdValue;
+
+            mat4 M = mat4( //
+            vec4(geometryData[elementIdx].xyz, 0.f), //
+            vec4(geometryData[elementIdx].w, geometryData[elementIdx + 1].x, geometryData[elementIdx + 1].y, 0.f), //
+            vec4(geometryData[elementIdx + 1].z, geometryData[elementIdx + 1].w, geometryData[elementIdx + 2].x, 0.f), //
+            vec4(geometryData[elementIdx + 2].yzw, 1.f)//
+            );
+
+            vec3 pos = (M * vec4(p, 1.f)).xyz;
+
+            switch (floatBitsToInt(geometryData[elementIdx + 3].x)) {
                 case 0: // Sphere
-                    sdValue = sdSphere(p - pos, geometryData[elementIdx + 1].x);
-                    elementIdx += 2;
-                    break;
-                case 1: // Simple Box
-                    sdValue = sdBox(p - pos, geometryData[elementIdx + 1].xyz);
-                    elementIdx += 3;
-                    break;
-                case 2: // Box (with optional rounded corners)
-                    float val = sdRoundBox2d((p - pos).xy, geometryData[elementIdx + 1].xy, geometryData[elementIdx + 2], floatBitsToInt(geometryData[elementIdx + 1].w));
-                    sdValue = opExtrusion(p - pos, val, geometryData[elementIdx + 1].z);
+                    sdValue = sdSphere(pos, geometryData[elementIdx + 3].y);
                     elementIdx += 4;
                     break;
+                case 1: // Simple Box
+                    sdValue = sdBox(pos, vec3(geometryData[elementIdx + 3].yzw));
+                    elementIdx += 4;
+                    break;
+                case 2: // Box (with optional rounded corners)
+                    float val = sdRoundBox2d(pos.xy, geometryData[elementIdx + 3].yz, geometryData[elementIdx + 4], floatBitsToInt(geometryData[elementIdx + 5].x));
+                    sdValue = opExtrusion(pos, val, geometryData[elementIdx + 3].w);
+                    elementIdx += 6;
+                    break;
                 case 3: // Round Box
-                    sdValue = sdRoundBox(p - pos, geometryData[elementIdx + 1].xyz, geometryData[elementIdx + 1].w);
-                    elementIdx += 3;
+                    sdValue = sdRoundBox(pos, geometryData[elementIdx + 3].yzw, geometryData[elementIdx + 4].x);
+                    elementIdx += 5;
                     break;
             }
 
@@ -523,13 +532,11 @@ vec3 shade(HitInfo hit) {
         return vec3(1.f, 0.f, 1.f);
     } */
 
-    const vec3 sundir = normalize(vec3(1.f, 1.f, -1.5f));
+    const vec3 sundir = normalize(vec3(1.f, -1.f, -1.5f));
 
     Surface surface = hit.surface;
 
     float mixFacotr = gaussian(surface.mix, 0.5f, 0.07f);
-
-    //return vec3(mixFacotr);
 
     float ld = 1.f; // diffuse light intensity (light source dependent)
     float la = 1.f; // ambient light intensity (constant for scene)
@@ -564,7 +571,7 @@ void main(void) {
 
     vec3 color = vec3(0.f);
 
-    vec3 pos = vec3(vUv * vec2(1.f, uResolution.y / uResolution.x), 5.f);
+    vec3 pos = vec3(vUv * vec2(1.f, uResolution.y / uResolution.x), 10.f); // origin = top left
     vec3 dir = vec3(0.f, 0.f, -1.f);
     vec3 posOffset;
 
@@ -579,5 +586,6 @@ void main(void) {
     //color = vec3(vUv, 0.);
 
     fragColor = vec4(color, 1.f);
+    //fragColor = vec4(vUv, 0., 1.);
     //fragColor = vec4(length(pos.xy) < .1f ? 1.f : 0.f, 0.f, 0.f, 1.f);
 }
