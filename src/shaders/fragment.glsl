@@ -16,6 +16,12 @@ layout (std140) uniform ShadingBlock {
 };
 
 uniform vec2 uResolution;
+uniform float uTopOffset;
+uniform float uLeftOffset;
+uniform float uWindowWidth;
+uniform float uWindowHeight;
+
+uniform float uCameraZ;
 
 uniform int uLayerOperations[MAX_LAYERS];
 uniform int uElementsInLayer[MAX_LAYERS];
@@ -132,6 +138,7 @@ float sdRoundBox2d(in vec2 p, in vec2 b, in vec4 r, int type) {
 
     // rotate 45 degrees, offset by r and scale by r*sqrt(0.5)
     // to canonical corner coordinates
+    r.x = max(EPSILON, r.x);
     vec2 uv = vec2(abs(q.x - q.y), q.x + q.y - r.x) / r.x;
 
     // compute distance to corner shape
@@ -394,13 +401,13 @@ Surface mapWithMaterial(vec3 p) {
                     combinedSurface = opXor(combinedSurface, surface);
                     break;
                 case 4: // Smooth union
-                    combinedSurface = opSmoothUnion(combinedSurface, surface, smoothness / uResolution.x);
+                    combinedSurface = opSmoothUnion(combinedSurface, surface, smoothness);
                     break;
                 case 5: // Smooth subtraction 
-                    combinedSurface = opSmoothSubtraction(combinedSurface, surface, smoothness / uResolution.x);
+                    combinedSurface = opSmoothSubtraction(combinedSurface, surface, smoothness);
                     break;
                 case 6: // Smooth intersection
-                    combinedSurface = opSmoothIntersection(combinedSurface, surface, smoothness / uResolution.x);
+                    combinedSurface = opSmoothIntersection(combinedSurface, surface, smoothness);
                     break;
             }
         }
@@ -571,7 +578,11 @@ void main(void) {
 
     vec3 color = vec3(0.f);
 
-    vec3 pos = vec3(vUv * vec2(1.f, uResolution.y / uResolution.x), 10.f); // origin = top left
+    vec2 uv = vUv; // origin = top left
+    uv *= vec2(uWindowWidth, uWindowHeight);
+    uv += vec2(uLeftOffset, uTopOffset);
+
+    vec3 pos = vec3(uv, uCameraZ);
     vec3 dir = vec3(0.f, 0.f, -1.f);
     vec3 posOffset;
 

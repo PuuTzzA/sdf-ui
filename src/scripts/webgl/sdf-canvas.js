@@ -76,6 +76,8 @@ class SdfCanvas {
         this.canvasName = canvasName;
         this.ready = false;
 
+        this.cameraZ = 10;
+
         this.canvas;
         this.gl;
         this.programInfo;
@@ -86,7 +88,7 @@ class SdfCanvas {
         this.layers = [
             { layerOperation: SdfCanvas.LayerOperation.UNION, elementsInLayer: 0, smoothingFactor: 0 },
             { layerOperation: SdfCanvas.LayerOperation.SMOOTH_UNION, elementsInLayer: 0, smoothingFactor: 10 },
-            { layerOperation: SdfCanvas.LayerOperation.SMOOTH_UNION, elementsInLayer: 0, smoothingFactor: 10 }
+            { layerOperation: SdfCanvas.LayerOperation.SMOOTH_UNION, elementsInLayer: 0, smoothingFactor: 20 }
         ];
     }
 
@@ -129,6 +131,13 @@ class SdfCanvas {
             },
             uniformLocations: {
                 resolution: this.gl.getUniformLocation(shaderProgram, "uResolution"),
+
+                top: this.gl.getUniformLocation(shaderProgram, "uTopOffset"),
+                left: this.gl.getUniformLocation(shaderProgram, "uLeftOffset"),
+                width: this.gl.getUniformLocation(shaderProgram, "uWindowWidth"),
+                height: this.gl.getUniformLocation(shaderProgram, "uWindowHeight"),
+
+                cameraZ: this.gl.getUniformLocation(shaderProgram, "uCameraZ"),
 
                 layerOperations: this.gl.getUniformLocation(shaderProgram, 'uLayerOperations'),
                 elementsInLayer: this.gl.getUniformLocation(shaderProgram, 'uElementsInLayer'),
@@ -269,28 +278,35 @@ class SdfCanvas {
             this.layers[i].elementsInLayer = 0;
         }
 
-        this.updateUniforms();
-        //console.log("sort, layers", this.layers);
-    }
-
-    updateUniforms() {
         this.gl.useProgram(this.programInfo.program);
-
-        this.gl.uniform2f(this.programInfo.uniformLocations.resolution, this.canvas.offsetWidth, this.canvas.offsetHeight);
 
         const operations = this.layers.map(l => l.layerOperation);
         const elements = this.layers.map(l => l.elementsInLayer);
-        const smoothing = this.layers.map(l => l.smoothingFactor);
+        const smoothing = this.layers.map(l => l.smoothingFactor / window.innerWidth);
         this.gl.uniform1iv(this.programInfo.uniformLocations.layerOperations, operations);
         this.gl.uniform1iv(this.programInfo.uniformLocations.elementsInLayer, elements);
         this.gl.uniform1fv(this.programInfo.uniformLocations.smoothingFactors, smoothing);
         this.gl.uniform1i(this.programInfo.uniformLocations.numLayers, this.layers.length);
     }
 
+    updateUniforms() {
+        this.gl.useProgram(this.programInfo.program);
+
+        this.gl.uniform2f(this.programInfo.uniformLocations.resolution, window.innerWidth, window.innerHeight);
+
+        const rect = this.canvas.getBoundingClientRect();
+        this.gl.uniform1f(this.programInfo.uniformLocations.top, rect.top / window.innerWidth);
+        this.gl.uniform1f(this.programInfo.uniformLocations.left, rect.left / window.innerWidth);
+        this.gl.uniform1f(this.programInfo.uniformLocations.width, (rect.right - rect.left) / window.innerWidth);
+        this.gl.uniform1f(this.programInfo.uniformLocations.height, (rect.bottom - rect.top) / window.innerWidth);
+
+        this.gl.uniform1f(this.programInfo.uniformLocations.cameraZ, this.cameraZ);
+    }
+
     updateUniformBuffers() {
-        const resolution = [this.canvas.clientWidth, this.canvas.clientHeight];
-        const aspect = resolution[1] / resolution[0];
-        const oneOverX = 1 / resolution[0];
+        this.updateUniforms();
+
+        const oneOverX = 1 / window.innerWidth;
         let elementIdx = 0;
 
         for (let i = 0; i < SdfCanvas.trackedElements.length; i++) {

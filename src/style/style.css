@@ -96,7 +96,7 @@ html,
     height: 500px;
     top: 50vh;
     left: 50%;
-    transform: translate(-50%, -50%) rotateY(45deg) skewX(10deg);
+    transform: translate(-50%, -50%);
 
     transform-origin: 0px 70px;
 
@@ -104,12 +104,12 @@ html,
     --z: 10rem;
 
     --depth: 5rem;
-    --r: 2rem;
+    --r: 10rem;
 
-    border-top-left-radius: 2rem;
-    border-top-right-radius: 4rem;
-    border-bottom-left-radius: 6rem;
-    border-bottom-right-radius: 10rem;
+    border-top-left-radius: 10rem;
+    border-top-right-radius: 0em;
+    border-bottom-left-radius: 0.00rem;
+    border-bottom-right-radius: 0.00rem;
 
     --border-radius-type: 0;
 
@@ -130,10 +130,10 @@ html,
     background-color: rgb(100, 100, 200);
 } */
 
-#test-div:hover {
+#test-div:active {
     background-color: red;
-    transform: translate(-50%, -50%) rotate(100deg);
-
+/*     transform: translate(-50%, -50%) rotate(100deg);
+ */
     --z: 10;
 
     /*     --specular-color: rgb(255, 255, 200);
@@ -162,10 +162,8 @@ html,
     height: 600px;
     background-color: blue;
     position: absolute;
-    top: 150px;
-    left: 150px;
-
-    transform: rotateY(20deg);
+    top: 350px;
+    left: 450px;
 
     opacity: 0.2;
 

@@ -8,9 +8,9 @@ const testDiv = document.querySelector("#test-div");
 let mousePos = [0, 0];
 window.addEventListener("mousemove", (e) => {
     mousePos = [e.clientX, e.clientY];
-/*     testDiv.style.left = e.clientX + "px";
+    testDiv.style.left = e.clientX + "px";
     testDiv.style.top = e.clientY + "px";
- */});
+});
 
 let cs = getComputedStyle(testDiv);
 
