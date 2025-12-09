@@ -375,8 +375,29 @@ Surface mapWithMaterial(vec3 p) {
                     elementIdx += 4;
                     break;
                 case 2: // Box (with optional rounded corners)
-                    float val = sdRoundBox2d(pos.xy, geometryData[elementIdx + 3].yz, geometryData[elementIdx + 4], floatBitsToInt(geometryData[elementIdx + 5].x));
-                    sdValue = opExtrusion(pos, val, geometryData[elementIdx + 3].w);
+                    float w = geometryData[elementIdx + 3].y;
+                    float h = geometryData[elementIdx + 3].z;
+                    float d = geometryData[elementIdx + 3].w;
+
+                    int initialRotation = floatBitsToInt(geometryData[elementIdx + 5].y);
+
+                    // Adiddional Rotation (rounded edge selection)
+                    if (initialRotation == 1) {
+                        mat3 Rot = mat3(0.f, 0.f, 1.f, 0.f, 1.f, 0.f, -1.f, 0.f, 0.f);
+                        pos = Rot * pos;
+                        float temp = w;
+                        w = d;
+                        d = temp;
+                    } else if (initialRotation == 2) {
+                        mat3 Rot = mat3(1.f, 0.f, 0.f, 0.f, 0.f, -1.f, 0.f, 1.f, 0.f);
+                        pos = Rot * pos;
+                        float temp = h;
+                        h = d;
+                        d = temp;
+                    }
+
+                    float val = sdRoundBox2d(pos.xy, vec2(w, h), geometryData[elementIdx + 4], floatBitsToInt(geometryData[elementIdx + 5].x));
+                    sdValue = opExtrusion(pos, val, d);
                     elementIdx += 6;
                     break;
                 case 3: // Round Box
@@ -538,6 +559,8 @@ vec3 shade(HitInfo hit) {
     /* if (hit.id == -2) {
         return vec3(1.f, 0.f, 1.f);
     } */
+
+    //return vec3(1.);
 
     const vec3 sundir = normalize(vec3(1.f, -1.f, -1.5f));
 

@@ -379,6 +379,7 @@ class SdfCanvas {
                     this.geometryBuffer[elementIdx + 19] = parseFloat(computedStyle.borderTopLeftRadius) * oneOverX;
 
                     this.geometryBuffer[elementIdx + 20] = SdfCanvas.intToFloatBits(parseInt(computedStyle.getPropertyValue("--border-radius-type"))); // border radius
+                    this.geometryBuffer[elementIdx + 21] = SdfCanvas.intToFloatBits(parseInt(computedStyle.getPropertyValue("--rotation-offset"))); // initial rotation
                     break;
                 case SdfCanvas.ElementType.ROUND_BOX:
                     this.geometryBuffer[elementIdx + 13] = halfWidth; // width 
