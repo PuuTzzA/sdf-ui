@@ -257,7 +257,6 @@ class SdfCanvas {
 
         SdfCanvas.trackedElements.forEach((e) => {
             if (parseInt(e.dataset.layerIndex) == currentIdx) {
-                console.log("hallo", currentIdx)
                 currentNum++;
             } else {
                 this.layers[currentIdx].elementsInLayer = currentNum;
@@ -341,18 +340,19 @@ class SdfCanvas {
             mat = Matrix.invertMat4(mat);
 
             // Inverse affine modelview matrix = computedStyle.transform @ T(offsetX, offsetY, offsetZ), computedStyle.transform used without translation since that is already in boundingclientrect
-            this.geometryBuffer[elementIdx + 0] = mat[0];
+            this.geometryBuffer[elementIdx + 0] = mat[0]; // column 1 [mat[0], mat[1], mat[2], 0]^T
             this.geometryBuffer[elementIdx + 1] = mat[1];
             this.geometryBuffer[elementIdx + 2] = mat[2];
-            this.geometryBuffer[elementIdx + 3] = mat[4];
 
+            this.geometryBuffer[elementIdx + 3] = mat[4]; // column 2 [mat[4], mat[5], mat[6], 0]^T
             this.geometryBuffer[elementIdx + 4] = mat[5];
             this.geometryBuffer[elementIdx + 5] = mat[6];
-            this.geometryBuffer[elementIdx + 6] = mat[8];
-            this.geometryBuffer[elementIdx + 7] = mat[9];
 
+            this.geometryBuffer[elementIdx + 6] = mat[8]; // column 3 [mat[8], mat[9], mat[10], 0]^T
+            this.geometryBuffer[elementIdx + 7] = mat[9];
             this.geometryBuffer[elementIdx + 8] = mat[10];
-            this.geometryBuffer[elementIdx + 9] = mat[12]; // tx
+
+            this.geometryBuffer[elementIdx + 9] = mat[12]; // tx, column 4 [tx, ty, tz, 1]^T
             this.geometryBuffer[elementIdx + 10] = mat[13]; // ty
             this.geometryBuffer[elementIdx + 11] = mat[14]; // tz
 
@@ -380,6 +380,7 @@ class SdfCanvas {
 
                     this.geometryBuffer[elementIdx + 20] = SdfCanvas.intToFloatBits(parseInt(computedStyle.getPropertyValue("--border-radius-type"))); // border radius
                     this.geometryBuffer[elementIdx + 21] = SdfCanvas.intToFloatBits(parseInt(computedStyle.getPropertyValue("--rotation-offset"))); // initial rotation
+                    this.geometryBuffer[elementIdx + 22] = 0;
                     break;
                 case SdfCanvas.ElementType.ROUND_BOX:
                     this.geometryBuffer[elementIdx + 13] = halfWidth; // width 
@@ -391,8 +392,7 @@ class SdfCanvas {
             }
 
             // Shading Information
-            this.shadingBuffer[elementIdx + 0] = SdfCanvas.intToFloatBits(SdfCanvas.cssColorToUint32(computedStyle.backgroundColor)); // diffuse color
-            this.shadingBuffer[elementIdx + 0] = SdfCanvas.intToFloatBits(SdfCanvas.cssColorToUint32("rgb(255, 255, 255)")); // diffuse color
+            this.shadingBuffer[elementIdx + 0] = SdfCanvas.intToFloatBits(SdfCanvas.cssColorToUint32(computedStyle.getPropertyValue("--diffuse-color"))); // diffuse color
             this.shadingBuffer[elementIdx + 1] = SdfCanvas.intToFloatBits(SdfCanvas.cssColorToUint32(computedStyle.getPropertyValue("--specular-color"))); // specular color
             this.shadingBuffer[elementIdx + 2] = SdfCanvas.intToFloatBits(SdfCanvas.cssColorToUint32(computedStyle.getPropertyValue("--ambient-color"))); // ambient color
             this.shadingBuffer[elementIdx + 3] = parseFloat(computedStyle.getPropertyValue("--kd")); // diffuse material property

@@ -15,6 +15,7 @@ html,
     left: 0;
     width: 100%;
     height: 100vh;
+    z-index: -1;
 }
 
 @property --z {
@@ -45,6 +46,12 @@ html,
     syntax: "<number>";
     inherits: false;
     initial-value: 0;
+}
+
+@property --diffuse-color {
+    syntax: "<color>";
+    inherits: false;
+    initial-value: rgb(0, 0, 0);
 }
 
 @property --specular-color {
@@ -83,6 +90,10 @@ html,
     initial-value: 1;
 }
 
+.sdf-ui-base-class{
+/*     background-color: rgba(0, 0, 0, 0)!important;
+ */}
+
 /* @property --depth {
     syntax: "<number>";
     inherits: false;
@@ -106,18 +117,18 @@ html,
 
     transform-origin: 0px 70px;
 
-    background-color: red;
+    --diffuse-color: blue;
     --z: 10rem;
 
     --depth: 10rem;
     --r: 10rem;
 
     border-top-left-radius: 3rem;
-    border-top-right-radius: 0em;
+    border-top-right-radius: 1rem;
     border-bottom-left-radius: 3rem;
-    border-bottom-right-radius: 5rem;
+    border-bottom-right-radius: 7rem;
 
-    --border-radius-type: 2.5;
+    --border-radius-type: 2;
     --rotation-offset: 3;
 
     --kd: 1;
@@ -127,7 +138,7 @@ html,
 
     --specular-color: rgb(100, 100, 200);
     transition: background-color 0.3s, --z .3s, --specular-color .3s, --kd .3s, transform 1s;
-    opacity: 0.2;
+    opacity: 0;
 
     z-index: 1999;
 }
@@ -137,8 +148,9 @@ html,
 } */
 
 #test-div:active {
-    background-color: red;
-/*     transform: translate(-50%, -50%) rotate(100deg);
+    --diffuse-color: red;
+/*     --specular-color: blue;
+ *//*     transform: translate(-50%, -50%) rotate(100deg);
  */
     --z: 10;
 

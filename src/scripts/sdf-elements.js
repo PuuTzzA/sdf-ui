@@ -12,13 +12,15 @@ class ASdfElement extends HTMLElement {
             this.dataset.layerIndex = 0;
         }
 
+
+        this.classList.add("sdf-ui-base-class");
         this.dataset.elementType = this.getElementType();
 
         SdfCanvas.addTrackedElement(this);
     }
 
     getElementType() {
-        throw "cannot get element type on abstract base class.";
+        throw "Cannot get element type on abstract base class.";
     }
 
     disconnectedCallback() {
@@ -39,7 +41,6 @@ class ASdfElement extends HTMLElement {
         }
 
         // console.log(`Attribute ${name} has changed from ${oldValue} to ${newValue}.`);
-        const test = newValue * 22;
     }
 }
 
@@ -73,5 +74,5 @@ class SdfRoundBox extends ASdfElement {
     }
 }
 
-customElements.define("sdf-round-box", SdfRoundBox);
+customElements.define("sdf-box-round", SdfRoundBox);
 

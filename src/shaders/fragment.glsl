@@ -172,6 +172,10 @@ float opExtrusion(in vec3 p, in float sdf, in float h) {
     return min(max(w.x, w.y), 0.0f) + length(max(w, 0.0f));
 }
 
+float opRound(in float primitive, in float rad) {
+    return primitive - rad;
+}
+
 // ╔══════════════════════════════════════════════════════════╗
 // ║                 SDF COMBINING OPERATIONS                 ║
 // ╚══════════════════════════════════════════════════════════╝
@@ -398,6 +402,9 @@ Surface mapWithMaterial(vec3 p) {
 
                     float val = sdRoundBox2d(pos.xy, vec2(w, h), geometryData[elementIdx + 4], floatBitsToInt(geometryData[elementIdx + 5].x));
                     sdValue = opExtrusion(pos, val, d);
+
+                    sdValue = opRound(sdValue, geometryData[elementIdx + 5].z);
+
                     elementIdx += 6;
                     break;
                 case 3: // Round Box
@@ -562,7 +569,10 @@ vec3 shade(HitInfo hit) {
 
     //return vec3(1.);
 
-    const vec3 sundir = normalize(vec3(1.f, -1.f, -1.5f));
+    const vec3 lightPos = vec3(0.5f, 0.5f, 10.f);
+
+    vec3 vecToLight = normalize(lightPos - hit.pos);
+    vec3 vecFromLight = normalize(hit.pos - lightPos);
 
     Surface surface = hit.surface;
 
@@ -572,12 +582,12 @@ vec3 shade(HitInfo hit) {
     float la = 1.f; // ambient light intensity (constant for scene)
     float ls = 1.f; // specular light intensity (light source dependent)
 
-    float iDiffuse = surface.kd * ld * max(0.f, dot(-sundir, hit.normal));
+    float iDiffuse = surface.kd * ld * max(0.f, dot(vecToLight, hit.normal));
     float iAmbient = surface.ka * la;
-    float iSpecular = surface.ks * ls * pow(max(0.f, dot(reflect(sundir, hit.normal), vec3(0.f, 0.f, -1.f))), surface.p);
+    float iSpecular = surface.ks * ls * pow(max(0.f, dot(reflect(vecFromLight, hit.normal), vec3(0.f, 0.f, 1.f))), surface.p);
 
     //float shadow = shadow(hit.pos, -sundir, 0.001f, 5.f);
-    float shadow = softshadow(hit.pos, -sundir, 0.001f, 5.f, 0.1f);
+    float shadow = softshadow(hit.pos, vecToLight, 0.001f, 5.f, 0.1f);
     //float shadow = calcSoftshadow(hit.pos, -sundir, 0.01f, 5.0f, 16.0f);
     shadow = max(shadow, 0.1f);
 
@@ -611,7 +621,7 @@ void main(void) {
 
     for (int i = 0; i < subPixleOffsets.length(); i++) {
         posOffset = pos + vec3(subPixleOffsets[i] * pixelSize, 0.0f);
-
+        
         color += shade(trace(posOffset, dir));
     }
 
