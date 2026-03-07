@@ -474,9 +474,62 @@ vec3 calcNormalTetrahedron(vec3 p) {
         k.xxx * mapWithMaterial(p + k.xxx * h).distance);
 }
 
+HitInfo traceOptimized(vec3 ro, vec3 rd){
+    // taken from Accelerating Sphere Tracing 
+    // https://diglib.eg.org/server/api/core/bitstreams/7537a378-9a0a-4ef4-b57d-877322b1441e/content
+    float omega = 1.2;
+
+    float t = 0.f;
+    float pixelRadius = 0.5f / uResolution.x;
+    pixelRadius = EPSILON;
+    float tMax = 100.f;
+
+    float rLast = 0.f;
+    float rCurr = mapWithMaterial(ro).distance;
+    float dPrev = 0.0;
+
+    for (int i = 0; i < 200; i++){
+        if (rCurr < pixelRadius){
+            vec3 p = ro + t * rd;
+            Surface surface = mapWithMaterial(p);
+            vec3 normal = calcNormalTetrahedron(p);
+            return HitInfo(i, p, normal, surface);
+        }
+
+        if (t > tMax){
+            vec3 p = ro + t * rd;
+            Surface surface = mapWithMaterial(p);
+            vec3 normal = calcNormalTetrahedron(p);
+            return HitInfo(i, p, normal, surface);
+        }
+
+        float dNext = rCurr;
+
+        float denom = dPrev + rLast - rCurr;
+
+        if (i > 0 && denom > EPSILON){
+            dNext = rCurr + omega * rCurr * (dPrev - rLast + rCurr) / denom;
+        }
+
+        float rNext = mapWithMaterial(ro + (t + dNext) * rd).distance;
+ 
+        if (dNext > rCurr + rNext){
+            dNext = rCurr;
+            rNext = mapWithMaterial(ro + (t + dNext) * rd).distance;
+        }
+
+        t += dNext;
+        dPrev = dNext;
+        rLast = rCurr;
+        rCurr = rNext;
+    }
+    
+    return HitInfo(-1, vec3(0.0f), vec3(0.f, 0.f, 0.f), Surface(vec3(0.f), vec3(0.f), vec3(0.f), 0.f, 0.f, 0.f, 0.f, 0.f, 0.f));
+}
+
 HitInfo trace(vec3 ro, vec3 rd) {
     const float tMax = 100.0f;
-    const int maxSteps = 128;
+    const int maxSteps = 200;
 
     float t = 0.0f;   // distance traveled along ray
 
@@ -497,15 +550,19 @@ HitInfo trace(vec3 ro, vec3 rd) {
             // hit — return a basic color (white)
             Surface surface = mapWithMaterial(p);
             vec3 normal = calcNormalTetrahedron(p);
-
-            return HitInfo(i > 20 ? -2 : 1, p, normal, surface);
-            //return vec3(1.0f);
+            return HitInfo(i, p, normal, surface);
+            return HitInfo(i, vec3(0.0f), vec3(0.f, 0.f, 0.f), Surface(vec3(0.f), vec3(0.f), vec3(0.f), 0.f, 0.f, 0.f, 0.f, 0.f, 0.f));
         }
 
         t += d;
 
-        if (t > tMax)
+        if (t > tMax){
+            Surface surface = mapWithMaterial(p);
+            vec3 normal = calcNormalTetrahedron(p);
+            return HitInfo(i, p, normal, surface);
+            return HitInfo(i, vec3(0.0f), vec3(0.f, 0.f, 0.f), Surface(vec3(0.f), vec3(0.f), vec3(0.f), 0.f, 0.f, 0.f, 0.f, 0.f, 0.f));
             break;
+        }
     }
 
     // miss — return background
@@ -559,13 +616,21 @@ float gaussian(float x, float mu, float sigma) {
 }
 
 vec3 shade(HitInfo hit) {
-    if (hit.id == -1) {
-        return vec3(0.f);
-        return vec3(0.f, 1.f, 1.f);
+    if (hit.id == -1){
+        return vec3(1., 0., 1.);
     }
-    /* if (hit.id == -2) {
-        return vec3(1.f, 0.f, 1.f);
-    } */
+
+    if (hit.pos.x < 0.5){
+        if (hit.id < 20){
+            return vec3(0., float(hit.id) / 20., 0.);
+        }
+        if (hit.id < 50){
+            return vec3(1., 1., 0.);
+        }
+    
+        return vec3(1., 0., 0.);
+    }
+
 
     //return vec3(1.);
 
@@ -622,7 +687,7 @@ void main(void) {
     for (int i = 0; i < subPixleOffsets.length(); i++) {
         posOffset = pos + vec3(subPixleOffsets[i] * pixelSize, 0.0f);
         
-        color += shade(trace(posOffset, dir));
+        color += shade(traceOptimized(posOffset, dir));
     }
 
     color /= float(subPixleOffsets.length());

@@ -178,7 +178,6 @@ html,
 #background {
     width: 600px;
     height: 600px;
-    background-color: blue;
     position: absolute;
     top: 150px;
     left: 450px;
@@ -195,4 +194,14 @@ html,
     position: absolute;
     background-color: yellow;
     opacity: 0.2;
+}
+
+
+#fps-counter{
+    position: absolute;
+    top: 0;
+    left: 0;
+    color: white;
+    background-color: black;
+    padding: 0.2rem;
 }

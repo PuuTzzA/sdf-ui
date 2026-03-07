@@ -113,12 +113,15 @@ class SdfCanvas {
         // Clear the color buffer with specified clear color
         this.gl.clear(this.gl.COLOR_BUFFER_BIT);
 
+        console.log("before loading shaders from disk")
         const { vertexSource, fragmentSource } = await SdfCanvas.loadShadersFromDisk();
 
+        console.log("after loading shaders from disk")
         // Initialize a shader program; this is where all the lighting
         // for the vertices and so forth is established.
         const shaderProgram = this.initShaderProgram(vertexSource, fragmentSource);
 
+        console.log("after initShaderProgram")
         // Collect all the info needed to use the shader program.
         // Look up which attribute our shader program is using
         // for aVertexPosition and look up uniform locations.

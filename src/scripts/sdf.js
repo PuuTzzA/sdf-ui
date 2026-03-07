@@ -4,6 +4,14 @@ const sdfCanvas = new SdfCanvas("canvas");
 sdfCanvas.initWebgl();
 
 const testDiv = document.querySelector("#test-div");
+const fpsDiv = document.querySelector("#fps-counter");
+let lastFps = []
+
+const SIZE = 90;
+for (let i = 0; i < SIZE; i++) {
+    lastFps.push(0);
+}
+let i = 0;
 
 let mousePos = [0, 0];
 window.addEventListener("mousemove", (e) => {
@@ -11,8 +19,6 @@ window.addEventListener("mousemove", (e) => {
     testDiv.style.left = e.clientX + "px";
     testDiv.style.top = e.clientY + "px";
 });
-
-let cs = getComputedStyle(testDiv);
 
 let lastTime = performance.now();
 let fps = 0;
@@ -23,7 +29,14 @@ function gameLoop(now) {
     const delta = now - lastTime;
     fps = 1000 / delta;     // frames per second
     lastTime = now;
-    testDiv.innerHTML = fps.toFixed(1);  // show FPS with 1 decimal
+
+    lastFps[i % SIZE] = fps;
+    i++
+
+    const sum = lastFps.reduce((a, b) => a + b, 0);
+    const avg = (sum / lastFps.length) || 0;
+
+    fpsDiv.innerHTML = avg.toFixed(1);  // show FPS with 1 decimal
 
     // Draw Scene
     if (sdfCanvas.ready) {
