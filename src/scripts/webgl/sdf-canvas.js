@@ -119,7 +119,13 @@ class SdfCanvas {
         console.log("after loading shaders from disk")
         // Initialize a shader program; this is where all the lighting
         // for the vertices and so forth is established.
+        const startTime = performance.now()
+
         const shaderProgram = this.initShaderProgram(vertexSource, fragmentSource);
+
+        const endTime = performance.now()
+        console.log(`Call to doSomething took ${endTime - startTime} milliseconds`)
+
 
         console.log("after initShaderProgram")
         // Collect all the info needed to use the shader program.

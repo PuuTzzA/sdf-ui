@@ -3,7 +3,8 @@ precision highp float;
 
 #define MAX_SIZE_ELEMENT_BUFFER 512
 #define MAX_LAYERS 16
-#define EPSILON 1e-6
+#define EPSILON 1e-4
+#define ZERO (min(uNumLayers,0)) // non-constant zero to avoid inlining of functions
 
 // ╔══════════════════════════════════════════════════════════╗
 // ║                       UNIFORMS                           ║
@@ -316,7 +317,7 @@ vec3 unpackColor(float f) {
     ) / 255.0f;
 }
 
-float map(vec3 p) {
+float mapold(vec3 p) {
     // custom sphere position + radius
     vec3 spherePos = vec3(geometryData[0].xyz);
     float sphereRadius = geometryData[0].w;
@@ -342,12 +343,12 @@ Surface mapWithMaterial(vec3 p) {
 
     int elementIdx = 0;
 
-    for (int layer = 0; layer < uNumLayers; layer++) {
+    for (int layer = ZERO; layer < uNumLayers; layer++) {
         int layerOperation = uLayerOperations[layer];
         int numElements = uElementsInLayer[layer];
         float smoothness = uSmoothingFactors[layer];
 
-        for (int i = 0; i < numElements; i++) {
+        for (int i = ZERO; i < numElements; i++) {
 
             Surface surface;
             surface.colorDiffuse = unpackColor(shadingData[elementIdx].x);
@@ -455,67 +456,132 @@ Surface mapWithMaterial(vec3 p) {
     return combinedSurface;
 }
 
-vec3 calcNormal(in vec3 pos) {
-    const float eps = 1e-1f;
-    const vec2 h = vec2(eps, 0.f);
-    return normalize(vec3(map(pos + h.xyy) - map(pos - h.xyy), map(pos + h.yxy) - map(pos - h.yxy), map(pos + h.yyx) - map(pos - h.yyx)));
+Surface mapSimple(vec3 p) {
+    Surface combinedSurface;
+    combinedSurface.colorDiffuse = vec3(1.f);
+    combinedSurface.colorSpecular = vec3(0.f);
+    combinedSurface.colorAmbient = vec3(0.f);
+    combinedSurface.kd = 1.f; // diffuse material property
+    combinedSurface.ks = 1.f; // specular material property
+    combinedSurface.p = 1.f; // specular exponent, fall of of specular light
+    combinedSurface.ka = 1.1f; // ambient material property
+    combinedSurface.distance = 3.402823466e+38f;
+
+    float rawDist1 = sdBox(p - vec3(0.5, 0.2, 0.0), vec3(0.3, 0.1, 0.2));
+    float rawDist2 = sdSphere(p - vec3(0.5), 0.15);
+    float rawDist3 = sdBox(p - vec3(0.5, 0.25, -0.2), vec3(0.4, 0.2, 0.1));
+    combinedSurface.distance = rawDist1;
+
+    Surface s2;
+    s2.distance = rawDist2;
+    Surface s = opSmoothUnion(combinedSurface, s2, 0.1);
+
+    s2.distance = rawDist3;
+    return opSmoothUnion(s, s2, 0.01);
 }
 
-// https://iquilezles.org/articles/normalsSDF/
+Surface map(vec3 p){
+    return mapWithMaterial(p);
+    //return mapSimple(p);
+}
+
 vec3 calcNormalTetrahedron(vec3 p) {
-    // TODO: if perspective camera, make h dependent on the distance to the camera (pixel size)
-    //const float h = 0.1f;
-    float h = max(0.0005f, 0.0005f * length(p));  // adapt with distance
+    // https://iquilezles.org/articles/normalsSDF/
+    const float h = 0.0001;      // replace by an appropriate value
+    vec3 n = vec3(0.0);
+    for( int i=ZERO; i<4; i++ )
+    {
+        vec3 e = 0.5773*(2.0*vec3((((i+3)>>1)&1),((i>>1)&1),(i&1))-1.0);
+        n += e*map(p+e*h).distance;
+    }
+    return normalize(n);
 
-    const vec2 k = vec2(1, -1);
-    return normalize(k.xyy * mapWithMaterial(p + k.xyy * h).distance +
-        k.yyx * mapWithMaterial(p + k.yyx * h).distance +
-        k.yxy * mapWithMaterial(p + k.yxy * h).distance +
-        k.xxx * mapWithMaterial(p + k.xxx * h).distance);
 }
 
-HitInfo traceOptimized(vec3 ro, vec3 rd){
-    // taken from Accelerating Sphere Tracing 
-    // https://diglib.eg.org/server/api/core/bitstreams/7537a378-9a0a-4ef4-b57d-877322b1441e/content
+HitInfo trace(vec3 ro, vec3 rd){
+    // 
+    // adapted from Accelerating Sphere Tracing 
+    // https://diglib.eg.org/server/api/core/bitstreams/7537a378-9a0a-4ef4-b57d-877322b1441e/content    
     float omega = 1.2;
-
-    float t = 0.f;
-    float pixelRadius = 0.5f / uResolution.x;
-    pixelRadius = EPSILON;
-    float tMax = 100.f;
-
-    float rLast = 0.f;
-    float rCurr = mapWithMaterial(ro).distance;
+    float t = 0.0;
+    float pixelRadius = EPSILON;
+    float tMax = 100.0;
+    
+    float rLast = 0.0;
+    float rCurr = 0.1; // map(ro).distance; to reduce compilation time, because map() gets inlined
     float dPrev = 0.0;
 
+    float lowerBound = 0.001; // lower bound for the stepsize when raymarching
+    float upperBound = 0.01; // upper bound for the stepsize when raymarching
+    float lowerDistance = EPSILON; // distance at which stepsize = lowerBound
+    float upperDistance = 0.01; // distance at which stepsize = upperBound
+
+    int directionalDerivativeZero = 0;
+
     for (int i = 0; i < 200; i++){
-        if (rCurr < pixelRadius){
-            vec3 p = ro + t * rd;
-            Surface surface = mapWithMaterial(p);
-            vec3 normal = calcNormalTetrahedron(p);
-            return HitInfo(i, p, normal, surface);
+        // Intersection found if raymarching
+        bool raymarchingIntersection = rCurr < 0.0;
+        if (raymarchingIntersection){
+            float tLower = t - dPrev;
+            float tUpper = t;
+            float mid = 0.0;
+
+            for (int j = 0; j < 5; j++){
+                mid = (tLower + tUpper) * 0.5;
+                float sdfMid = map(ro + mid * rd).distance;
+                if (abs(sdfMid) < pixelRadius){
+                    break;
+                }
+                if (sdfMid < 0.0){
+                    tUpper = mid;
+                } else{
+                    tLower = mid;
+                }
+            }
+            // vec3 p = ro + t * rd;
+            // return HitInfo(i, p, calcNormalTetrahedron(p), map(p));
         }
 
-        if (t > tMax){
+        // Hit condition
+        if (raymarchingIntersection || rCurr < pixelRadius){
             vec3 p = ro + t * rd;
-            Surface surface = mapWithMaterial(p);
-            vec3 normal = calcNormalTetrahedron(p);
-            return HitInfo(i, p, normal, surface);
+            return HitInfo(i, p, calcNormalTetrahedron(p), map(p));
+        }
+
+        if (t >= tMax){
+            vec3 p = ro + t * rd;
+            break;
         }
 
         float dNext = rCurr;
-
         float denom = dPrev + rLast - rCurr;
 
         if (i > 0 && denom > EPSILON){
             dNext = rCurr + omega * rCurr * (dPrev - rLast + rCurr) / denom;
         }
 
-        float rNext = mapWithMaterial(ro + (t + dNext) * rd).distance;
- 
-        if (dNext > rCurr + rNext){
+        // Detect parallel rays 
+        if (rCurr < upperDistance && abs(rCurr - rLast) < EPSILON){
+            directionalDerivativeZero++;
+        } else{
+            directionalDerivativeZero = 0;
+        }
+
+        bool isParallel = directionalDerivativeZero >= 5;
+
+        if (isParallel){
+            float tFactor = clamp((rCurr - lowerDistance) / (upperDistance - lowerDistance), 0.0, 1.0);
+            float minStep = mix(lowerBound, upperBound, tFactor);
+            // Allow over-relaxation to take a larger step if possible, but enforce minimum step
+            dNext = max(dNext, minStep); 
+        }
+
+        float rNext = map(ro + (t + dNext) * rd).distance;
+
+        // Overrelaxation was too big (only in the case where we don't do raymarching)
+        if (!isParallel && dNext > rCurr + rNext){
             dNext = rCurr;
-            rNext = mapWithMaterial(ro + (t + dNext) * rd).distance;
+            rNext = map(ro + (t + dNext) * rd).distance;
         }
 
         t += dNext;
@@ -523,50 +589,8 @@ HitInfo traceOptimized(vec3 ro, vec3 rd){
         rLast = rCurr;
         rCurr = rNext;
     }
-    
-    return HitInfo(-1, vec3(0.0f), vec3(0.f, 0.f, 0.f), Surface(vec3(0.f), vec3(0.f), vec3(0.f), 0.f, 0.f, 0.f, 0.f, 0.f, 0.f));
-}
 
-HitInfo trace(vec3 ro, vec3 rd) {
-    const float tMax = 100.0f;
-    const int maxSteps = 200;
-
-    float t = 0.0f;   // distance traveled along ray
-
-    float last = -1.f;
-    int howOften = 0;
-
-    for (int i = 0; i < maxSteps; i++) {
-
-        vec3 p = ro + rd * t;   // current sample position
-        float d = mapWithMaterial(p).distance;       // distance to nearest surface
-
-        if (abs(d - last) < EPSILON) {
-            howOften++;
-        }
-        last = d;
-
-        if (d < EPSILON || howOften > 1000) {
-            // hit — return a basic color (white)
-            Surface surface = mapWithMaterial(p);
-            vec3 normal = calcNormalTetrahedron(p);
-            return HitInfo(i, p, normal, surface);
-            return HitInfo(i, vec3(0.0f), vec3(0.f, 0.f, 0.f), Surface(vec3(0.f), vec3(0.f), vec3(0.f), 0.f, 0.f, 0.f, 0.f, 0.f, 0.f));
-        }
-
-        t += d;
-
-        if (t > tMax){
-            Surface surface = mapWithMaterial(p);
-            vec3 normal = calcNormalTetrahedron(p);
-            return HitInfo(i, p, normal, surface);
-            return HitInfo(i, vec3(0.0f), vec3(0.f, 0.f, 0.f), Surface(vec3(0.f), vec3(0.f), vec3(0.f), 0.f, 0.f, 0.f, 0.f, 0.f, 0.f));
-            break;
-        }
-    }
-
-    // miss — return background
-    return HitInfo(-1, vec3(0.0f), vec3(0.f, 0.f, 0.f), Surface(vec3(0.f), vec3(0.f), vec3(0.f), 0.f, 0.f, 0.f, 0.f, 0.f, 0.f));
+    return HitInfo(-1, vec3(0.0), vec3(0.0), Surface(vec3(0.0), vec3(0.0), vec3(0.0), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0));
 }
 
 // ╔══════════════════════════════════════════════════════════╗
@@ -575,7 +599,7 @@ HitInfo trace(vec3 ro, vec3 rd) {
 float shadow(in vec3 ro, in vec3 rd, float mint, float maxt) {
     float t = mint;
     for (int i = 0; i < 256 && t < maxt; i++) {
-        float h = mapWithMaterial(ro + rd * t).distance;
+        float h = map(ro + rd * t).distance;
         if (h < EPSILON)
             return 0.0f;
         t += h;
@@ -588,7 +612,7 @@ float softshadow(in vec3 ro, in vec3 rd, float mint, float maxt, float w) {
     float res = 1.0f;
     float t = mint;
     for (int i = 0; i < 256 && t < maxt; i++) {
-        float h = mapWithMaterial(ro + t * rd).distance;
+        float h = map(ro + t * rd).distance;
         res = min(res, h / (w * t));
         t += clamp(h, 0.005f, 0.50f);
         if (res < -1.0f || t > maxt)
@@ -602,7 +626,7 @@ float calcSoftshadow(in vec3 ro, in vec3 rd, float tmin, float tmax, const float
     float res = 1.0f;
     float t = tmin;
     for (int i = 0; i < 50; i++) {
-        float h = mapWithMaterial(ro + rd * t).distance;
+        float h = map(ro + rd * t).distance;
         res = min(res, k * h / t);
         t += clamp(h, 0.02f, 0.20f);
         if (res < 0.005f || t > tmax)
@@ -616,23 +640,20 @@ float gaussian(float x, float mu, float sigma) {
 }
 
 vec3 shade(HitInfo hit) {
-    if (hit.id == -1){
-        return vec3(1., 0., 1.);
-    }
-
-    if (hit.pos.x < 0.5){
-        if (hit.id < 20){
-            return vec3(0., float(hit.id) / 20., 0.);
-        }
-        if (hit.id < 50){
-            return vec3(1., 1., 0.);
-        }
-    
-        return vec3(1., 0., 0.);
-    }
-
-
-    //return vec3(1.);
+    // if (hit.id == -1){
+    //     return vec3(1., 0., 1.);
+    // }
+    // if (hit.id == -2){
+    //     return vec3(0.,1.,1.);
+    // }
+    // if (hit.id < 20){
+    //     return vec3(0., float(hit.id) / 20., 0.);
+    // }
+    // if (hit.id < 50){
+    //     float val = float(hit.id) / 50.;
+    //     return vec3(val, val, 0.);
+    // }
+    //return vec3(1, 0., 0.);
 
     const vec3 lightPos = vec3(0.5f, 0.5f, 10.f);
 
@@ -655,6 +676,7 @@ vec3 shade(HitInfo hit) {
     float shadow = softshadow(hit.pos, vecToLight, 0.001f, 5.f, 0.1f);
     //float shadow = calcSoftshadow(hit.pos, -sundir, 0.01f, 5.0f, 16.0f);
     shadow = max(shadow, 0.1f);
+    shadow = 1.0;
 
     //return vec3(shadow);
     //return hit.id != -1 ? vec3(1.f) : vec3(0.f);
@@ -665,11 +687,6 @@ vec3 shade(HitInfo hit) {
 // ║                           MAIN                           ║
 // ╚══════════════════════════════════════════════════════════╝
 void main(void) {
-    fragColor = vec4(vec3(shadingData[0].w), 1.f);
-    //return;
-
-    fragColor = length(vUv - geometryData[0].xy) < 0.1f ? vec4(1.f, 0.f, 0.f, 1.f) : vec4(1.f);
-    //return;
     //const vec2 subPixleOffsets[] = vec2[](vec2(0.375f, 0.125f) - vec2(0.5f), vec2(0.875f, 0.375f) - vec2(0.5f), vec2(0.125f, 0.625f) - vec2(0.5f), vec2(0.625f, 0.875f) - vec2(0.5f));
     const vec2 subPixleOffsets[] = vec2[](vec2(0.f, 0.f));
     vec2 pixelSize = vec2(1.f) / uResolution.x;
@@ -686,15 +703,11 @@ void main(void) {
 
     for (int i = 0; i < subPixleOffsets.length(); i++) {
         posOffset = pos + vec3(subPixleOffsets[i] * pixelSize, 0.0f);
-        
-        color += shade(traceOptimized(posOffset, dir));
+
+        color += shade(trace(posOffset, dir));
     }
 
     color /= float(subPixleOffsets.length());
 
-    //color = vec3(vUv, 0.);
-
     fragColor = vec4(color, 1.f);
-    //fragColor = vec4(vUv, 0., 1.);
-    //fragColor = vec4(length(pos.xy) < .1f ? 1.f : 0.f, 0.f, 0.f, 1.f);
 }
