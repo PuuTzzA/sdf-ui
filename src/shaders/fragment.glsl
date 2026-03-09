@@ -180,12 +180,16 @@ float opRound(in float primitive, in float rad) {
 // ╔══════════════════════════════════════════════════════════╗
 // ║                 SDF COMBINING OPERATIONS                 ║
 // ╚══════════════════════════════════════════════════════════╝
-vec2 smin(float a, float b, float k) { // ret.a = distnce, ret.b = blendfactor //return vec2(min(a, b), a);
+vec2 smin(float a, float b, float k) { // ret.a = distance, ret.b = blendfactor //return vec2(min(a, b), a);
     k *= 6.0f;
     float h = max(k - abs(a - b), 0.0f) / k;
     float m = h * h * h * 0.5f;
     float s = m * k * (1.0f / 3.0f);
     return (a < b) ? vec2(a - s, m) : vec2(b - s, 1.0f - m);
+}
+
+float opUnion(float a, float b) {
+    return min(a, b);
 }
 
 Surface opUnion(Surface a, Surface b) {
@@ -200,7 +204,11 @@ Surface opUnion(Surface a, Surface b) {
     mix(a.p, b.p, t),//
     mix(a.ka, b.ka, t),//
     t,//
-    a.distance < b.distance ? a.distance : b.distance);//
+    min(a.distance, b.distance));//
+}
+
+float opSubtraction(float a, float b) {
+    return max(a, -b);
 }
 
 Surface opSubtraction(Surface a, Surface b) {
@@ -217,6 +225,10 @@ Surface opSubtraction(Surface a, Surface b) {
     max(a.distance, -b.distance)); //
 }
 
+float opIntersection(float a, float b) {
+    return max(a, b);
+}
+
 Surface opIntersection(Surface a, Surface b) {
     float t = a.distance > b.distance ? 0.f : 1.f;
 
@@ -229,6 +241,10 @@ Surface opIntersection(Surface a, Surface b) {
     mix(a.ka, b.ka, t), //
     t, //
     max(a.distance, b.distance)); //
+}
+
+float opXor(float a, float b) {
+    return max(min(a, b), - max(a, b));
 }
 
 Surface opXor(Surface a, Surface b) {
@@ -246,6 +262,10 @@ Surface opXor(Surface a, Surface b) {
     dist); //
 }
 
+float opSmoothUnion(float a, float b, float smoothness) {
+    return smin(a, b, smoothness).x;
+}
+
 Surface opSmoothUnion(Surface a, Surface b, float smoothness) {
     vec2 blend = smin(a.distance, b.distance, smoothness);
 
@@ -259,6 +279,10 @@ Surface opSmoothUnion(Surface a, Surface b, float smoothness) {
     mix(a.ka, b.ka, blend.y),//
     blend.y,//
     blend.x);//
+}
+
+float opSmoothSubtraction(float a, float b, float smoothness) {
+    return smin(-a, b, smoothness).x;
 }
 
 Surface opSmoothSubtraction(Surface a, Surface b, float smoothness) {
@@ -275,6 +299,10 @@ Surface opSmoothSubtraction(Surface a, Surface b, float smoothness) {
     mix(a.ka, b.ka, blend.y),//
     blend.y,//
     blend.x);//
+}
+
+float opSmoothIntersection(float a, float b, float smoothness) {
+    return smin(-a, -b, smoothness).x;
 }
 
 Surface opSmoothIntersection(Surface a, Surface b, float smoothness) {
@@ -296,18 +324,6 @@ Surface opSmoothIntersection(Surface a, Surface b, float smoothness) {
 // ╔══════════════════════════════════════════════════════════╗
 // ║                      RAYMARCHING                         ║
 // ╚══════════════════════════════════════════════════════════╝
-/* vec4 unpackColor(float f) {
-    // reinterpret float bits as uint
-    uint u = floatBitsToUint(f);
-
-    float r = float((u >> 24u) & 0xFFu) / 255.0f;
-    float g = float((u >> 16u) & 0xFFu) / 255.0f;
-    float b = float((u >> 8u) & 0xFFu) / 255.0f;
-    float a = float(u & 0xFFu) / 255.0f;
-
-    return vec4(r, g, b, a);
-} */
-
 vec3 unpackColor(float f) {
     uint u = floatBitsToUint(f);
     return vec3(//
@@ -317,144 +333,146 @@ vec3 unpackColor(float f) {
     ) / 255.0f;
 }
 
-float mapold(vec3 p) {
-    // custom sphere position + radius
-    vec3 spherePos = vec3(geometryData[0].xyz);
-    float sphereRadius = geometryData[0].w;
-
-    vec3 boxPosition = vec3(0.5f, 0.5f, 0.f);
-
-    float s = sdSphere(p - spherePos, sphereRadius);
-
-    s = smin2(s, sdBox(p - boxPosition, vec3(0.45f, 0.45f, 0.01f)), 0.05f);
-    return s;
+void initializeData(inout float data) {
+    data = 3.402823466e+38f;
 }
 
-Surface mapWithMaterial(vec3 p) {
-    Surface combinedSurface;
-    combinedSurface.colorDiffuse = vec3(0.f);
-    combinedSurface.colorSpecular = vec3(0.f);
-    combinedSurface.colorAmbient = vec3(0.f);
-    combinedSurface.kd = 0.f; // diffuse material property
-    combinedSurface.ks = 0.f; // specular material property
-    combinedSurface.p = 0.f; // specular exponent, fall of of specular light
-    combinedSurface.ka = 0.1f; // ambient material property
-    combinedSurface.distance = 3.402823466e+38f;
-
-    int elementIdx = 0;
-
-    for (int layer = ZERO; layer < uNumLayers; layer++) {
-        int layerOperation = uLayerOperations[layer];
-        int numElements = uElementsInLayer[layer];
-        float smoothness = uSmoothingFactors[layer];
-
-        for (int i = ZERO; i < numElements; i++) {
-
-            Surface surface;
-            surface.colorDiffuse = unpackColor(shadingData[elementIdx].x);
-            surface.colorSpecular = unpackColor(shadingData[elementIdx].y);
-            surface.colorAmbient = unpackColor(shadingData[elementIdx].z);
-            surface.kd = shadingData[elementIdx].w; // diffuse material property
-            surface.ks = shadingData[elementIdx + 1].x; // specular material property
-            surface.p = shadingData[elementIdx + 1].y; // specular exponent, fall of of specular light
-            surface.ka = shadingData[elementIdx + 1].z; // ambient material property
-
-            float sdValue;
-
-            mat4 M = mat4( //
-            vec4(geometryData[elementIdx].xyz, 0.f), //
-            vec4(geometryData[elementIdx].w, geometryData[elementIdx + 1].x, geometryData[elementIdx + 1].y, 0.f), //
-            vec4(geometryData[elementIdx + 1].z, geometryData[elementIdx + 1].w, geometryData[elementIdx + 2].x, 0.f), //
-            vec4(geometryData[elementIdx + 2].yzw, 1.f)//
-            );
-
-            vec3 pos = (M * vec4(p, 1.f)).xyz;
-
-            switch (floatBitsToInt(geometryData[elementIdx + 3].x)) {
-                case 0: // Sphere
-                    sdValue = sdSphere(pos, geometryData[elementIdx + 3].y);
-                    elementIdx += 4;
-                    break;
-                case 1: // Simple Box
-                    sdValue = sdBox(pos, vec3(geometryData[elementIdx + 3].yzw));
-                    elementIdx += 4;
-                    break;
-                case 2: // Box (with optional rounded corners)
-                    float w = geometryData[elementIdx + 3].y;
-                    float h = geometryData[elementIdx + 3].z;
-                    float d = geometryData[elementIdx + 3].w;
-
-                    int initialRotation = floatBitsToInt(geometryData[elementIdx + 5].y);
-
-                    // Adiddional Rotation (rounded edge selection)
-                    if (initialRotation == 1) {
-                        mat3 Rot = mat3(0.f, 0.f, 1.f, 0.f, 1.f, 0.f, -1.f, 0.f, 0.f);
-                        pos = Rot * pos;
-                        float temp = w;
-                        w = d;
-                        d = temp;
-                    } else if (initialRotation == 2) {
-                        mat3 Rot = mat3(1.f, 0.f, 0.f, 0.f, 0.f, -1.f, 0.f, 1.f, 0.f);
-                        pos = Rot * pos;
-                        float temp = h;
-                        h = d;
-                        d = temp;
-                    }
-
-                    float val = sdRoundBox2d(pos.xy, vec2(w, h), geometryData[elementIdx + 4], floatBitsToInt(geometryData[elementIdx + 5].x));
-                    sdValue = opExtrusion(pos, val, d);
-
-                    sdValue = opRound(sdValue, geometryData[elementIdx + 5].z);
-
-                    elementIdx += 6;
-                    break;
-                case 3: // Round Box
-                    sdValue = sdRoundBox(pos, geometryData[elementIdx + 3].yzw, geometryData[elementIdx + 4].x);
-                    elementIdx += 5;
-                    break;
-            }
-
-            surface.distance = sdValue;
-
-            switch (layerOperation) {
-                case 0: // Union
-                    combinedSurface = opUnion(combinedSurface, surface);
-                    break;
-                case 1: // Subtraction
-                    combinedSurface = opSubtraction(combinedSurface, surface);
-                    break;
-                case 2: // Intersection
-                    combinedSurface = opIntersection(combinedSurface, surface);
-                    break;
-                case 3: // Xor
-                    combinedSurface = opXor(combinedSurface, surface);
-                    break;
-                case 4: // Smooth union
-                    combinedSurface = opSmoothUnion(combinedSurface, surface, smoothness);
-                    break;
-                case 5: // Smooth subtraction 
-                    combinedSurface = opSmoothSubtraction(combinedSurface, surface, smoothness);
-                    break;
-                case 6: // Smooth intersection
-                    combinedSurface = opSmoothIntersection(combinedSurface, surface, smoothness);
-                    break;
-            }
-        }
-    }
-
-/*     vec3 pos = geometryData[0].xyz;
-    sphereSurface.distance = sdBox(p - pos, geometryData[1].xyz);
- */
-
-/*    vec3 negBoxPos = vec3(geometryData[0].xyz - vec3(0.f, 0.f, 0.3f));
-    Surface negBoxSurface;
-    negBoxSurface = sphereSurface;
-    negBoxSurface.colorDiffuse = vec3(1.f, 0.f, 0.f);
-    negBoxSurface.distance = sdRoundBox(p - negBoxPos, vec3(.1f, .1f, .1f), 0.01f); */
-
-    //return opSmoothSubtraction(negBoxSurface, union_, 0.005f);
-    return combinedSurface;
+void initializeData(inout Surface data) {
+    data.colorDiffuse = vec3(0.f);
+    data.colorSpecular = vec3(0.f);
+    data.colorAmbient = vec3(0.f);
+    data.kd = 0.f; // diffuse material property
+    data.ks = 0.f; // specular material property
+    data.p = 0.f; // specular exponent, fall of of specular light
+    data.ka = 0.1f; // ambient material property
+    data.distance = 3.402823466e+38f;
 }
+
+void populateData(inout float data, int elementIdx) {
+}
+
+void populateData(inout Surface data, int elementIdx) {
+    data.colorDiffuse = unpackColor(shadingData[elementIdx].x);
+    data.colorSpecular = unpackColor(shadingData[elementIdx].y);
+    data.colorAmbient = unpackColor(shadingData[elementIdx].z);
+    data.kd = shadingData[elementIdx].w; // diffuse material property 
+    data.ks = shadingData[elementIdx + 1].x; // specular material property 
+    data.p  = shadingData[elementIdx + 1].y; // specular exponent, fall of of specular light
+    data.ka = shadingData[elementIdx + 1].z; // ambient material property
+}
+
+void setDistance(inout float destination, float distance) {
+    destination = distance;
+}
+
+void setDistance(inout Surface destination, float distance) {
+    destination.distance = distance;
+}
+
+#define GENERATE_MAP_FUNCTION(FUNCTION_NAME, RETURN_TYPE)                                                                                       \
+RETURN_TYPE FUNCTION_NAME(vec3 p) {                                                                                                             \
+    RETURN_TYPE result;                                                                                                                         \
+    initializeData(result);                                                                                                                     \
+                                                                                                                                                \
+    int elementIdx = 0;                                                                                                                         \
+                                                                                                                                                \
+    for (int layer = ZERO; layer < uNumLayers; layer++) {                                                                                       \
+        int layerOperation = uLayerOperations[layer];                                                                                           \
+        int numElements = uElementsInLayer[layer];                                                                                              \
+        float smoothness = uSmoothingFactors[layer];                                                                                            \
+                                                                                                                                                \
+        for (int i = ZERO; i < numElements; i++) {                                                                                              \
+            RETURN_TYPE current;                                                                                                                \
+            populateData(current, elementIdx);                                                                                                  \
+                                                                                                                                                \
+            float sdValue;                                                                                                                      \
+                                                                                                                                                \
+            mat4 M = mat4(                                                                                                                      \
+                vec4(geometryData[elementIdx].xyz, 0.f),                                                                                        \
+                vec4(geometryData[elementIdx].w, geometryData[elementIdx + 1].x, geometryData[elementIdx + 1].y, 0.f),                          \
+                vec4(geometryData[elementIdx + 1].z, geometryData[elementIdx + 1].w, geometryData[elementIdx + 2].x, 0.f),                      \
+                vec4(geometryData[elementIdx + 2].yzw, 1.f)                                                                                     \
+            );                                                                                                                                  \
+                                                                                                                                                \
+            vec3 pos = (M * vec4(p, 1.f)).xyz;                                                                                                  \
+                                                                                                                                                \
+            switch (floatBitsToInt(geometryData[elementIdx + 3].x)) {                                                                           \
+                case 0: /* Sphere */                                                                                                            \
+                    sdValue = sdSphere(pos, geometryData[elementIdx + 3].y);                                                                    \
+                    elementIdx += 4;                                                                                                            \
+                    break;                                                                                                                      \
+                case 1: /* Simple Box */                                                                                                        \
+                    sdValue = sdBox(pos, vec3(geometryData[elementIdx + 3].yzw));                                                               \
+                    elementIdx += 4;                                                                                                            \
+                    break;                                                                                                                      \
+                case 2: /* Box (with optional rounded corners) */                                                                               \
+                    float w = geometryData[elementIdx + 3].y;                                                                                   \
+                    float h = geometryData[elementIdx + 3].z;                                                                                   \
+                    float d = geometryData[elementIdx + 3].w;                                                                                   \
+                                                                                                                                                \
+                    int initialRotation = floatBitsToInt(geometryData[elementIdx + 5].y);                                                       \
+                                                                                                                                                \
+                    /* Adiddional Rotation (rounded edge selection) */                                                                          \
+                    if (initialRotation == 1) {                                                                                                 \
+                        mat3 Rot = mat3(0.f, 0.f, 1.f, 0.f, 1.f, 0.f, -1.f, 0.f, 0.f);                                                          \
+                        pos = Rot * pos;                                                                                                        \
+                        float temp = w;                                                                                                         \
+                        w = d;                                                                                                                  \
+                        d = temp;                                                                                                               \
+                    } else if (initialRotation == 2) {                                                                                          \
+                        mat3 Rot = mat3(1.f, 0.f, 0.f, 0.f, 0.f, -1.f, 0.f, 1.f, 0.f);                                                          \
+                        pos = Rot * pos;                                                                                                        \
+                        float temp = h;                                                                                                         \
+                        h = d;                                                                                                                  \
+                        d = temp;                                                                                                               \
+                    }                                                                                                                           \
+                                                                                                                                                \
+                    float val = sdRoundBox2d(pos.xy, vec2(w, h), geometryData[elementIdx + 4], floatBitsToInt(geometryData[elementIdx + 5].x)); \
+                    sdValue = opExtrusion(pos, val, d);                                                                                         \
+                                                                                                                                                \
+                    sdValue = opRound(sdValue, geometryData[elementIdx + 5].z);                                                                 \
+                                                                                                                                                \
+                    elementIdx += 6;                                                                                                            \
+                    break;                                                                                                                      \
+                case 3: /* Round Box */                                                                                                         \
+                    sdValue = sdRoundBox(pos, geometryData[elementIdx + 3].yzw, geometryData[elementIdx + 4].x);                                \
+                    elementIdx += 5;                                                                                                            \
+                    break;                                                                                                                      \
+            }                                                                                                                                   \
+                                                                                                                                                \
+            setDistance(current, sdValue);                                                                                                      \
+                                                                                                                                                \
+            switch (layerOperation) {                                                                                                           \
+                case 0: /* Union */                                                                                                             \
+                    result = opUnion(result, current);                                                                                          \
+                    break;                                                                                                                      \
+                case 1: /* Subtraction */                                                                                                       \
+                    result = opSubtraction(result, current);                                                                                    \
+                    break;                                                                                                                      \
+                case 2: /* Intersection */                                                                                                      \
+                    result = opIntersection(result, current);                                                                                   \
+                    break;                                                                                                                      \
+                case 3: /* Xor */                                                                                                               \
+                    result = opXor(result, current);                                                                                            \
+                    break;                                                                                                                      \
+                case 4: /* Smooth union */                                                                                                      \
+                    result = opSmoothUnion(result, current, smoothness);                                                                        \
+                    break;                                                                                                                      \
+                case 5: /* Smooth subtraction */                                                                                                \
+                    result = opSmoothSubtraction(result, current, smoothness);                                                                  \
+                    break;                                                                                                                      \
+                case 6: /* Smooth intersection */                                                                                               \
+                    result = opSmoothIntersection(result, current, smoothness);                                                                 \
+                    break;                                                                                                                      \
+            }                                                                                                                                   \
+        }                                                                                                                                       \
+    }                                                                                                                                           \
+                                                                                                                                                \
+    return result;                                                                                                                              \
+}                                                                                                                                               \
+
+GENERATE_MAP_FUNCTION(map, float)
+GENERATE_MAP_FUNCTION(mapWithMaterial, Surface)
 
 Surface mapSimple(vec3 p) {
     Surface combinedSurface;
@@ -467,74 +485,68 @@ Surface mapSimple(vec3 p) {
     combinedSurface.ka = 1.1f; // ambient material property
     combinedSurface.distance = 3.402823466e+38f;
 
-    float rawDist1 = sdBox(p - vec3(0.5, 0.2, 0.0), vec3(0.3, 0.1, 0.2));
-    float rawDist2 = sdSphere(p - vec3(0.5), 0.15);
-    float rawDist3 = sdBox(p - vec3(0.5, 0.25, -0.2), vec3(0.4, 0.2, 0.1));
+    float rawDist1 = sdBox(p - vec3(0.5f, 0.2f, 0.0f), vec3(0.3f, 0.1f, 0.2f));
+    float rawDist2 = sdSphere(p - vec3(0.5f), 0.15f);
+    float rawDist3 = sdBox(p - vec3(0.5f, 0.25f, -0.2f), vec3(0.4f, 0.2f, 0.1f));
     combinedSurface.distance = rawDist1;
 
     Surface s2;
     s2.distance = rawDist2;
-    Surface s = opSmoothUnion(combinedSurface, s2, 0.1);
+    Surface s = opSmoothUnion(combinedSurface, s2, 0.1f);
 
     s2.distance = rawDist3;
-    return opSmoothUnion(s, s2, 0.01);
-}
-
-Surface map(vec3 p){
-    return mapWithMaterial(p);
-    //return mapSimple(p);
+    return opSmoothUnion(s, s2, 0.01f);
 }
 
 vec3 calcNormalTetrahedron(vec3 p) {
     // https://iquilezles.org/articles/normalsSDF/
-    const float h = 0.0001;      // replace by an appropriate value
-    vec3 n = vec3(0.0);
-    for( int i=ZERO; i<4; i++ )
-    {
-        vec3 e = 0.5773*(2.0*vec3((((i+3)>>1)&1),((i>>1)&1),(i&1))-1.0);
-        n += e*map(p+e*h).distance;
+    const float h = 0.0001f;      // replace by an appropriate value
+    vec3 n = vec3(0.0f);
+    for (int i = ZERO; i < 4; i++) {
+        vec3 e = 0.5773f * (2.0f * vec3((((i + 3) >> 1) & 1), ((i >> 1) & 1), (i & 1)) - 1.0f);
+        n += e * map(p + e * h);
     }
     return normalize(n);
 
 }
 
-HitInfo trace(vec3 ro, vec3 rd){
+HitInfo trace(vec3 ro, vec3 rd) {
     // 
     // adapted from Accelerating Sphere Tracing 
     // https://diglib.eg.org/server/api/core/bitstreams/7537a378-9a0a-4ef4-b57d-877322b1441e/content    
-    float omega = 1.2;
-    float t = 0.0;
+    float omega = 1.2f;
+    float t = 0.0f;
     float pixelRadius = EPSILON;
-    float tMax = 100.0;
-    
-    float rLast = 0.0;
-    float rCurr = 0.1; // map(ro).distance; to reduce compilation time, because map() gets inlined
-    float dPrev = 0.0;
+    float tMax = 100.0f;
 
-    float lowerBound = 0.001; // lower bound for the stepsize when raymarching
-    float upperBound = 0.01; // upper bound for the stepsize when raymarching
+    float rLast = 0.0f;
+    float rCurr = 0.1f; // map(ro).distance; to reduce compilation time, because map() gets inlined
+    float dPrev = 0.0f;
+
+    float lowerBound = 0.001f; // lower bound for the stepsize when raymarching
+    float upperBound = 0.01f; // upper bound for the stepsize when raymarching
     float lowerDistance = EPSILON; // distance at which stepsize = lowerBound
-    float upperDistance = 0.01; // distance at which stepsize = upperBound
+    float upperDistance = 0.01f; // distance at which stepsize = upperBound
 
     int directionalDerivativeZero = 0;
 
-    for (int i = 0; i < 200; i++){
+    for (int i = 0; i < 200; i++) {
         // Intersection found if raymarching
-        bool raymarchingIntersection = rCurr < 0.0;
-        if (raymarchingIntersection){
+        bool raymarchingIntersection = rCurr < 0.0f;
+        if (raymarchingIntersection) {
             float tLower = t - dPrev;
             float tUpper = t;
-            float mid = 0.0;
+            float mid = 0.0f;
 
-            for (int j = 0; j < 5; j++){
-                mid = (tLower + tUpper) * 0.5;
-                float sdfMid = map(ro + mid * rd).distance;
-                if (abs(sdfMid) < pixelRadius){
+            for (int j = 0; j < 5; j++) {
+                mid = (tLower + tUpper) * 0.5f;
+                float sdfMid = map(ro + mid * rd);
+                if (abs(sdfMid) < pixelRadius) {
                     break;
                 }
-                if (sdfMid < 0.0){
+                if (sdfMid < 0.0f) {
                     tUpper = mid;
-                } else{
+                } else {
                     tLower = mid;
                 }
             }
@@ -543,12 +555,12 @@ HitInfo trace(vec3 ro, vec3 rd){
         }
 
         // Hit condition
-        if (raymarchingIntersection || rCurr < pixelRadius){
+        if (raymarchingIntersection || rCurr < pixelRadius) {
             vec3 p = ro + t * rd;
-            return HitInfo(i, p, calcNormalTetrahedron(p), map(p));
+            return HitInfo(i, p, calcNormalTetrahedron(p), mapWithMaterial(p));
         }
 
-        if (t >= tMax){
+        if (t >= tMax) {
             vec3 p = ro + t * rd;
             break;
         }
@@ -556,32 +568,32 @@ HitInfo trace(vec3 ro, vec3 rd){
         float dNext = rCurr;
         float denom = dPrev + rLast - rCurr;
 
-        if (i > 0 && denom > EPSILON){
+        if (i > 0 && denom > EPSILON) {
             dNext = rCurr + omega * rCurr * (dPrev - rLast + rCurr) / denom;
         }
 
         // Detect parallel rays 
-        if (rCurr < upperDistance && abs(rCurr - rLast) < EPSILON){
+        if (rCurr < upperDistance && abs(rCurr - rLast) < EPSILON) {
             directionalDerivativeZero++;
-        } else{
+        } else {
             directionalDerivativeZero = 0;
         }
 
         bool isParallel = directionalDerivativeZero >= 5;
 
-        if (isParallel){
-            float tFactor = clamp((rCurr - lowerDistance) / (upperDistance - lowerDistance), 0.0, 1.0);
+        if (isParallel) {
+            float tFactor = clamp((rCurr - lowerDistance) / (upperDistance - lowerDistance), 0.0f, 1.0f);
             float minStep = mix(lowerBound, upperBound, tFactor);
             // Allow over-relaxation to take a larger step if possible, but enforce minimum step
-            dNext = max(dNext, minStep); 
+            dNext = max(dNext, minStep);
         }
 
-        float rNext = map(ro + (t + dNext) * rd).distance;
+        float rNext = map(ro + (t + dNext) * rd);
 
         // Overrelaxation was too big (only in the case where we don't do raymarching)
-        if (!isParallel && dNext > rCurr + rNext){
+        if (!isParallel && dNext > rCurr + rNext) {
             dNext = rCurr;
-            rNext = map(ro + (t + dNext) * rd).distance;
+            rNext = map(ro + (t + dNext) * rd);
         }
 
         t += dNext;
@@ -590,7 +602,7 @@ HitInfo trace(vec3 ro, vec3 rd){
         rCurr = rNext;
     }
 
-    return HitInfo(-1, vec3(0.0), vec3(0.0), Surface(vec3(0.0), vec3(0.0), vec3(0.0), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0));
+    return HitInfo(-1, vec3(0.0f), vec3(0.0f), Surface(vec3(0.0f), vec3(0.0f), vec3(0.0f), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f));
 }
 
 // ╔══════════════════════════════════════════════════════════╗
@@ -599,7 +611,7 @@ HitInfo trace(vec3 ro, vec3 rd){
 float shadow(in vec3 ro, in vec3 rd, float mint, float maxt) {
     float t = mint;
     for (int i = 0; i < 256 && t < maxt; i++) {
-        float h = map(ro + rd * t).distance;
+        float h = map(ro + rd * t);
         if (h < EPSILON)
             return 0.0f;
         t += h;
@@ -612,7 +624,7 @@ float softshadow(in vec3 ro, in vec3 rd, float mint, float maxt, float w) {
     float res = 1.0f;
     float t = mint;
     for (int i = 0; i < 256 && t < maxt; i++) {
-        float h = map(ro + t * rd).distance;
+        float h = map(ro + t * rd);
         res = min(res, h / (w * t));
         t += clamp(h, 0.005f, 0.50f);
         if (res < -1.0f || t > maxt)
@@ -626,7 +638,7 @@ float calcSoftshadow(in vec3 ro, in vec3 rd, float tmin, float tmax, const float
     float res = 1.0f;
     float t = tmin;
     for (int i = 0; i < 50; i++) {
-        float h = map(ro + rd * t).distance;
+        float h = map(ro + rd * t);
         res = min(res, k * h / t);
         t += clamp(h, 0.02f, 0.20f);
         if (res < 0.005f || t > tmax)
@@ -673,10 +685,10 @@ vec3 shade(HitInfo hit) {
     float iSpecular = surface.ks * ls * pow(max(0.f, dot(reflect(vecFromLight, hit.normal), vec3(0.f, 0.f, 1.f))), surface.p);
 
     //float shadow = shadow(hit.pos, -sundir, 0.001f, 5.f);
-    float shadow = softshadow(hit.pos, vecToLight, 0.001f, 5.f, 0.1f);
+    float shadow; // = softshadow(hit.pos, vecToLight, 0.001f, 5.f, 0.1f);
     //float shadow = calcSoftshadow(hit.pos, -sundir, 0.01f, 5.0f, 16.0f);
-    shadow = max(shadow, 0.1f);
-    shadow = 1.0;
+    // shadow = max(shadow, 0.1f);
+    shadow = 1.0f;
 
     //return vec3(shadow);
     //return hit.id != -1 ? vec3(1.f) : vec3(0.f);
