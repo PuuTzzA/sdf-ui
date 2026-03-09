@@ -23,6 +23,7 @@ uniform float uWindowWidth;
 uniform float uWindowHeight;
 
 uniform float uCameraZ;
+uniform bool uTwoDMode;
 
 uniform int uLayerOperations[MAX_LAYERS];
 uniform int uElementsInLayer[MAX_LAYERS];
@@ -695,6 +696,25 @@ vec3 shade(HitInfo hit) {
     return shadow * (iDiffuse * surface.colorDiffuse + iSpecular * surface.colorSpecular) + iAmbient * surface.colorAmbient;
 }
 
+struct ColorStop {
+    vec3 color;
+    float position;
+};
+
+#define COLOR_RAMP(colors, factor, finalColor) { \
+    int index = 0; \
+    for(int i = 0; i < colors.length() - 1; i++){ \
+       ColorStop currentColor = colors[i]; \
+       bool isInBetween = currentColor.position <= factor; \
+       index = isInBetween ? i : index; \
+    } \
+    ColorStop currentColor = colors[index]; \
+    ColorStop nextColor = colors[index + 1]; \
+    float range = nextColor.position - currentColor.position; \
+    float lerpFactor = (factor - currentColor.position) / range; \
+    finalColor = mix(currentColor.color, nextColor.color, lerpFactor); \
+} \
+
 // ╔══════════════════════════════════════════════════════════╗
 // ║                           MAIN                           ║
 // ╚══════════════════════════════════════════════════════════╝
@@ -716,7 +736,27 @@ void main(void) {
     for (int i = 0; i < subPixleOffsets.length(); i++) {
         posOffset = pos + vec3(subPixleOffsets[i] * pixelSize, 0.0f);
 
-        color += shade(trace(posOffset, dir));
+        if (!uTwoDMode) {
+            color += shade(trace(posOffset, dir));
+        } else {
+            posOffset.z = 0.0f;
+            Surface surface = mapWithMaterial(posOffset);
+            float sdfValue = surface.distance * 80.;
+
+            ColorStop[] colors = ColorStop[](
+			    //ColorStop(surface.colorDiffuse, 0.000000),
+			    ColorStop(vec3(0.000000, 0.000000, 0.015996), 0.000000),
+			    ColorStop(vec3(0.008023, 0.002428, 0.162029), 0.300000),
+			    ColorStop(vec3(0.590619, 0.964686, 0.428690), 0.400000),
+			    ColorStop(vec3(0.991102, 0.031896, 0.814847), 0.600000),
+			    ColorStop(vec3(1.000000, 0.000000, 0.001821), 0.800000),
+			    ColorStop(vec3(0.008023, 0.002428, 0.162029), 0.900000),
+			    ColorStop(vec3(0.000000, 0.000000, 0.015996), 1.000000));
+            vec3 finalColor;
+            COLOR_RAMP(colors, sdfValue, finalColor);
+
+            color += vec3(finalColor);
+        }
     }
 
     color /= float(subPixleOffsets.length());

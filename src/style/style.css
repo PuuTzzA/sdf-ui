@@ -137,7 +137,7 @@ html,
     --p: 20;
 
     --specular-color: rgb(100, 100, 200);
-    transition: background-color 0.3s, --z .3s, --specular-color .3s, --kd .3s, transform 1s;
+    transition: --diffuse-color 0.3s, --z .3s, --specular-color .3s, --kd .3s, transform 1s;
     opacity: 0;
 
     z-index: 1999;

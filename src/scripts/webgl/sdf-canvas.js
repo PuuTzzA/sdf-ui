@@ -77,6 +77,7 @@ class SdfCanvas {
         this.ready = false;
 
         this.cameraZ = 10;
+        this.twoDMode = false;
 
         this.canvas;
         this.gl;
@@ -87,8 +88,8 @@ class SdfCanvas {
 
         this.layers = [
             { layerOperation: SdfCanvas.LayerOperation.UNION, elementsInLayer: 0, smoothingFactor: 0 },
-            { layerOperation: SdfCanvas.LayerOperation.SMOOTH_UNION, elementsInLayer: 0, smoothingFactor: 10 },
-            { layerOperation: SdfCanvas.LayerOperation.SMOOTH_UNION, elementsInLayer: 0, smoothingFactor: 20 }
+            { layerOperation: SdfCanvas.LayerOperation.SMOOTH_UNION, elementsInLayer: 0, smoothingFactor: 30 },
+            { layerOperation: SdfCanvas.LayerOperation.SMOOTH_UNION, elementsInLayer: 0, smoothingFactor: 30 }
         ];
     }
 
@@ -147,6 +148,7 @@ class SdfCanvas {
                 height: this.gl.getUniformLocation(shaderProgram, "uWindowHeight"),
 
                 cameraZ: this.gl.getUniformLocation(shaderProgram, "uCameraZ"),
+                twoDMode: this.gl.getUniformLocation(shaderProgram, "uTwoDMode"),
 
                 layerOperations: this.gl.getUniformLocation(shaderProgram, 'uLayerOperations'),
                 elementsInLayer: this.gl.getUniformLocation(shaderProgram, 'uElementsInLayer'),
@@ -309,6 +311,7 @@ class SdfCanvas {
         this.gl.uniform1f(this.programInfo.uniformLocations.height, (rect.bottom - rect.top) / window.innerWidth);
 
         this.gl.uniform1f(this.programInfo.uniformLocations.cameraZ, this.cameraZ);
+        this.gl.uniform1i(this.programInfo.uniformLocations.twoDMode, this.twoDMode);
     }
 
     updateUniformBuffers() {
@@ -328,11 +331,11 @@ class SdfCanvas {
 
             const halfWidth = element.offsetWidth * oneOverX * 0.5;
             const halfHeight = element.offsetHeight * oneOverX * 0.5;
-            const halfDepth = parseFloat(computedStyle.getPropertyValue("--depth")) * oneOverX * 0.5;
+            const halfDepth = this.twoDMode ? 100 : parseFloat(computedStyle.getPropertyValue("--depth")) * oneOverX * 0.5;
 
             const offsetX = (rect.left + (rect.right - rect.left) * 0.5) * oneOverX;
             const offsetY = (rect.top + (rect.bottom - rect.top) * 0.5) * oneOverX;
-            const offsetZ = parseFloat(computedStyle.getPropertyValue("--z")) * oneOverX;
+            const offsetZ = this.twoDMode ? 0 : parseFloat(computedStyle.getPropertyValue("--z")) * oneOverX;
 
             // calculate computedStyle.transform @ T(offsetX, offsetY, offsetZ)
             mat[12] = offsetX; // + mat[12] * oneOverX;
