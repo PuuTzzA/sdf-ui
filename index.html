@@ -11,16 +11,17 @@
 
 <body>
     <canvas id="canvas"></canvas>
+    <!--  <canvas id="canvas2"></canvas> -->
 
     <div id="all-types-container">
-        <sdf-sphere class="test-sdf-sphere" data-layer-index="1">Sphere</sdf-sphere>
-        <sdf-box-simple id="test-sdf-box-simple" data-layer-index="1">Simple Box</sdf-box-simple>
-        <sdf-box id="test-sdf-box" data-layer-index="1">Box with rounded corners</sdf-box>
-        <sdf-box id="test-sdf-box-2" data-layer-index="1">Box with rounded corners</sdf-box>
-        <sdf-box-round id="test-sdf-box-round" data-layer-index="1">Rounded box</sdf-box-round>
+        <sdf-sphere class="test-sdf-sphere" data-render-layers="0 1" data-layer-index="1">Sphere</sdf-sphere>
+        <sdf-box-simple id="test-sdf-box-simple" data-render-layers="0 1" data-layer-index="1">Simple Box</sdf-box-simple>
+        <sdf-box id="test-sdf-box" data-render-layers="0" data-layer-index="1">Box with rounded corners</sdf-box>
+        <sdf-box id="test-sdf-box-2" data-render-layers="0 1" data-layer-index="1">Box with rounded corners</sdf-box>
+        <sdf-box-round id="test-sdf-box-round" data-render-layers="0 1" data-layer-index="1">Rounded box</sdf-box-round>
     </div>
 
-    <sdf-box id="test-div" data-layer-index="2">asdfasdf</sdf-box>
+    <sdf-box id="test-div" data-render-layers="0 1" data-layer-index="2">asdfasdf</sdf-box>
 
     <sdf-box-simple id="background" data-layer-index="0"></sdf-box-simple>
 

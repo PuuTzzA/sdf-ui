@@ -12,6 +12,9 @@ class ASdfElement extends HTMLElement {
             this.dataset.layerIndex = 0;
         }
 
+        if (this.dataset.renderLayers == undefined){
+            this.dataset.renderLayers = 0;
+        }
 
         this.classList.add("sdf-ui-base-class");
         this.dataset.elementType = this.getElementType();
@@ -24,7 +27,7 @@ class ASdfElement extends HTMLElement {
     }
 
     disconnectedCallback() {
-        console.log("Custom element removed from page.");
+        SdfCanvas.removeTrackedElement(this);
     }
 
     connectedMoveCallback() {

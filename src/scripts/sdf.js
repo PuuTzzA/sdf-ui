@@ -3,6 +3,9 @@ import { SdfCanvas } from "./webgl/sdf-canvas.js";
 const sdfCanvas = new SdfCanvas("canvas");
 sdfCanvas.initWebgl();
 
+/* const sdfCanvas2 = new SdfCanvas("canvas2", [1]);
+sdfCanvas2.initWebgl(); */
+
 const testDiv = document.querySelector("#test-div");
 const fpsDiv = document.querySelector("#fps-counter");
 let lastFps = []
@@ -42,6 +45,10 @@ function gameLoop(now) {
     if (sdfCanvas.ready) {
         sdfCanvas.draw();
     }
+
+    /* if (sdfCanvas2.ready) {
+        sdfCanvas2.draw();
+    } */
 
     requestAnimationFrame(gameLoop);
 }

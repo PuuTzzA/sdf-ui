@@ -1,6 +1,22 @@
 import { initBuffers } from "./init-buffers.js";
 import { Matrix } from "../helper/matrix.js";
 
+class SdfLayer {
+    constructor(layerOperation = SdfCanvas.LayerOperation.UNION, smoothingFactor = 0) {
+        this.layerOperation = layerOperation;
+        this.smoothingFactor = smoothingFactor;
+        this.elementsInLayer = 0;
+    }
+
+    setLayerOperation(layerOperation) {
+        this.layerOperation = layerOperation;
+    }
+
+    setSmoothingFactor(smoothingFactor) {
+        this.smoothingFactor = smoothingFactor;
+    }
+}
+
 class SdfCanvas {
     static MAX_SIZE_ELEMENT_BUFFER = 512; // number of vec4 in the buffer
 
@@ -62,6 +78,21 @@ class SdfCanvas {
         });
     }
 
+    static removeTrackedElement(element) {
+        const size = this.getElementSize(element.getElementType());
+
+        const index = this.trackedElements.indexOf(element);
+        if (index <= -1) {
+            return;
+        }
+        this.trackedElements.splice(index, 1);
+        this.trackedElementsSize -= size;
+
+        this.instantiatedCanvases.forEach((c) => {
+            c.updateLayers();
+        })
+    }
+
     static sortTrackedElements() {
         this.trackedElements.sort((a, b) => (a.dataset.layerIndex - b.dataset.layerIndex));
 
@@ -70,10 +101,11 @@ class SdfCanvas {
         });
     }
 
-    constructor(canvasName) {
+    constructor(canvasName, renderLayers = [0]) {
         SdfCanvas.instantiatedCanvases.push(this);
 
         this.canvasName = canvasName;
+        this.renderLayers = renderLayers;
         this.ready = false;
         this.downscaleFactor = 2;
 
@@ -87,18 +119,17 @@ class SdfCanvas {
         this.geometryBuffer = new Float32Array(SdfCanvas.MAX_SIZE_ELEMENT_BUFFER * 4);
         this.shadingBuffer = new Float32Array(SdfCanvas.MAX_SIZE_ELEMENT_BUFFER * 4);
 
-        this.layers = [
-            { layerOperation: SdfCanvas.LayerOperation.UNION, elementsInLayer: 0, smoothingFactor: 0 },
-            { layerOperation: SdfCanvas.LayerOperation.SMOOTH_UNION, elementsInLayer: 0, smoothingFactor: 30 },
-            { layerOperation: SdfCanvas.LayerOperation.SMOOTH_UNION, elementsInLayer: 0, smoothingFactor: 30 }
-        ];
+        let layer0 = new SdfLayer(SdfCanvas.LayerOperation.UNION, 0);
+        let layer1 = new SdfLayer(SdfCanvas.LayerOperation.SMOOTH_UNION, 30);
+        let layer2 = new SdfLayer(SdfCanvas.LayerOperation.SMOOTH_UNION, 30);
+        this.layers = [layer0, layer1, layer2];
     }
 
     async initWebgl() {
-        this.canvas = document.querySelector(this.canvasName);
+        this.canvas = document.getElementById(this.canvasName);
 
         // Initialize the GL context
-        this.gl = canvas.getContext("webgl2");
+        this.gl = this.canvas.getContext("webgl2");
 
         // Only continue if WebGL is available and working
         if (this.gl === null) {
@@ -176,6 +207,7 @@ class SdfCanvas {
 
         window.addEventListener("resize", () => {
             this.resizeCanvasToDisplaySize();
+            this.updateSmoothingFactors();
             this.updateUniforms();
             this.draw();
         });
@@ -262,13 +294,16 @@ class SdfCanvas {
         let currentNum = 0;
 
         SdfCanvas.trackedElements.forEach((e) => {
+            const elementRenderLayers = e.dataset.renderLayers.split(" ").map((s) => parseInt(s));
+            if (!this.containedInRenderLayers(elementRenderLayers)) {
+                return;
+            }
             if (parseInt(e.dataset.layerIndex) == currentIdx) {
                 currentNum++;
             } else {
                 this.layers[currentIdx].elementsInLayer = currentNum;
 
-                console.log(e.dataset.layerIndex)
-
+                // console.log(e.dataset.layerIndex)
                 for (let i = currentIdx + 1; i < parseInt(e.dataset.layerIndex); i++) {
                     this.layers[i].elementsInLayer = 0;
                 }
@@ -294,6 +329,12 @@ class SdfCanvas {
         this.gl.uniform1i(this.programInfo.uniformLocations.numLayers, this.layers.length);
     }
 
+    updateSmoothingFactors() {
+        this.gl.useProgram(this.programInfo.program);
+        const smoothing = this.layers.map(l => l.smoothingFactor / window.innerWidth);
+        this.gl.uniform1fv(this.programInfo.uniformLocations.smoothingFactors, smoothing);
+    }
+
     updateUniforms() {
         this.gl.useProgram(this.programInfo.program);
 
@@ -317,6 +358,13 @@ class SdfCanvas {
 
         for (let i = 0; i < SdfCanvas.trackedElements.length; i++) {
             const element = SdfCanvas.trackedElements[i];
+
+            // check if we even want to render that element
+            const elementRenderLayers = element.dataset.renderLayers.split(" ").map((s) => parseInt(s));
+            if (!this.containedInRenderLayers(elementRenderLayers)) {
+                continue;
+            }
+
             const elementType = parseInt(element.dataset.elementType);
 
             // Geometry Information
@@ -492,6 +540,10 @@ class SdfCanvas {
             return null;
         }
         return shader;
+    }
+
+    containedInRenderLayers(arr) {
+        return this.renderLayers.some(item => arr.includes(item));
     }
 
     static async loadShadersFromDisk() {

@@ -98,3 +98,20 @@ static LayerOperation = Object.freeze({
 ```
 
 The smooth operations also have a corresponding `smoothingFactor` per layer to control the amount of smoothing.
+
+
+## Render Layers
+
+To constrain certain elements to certain canvasses, you can define a `data-reder-layers` per element like so:
+
+```html
+<sdf-sphere class="test-sdf-sphere" data-render-layers="0" data-layer-index="1">Sphere</sdf-sphere>
+```
+
+An element can have multiple canvas-indices signaled by a space ` ` between the two.   
+
+```html
+<sdf-sphere class="test-sdf-sphere" data-render-layers="0 1" data-layer-index="1">Sphere</sdf-sphere>
+```
+
+The SdfCanvases in js also have a renderLayers property. While rendering they now only render elements that share a common render layer. E.g. if an element has the render layers [0, 4, 5] and a canvas renderes the layers [1, 2, 3] then that canvas will not render the element. But if the canvas rendered the layers [0, 2, 3] instead the element would be rendered. 
