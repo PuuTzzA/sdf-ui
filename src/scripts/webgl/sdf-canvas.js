@@ -75,6 +75,7 @@ class SdfCanvas {
 
         this.canvasName = canvasName;
         this.ready = false;
+        this.downscaleFactor = 2;
 
         this.cameraZ = 10;
         this.twoDMode = false;
@@ -172,12 +173,6 @@ class SdfCanvas {
     
         const maxFragBlocks = this.gl.getParameter(this.gl.MAX_FRAGMENT_UNIFORM_BLOCKS);
         console.log("max fragment blocks:", maxFragBlocks) */
-
-        /*         let dpr = window.devicePixelRatio || 1;
-                dpr = 1.;
-                console.log("aa;", window.devicePixelRatio)
-                console.log("bb;", [Math.round(this.canvas.clientWidth * dpr / 2), Math.round(this.canvas.clientHeight * dpr / 2)])
-         */        //requestAnimationFrame(() => drawScene(gl, programInfo, buffers));
 
         window.addEventListener("resize", () => {
             this.resizeCanvasToDisplaySize();
@@ -432,16 +427,27 @@ class SdfCanvas {
     }
 
     resizeCanvasToDisplaySize() {
+        // 1. Get the pixel density of the screen (e.g., Retina screens are often 2)
         const dpr = window.devicePixelRatio || 1;
-        const displayWidth = Math.round(this.canvas.clientWidth * dpr);
-        const displayHeight = Math.round(this.canvas.clientHeight * dpr);
 
-        if (this.canvas.width !== displayWidth || this.canvas.height !== displayHeight) {
-            this.canvas.width = displayWidth;
-            this.canvas.height = displayHeight;
+        // 2. Calculate the actual physical pixels of the display area
+        const displayWidth = this.canvas.clientWidth * dpr;
+        const displayHeight = this.canvas.clientHeight * dpr;
 
-            // Also update WebGL viewport so it covers the full new buffer
-            this.gl.viewport(0, 0, displayWidth, displayHeight);
+        // 3. Apply your downscale factor to determine the WebGL rendering resolution
+        // (Math.max is used to prevent the canvas from ever being 0x0 pixels)
+        const renderWidth = Math.max(1, Math.round(displayWidth / this.downscaleFactor));
+        const renderHeight = Math.max(1, Math.round(displayHeight / this.downscaleFactor));
+
+        // 4. If the rendering resolution changed, update the canvas and viewport
+        if (this.canvas.width !== renderWidth || this.canvas.height !== renderHeight) {
+
+            // This changes the internal rendering resolution (the WebGL buffer size)
+            this.canvas.width = renderWidth;
+            this.canvas.height = renderHeight;
+
+            // The WebGL viewport MUST match the internal buffer size, 
+            this.gl.viewport(0, 0, renderWidth, renderHeight);
         }
     }
 
