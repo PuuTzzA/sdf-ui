@@ -6,6 +6,7 @@ sdfCanvas.initWebgl();
 /* const sdfCanvas2 = new SdfCanvas("canvas2", [1]);
 sdfCanvas2.initWebgl(); */
 
+const compilingScreen = document.querySelector("#compiling-screen")
 const testDiv = document.querySelector("#test-div");
 const fpsDiv = document.querySelector("#fps-counter");
 let lastFps = []
@@ -43,6 +44,7 @@ function gameLoop(now) {
 
     // Draw Scene
     if (sdfCanvas.ready) {
+        compilingScreen.remove();
         sdfCanvas.draw();
     }
 

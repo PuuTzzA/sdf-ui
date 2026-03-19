@@ -154,7 +154,7 @@ class SdfCanvas {
         // for the vertices and so forth is established.
         const startTime = performance.now()
 
-        const shaderProgram = this.initShaderProgram(vertexSource, fragmentSource);
+        const shaderProgram = await this.initShaderProgram(vertexSource, fragmentSource);
 
         const endTime = performance.now()
         console.log(`Call to doSomething took ${endTime - startTime} milliseconds`)
@@ -500,26 +500,51 @@ class SdfCanvas {
     }
 
     initShaderProgram(vsSource, fsSource) {
-        const vertexShader = this.loadShader(this.gl.VERTEX_SHADER, vsSource);
-        const fragmentShader = this.loadShader(this.gl.FRAGMENT_SHADER, fsSource);
+        return new Promise((resolve, reject) => {
+            const vertexShader = this.loadShader(this.gl.VERTEX_SHADER, vsSource);
+            const fragmentShader = this.loadShader(this.gl.FRAGMENT_SHADER, fsSource);
 
-        // Create the shader program
-        const shaderProgram = this.gl.createProgram(); // program of vertex + fragment shader
-        this.gl.attachShader(shaderProgram, vertexShader);
-        this.gl.attachShader(shaderProgram, fragmentShader);
-        this.gl.linkProgram(shaderProgram);
+            // Create the shader program
+            const shaderProgram = this.gl.createProgram(); // program of vertex + fragment shader
+            this.gl.attachShader(shaderProgram, vertexShader);
+            this.gl.attachShader(shaderProgram, fragmentShader);
+            this.gl.linkProgram(shaderProgram);
 
-        // If creating the shader program failed, alert
+            // Try to get the parallel compilation extension
+            const ext = this.gl.getExtension("KHR_parallel_shader_compile");
+
+            const checkCompletion = () => {
+                if (ext) {
+                    // If extension exists, check if compilation is done in the background
+                    if (this.gl.getProgramParameter(shaderProgram, ext.COMPLETION_STATUS_KHR)) {
+                        // Check program link status; if OK, use it.
+                        this.finalizeProgram(shaderProgram, vertexShader, fragmentShader, resolve, reject);
+                    } else {
+                        // Not done yet, check again next frame!
+                        requestAnimationFrame(checkCompletion);
+                    }
+                } else {
+                    // Program linking is synchronous.
+                    // We yielded for at least one frame so the UI could paint. Now we force the check.
+                    this.finalizeProgram(shaderProgram, vertexShader, fragmentShader, resolve, reject);
+                }
+            };
+
+            // Start the polling loop on the next frame
+            requestAnimationFrame(checkCompletion);
+        });
+    }
+
+    finalizeProgram(shaderProgram, vertexShader, fragmentShader, resolve, reject) {
         if (!this.gl.getProgramParameter(shaderProgram, this.gl.LINK_STATUS)) {
-            alert(
-                `Unable to initialize the shader program: ${this.gl.getProgramInfoLog(
-                    shaderProgram,
-                )}`,
-            );
-            return null;
+            console.error("Shader program failed to link: ", this.gl.getProgramInfoLog(shaderProgram));
+            console.error("Vertex log: ", this.gl.getShaderInfoLog(vertexShader));
+            console.error("Fragment log: ", this.gl.getShaderInfoLog(fragmentShader));
+            alert("Unable to initialize the shader program.");
+            reject(new Error("Shader initialization failed"));
+            return;
         }
-
-        return shaderProgram;
+        resolve(shaderProgram);
     }
 
     loadShader(type, source) {
@@ -528,17 +553,11 @@ class SdfCanvas {
         // Send the source to the shader object
         this.gl.shaderSource(shader, source);
 
-        // Compile the shader program
+        // Compile the shader program (This now happens in the background!)
         this.gl.compileShader(shader);
 
-        // See if it compiled successfully
-        if (!this.gl.getShaderParameter(shader, this.gl.COMPILE_STATUS)) {
-            alert(
-                `An error occurred compiling the shaders: ${this.gl.getShaderInfoLog(shader)}`,
-            );
-            this.gl.deleteShader(shader);
-            return null;
-        }
+        // REMOVED: gl.getShaderParameter(shader, gl.COMPILE_STATUS)
+        // Querying the status here would force the browser to freeze.
         return shader;
     }
 
