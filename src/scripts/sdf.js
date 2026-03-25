@@ -1,10 +1,16 @@
 import { SdfCanvas } from "./webgl/sdf-canvas.js";
+import { TextMeter } from "./helper/text-meter.js"
 
 const sdfCanvas = new SdfCanvas("canvas");
 sdfCanvas.initWebgl();
 
 /* const sdfCanvas2 = new SdfCanvas("canvas2", [1]);
 sdfCanvas2.initWebgl(); */
+
+const testtext = document.querySelector(".sdf-text")
+console.log(testtext.getWordRects())
+console.log(testtext.textContent.replace(/\s+/g, '').length)
+
 
 const compilingScreen = document.querySelector("#compiling-screen")
 const testDiv = document.querySelector("#test-div");

@@ -116,6 +116,7 @@ html,
 }
 
 .sdf-ui-base-class {
+    display: block;
     /*     background-color: rgba(0, 0, 0, 0)!important;
  */
 }
@@ -223,7 +224,6 @@ html,
     opacity: 0.2;
 }
 
-
 #fps-counter {
     position: absolute;
     top: 0;
@@ -231,4 +231,37 @@ html,
     color: white;
     background-color: black;
     padding: 0.2rem;
+}
+
+@font-face {
+    font-family: metaballs;
+    src: url(./fonts/metaball_font_big.ttf);
+}
+
+.sdf-text {
+    margin-top: 10rem;
+    display: block;
+    font-family: metaballs;
+    /*     background-color: red;
+ */
+    text-align: center;
+    font-size: 5rem;
+    letter-spacing: 1rem;
+    word-spacing: 10rem;
+    color: rgba(255, 255, 255, 0.5) !important;
+    /*     background-color: blue;
+ */
+    width: 20rem;
+    transform: rotate(100deg);
+
+    word-break: break-all;
+
+
+    --diffuse-color: red;
+    --depth: 10rem;
+    --z: 10;
+}
+
+#lkj{
+    transform: rotate(-100deg);
 }

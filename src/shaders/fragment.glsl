@@ -157,14 +157,6 @@ float sdRoundBox2d(in vec2 p, in vec2 b, in vec4 r, int type) {
     return d * r.x * sqrt(0.5f);
 }
 
-float smin2(float a, float b, float k) { // ret.a = distnce, ret.b = blendfactor
-    k *= 6.0f;
-    float h = max(k - abs(a - b), 0.0f) / k;
-    float m = h * h * h * 0.5f;
-    float s = m * k * (1.0f / 3.0f);
-    return (a < b) ? a - s : b - s;
-}
-
 // ╔══════════════════════════════════════════════════════════╗
 // ║                    SDF OPERATIONS                        ║
 // ╚══════════════════════════════════════════════════════════╝
@@ -176,6 +168,58 @@ float opExtrusion(in vec3 p, in float sdf, in float h) {
 
 float opRound(in float primitive, in float rad) {
     return primitive - rad;
+}
+
+// ╔══════════════════════════════════════════════════════════╗
+// ║                     SDF of letters                       ║
+// ╚══════════════════════════════════════════════════════════╝
+const float d = 45.; // stroke width
+const float _h = 365.; // verical length of straight lines that have a halve circe on both sides  (e.g. straight section in c)
+const float pi = 3.1415926535897932384626433832795;
+
+vec2 rotate2d(vec2 v, float a) {
+    float s = sin(a);
+    float c = cos(a);
+    mat2 m = mat2(c, s, -s, c);
+    return m * v;
+}
+
+float smin2d(float a, float b, float k) {
+    k *= 1.0 / (1.0 - sqrt(0.5));
+    float h = max(k - abs(a - b), 0.0) / k;
+    return min(a, b) - k * 0.5 * (1.0 + h - sqrt(1.0 - h * (h - 2.0)));
+}
+
+float sdCircle2d(vec2 p, float r) {
+    return length(p) - r;
+}
+
+float sdBox2d(in vec2 p, in vec2 b) {
+    vec2 d = abs(p) - b;
+    return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
+}
+
+float sdRoundedBox2d(in vec2 p, in vec2 b, in vec4 r) {
+    r.xy = (p.x > 0.0) ? r.xy : r.zw;
+    r.x = (p.y > 0.0) ? r.x : r.y;
+    vec2 q = abs(p) - b + r.x;
+    return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r.x;
+}
+
+float sdRing2d(in vec2 p, in vec2 n, in float r, float th) {
+    p.x = abs(p.x);
+
+    p = mat2x2(n.x, n.y, -n.y, n.x) * p;
+
+    return max(abs(length(p) - r) - th * 0.5, length(vec2(p.x, max(0.0, abs(r - p.y) - th * 0.5))) * sign(p.x));
+}
+
+float sdh(in vec2 p) {
+    float h = sdRoundedBox2d(p + vec2(d / 2., -700. / 2.), vec2(d / 2., 700. / 2.), vec4(d / 2.)); // rectangle left
+    h = smin2d(sdBox2d(p + vec2(d * 1.25, -_h - d * 2.5), vec2(d / 4., d / 2.)), h, d / 8.); // small rectangle middle
+    h = min(sdRoundedBox2d(p + vec2(d * 2.5, -432.5 / 2.), vec2(d / 2., 432.5 / 2.), vec4(0., d / 2., 0., d / 2.)), h); // rectangle left
+    h = min(sdRing2d(rotate2d(p + vec2(d * 1.5, -_h - d * 1.5), -pi / 4.), vec2(cos(pi / 4.), sin(pi / 4.)), d, d), h); // quarter ring
+    return h;
 }
 
 // ╔══════════════════════════════════════════════════════════╗
@@ -439,6 +483,33 @@ RETURN_TYPE FUNCTION_NAME(vec3 p) {                                             
                     sdValue = sdRoundBox(pos, geometryData[elementIdx + 3].yzw, geometryData[elementIdx + 4].x);                                \
                     elementIdx += 5;                                                                                                            \
                     break;                                                                                                                      \
+                case 4: /* Text */                                                                                                              \
+                    /* The letters have the following sizes:                     */                                                             \
+                    /*                   │     ┬                                 */                                                             \
+                    /* ┌──┐  ┬           ├──┐  │            ┌──┐  ┬              */                                                             \
+                    /* │  │  │ 500 units │  │  │ 700 units  │  │  │              */                                                             \
+                    /* │  │  │           │  │  │            │  │  │ 700 units    */                                                             \
+                    /* └──┘  ┴           └──┘  ┴            └──┤  │              */                                                             \
+                    /* ├──┤                                    │  ┴              */                                                             \
+                    /* 135 units                                                 */                                                             \
+                    /*                                                           */                                                             \
+                    /* The stroke width is 45 units for all strokes              */                                                             \
+                    float scale = geometryData[elementIdx + 3].w; \
+                    vec2 p_sdf = vec2(0.0, 700.0) - (pos.xy) * scale;\
+                    float dist2D = sdh(p_sdf);\
+                    float trueDist2D = dist2D / scale;\
+                    float depth = 0.1; \
+                    sdValue = opExtrusion(pos, trueDist2D, depth);\
+/*                     pos = (M * (vec4(p, 1.f) + vec4(geometryData[elementIdx + 3].yz, 0.f, 0.f))).xyz;\ */ \
+                    M[3][0] = geometryData[elementIdx + 3].y; /* matrix[column][row] */  \
+                    M[3][1] = geometryData[elementIdx + 3].z;   \
+                    pos = (M * vec4(p, 1.f)).xyz; \
+                    vec2 p_sdf2 = vec2(0.0, 700.0) - (pos.xy) * scale;\
+                    float dist2D2 = sdh(p_sdf2);\
+                    float trueDist2D2 = dist2D2 / scale;\
+                    sdValue = opUnion(opExtrusion(pos, trueDist2D2, depth), sdValue);\
+/*                     sdValue = sdBox(posBotLeft, vec3(0.01f));                                                               \
+ */                    elementIdx += 4; \
             }                                                                                                                                   \
                                                                                                                                                 \
             setDistance(current, sdValue);                                                                                                      \
@@ -512,7 +583,6 @@ vec3 calcNormalTetrahedron(vec3 p) {
 }
 
 HitInfo trace(vec3 ro, vec3 rd) {
-    // 
     // adapted from Accelerating Sphere Tracing 
     // https://diglib.eg.org/server/api/core/bitstreams/7537a378-9a0a-4ef4-b57d-877322b1441e/content    
     float omega = 1.2f;
