@@ -494,22 +494,23 @@ RETURN_TYPE FUNCTION_NAME(vec3 p) {                                             
                     /* 135 units                                                 */                                                             \
                     /*                                                           */                                                             \
                     /* The stroke width is 45 units for all strokes              */                                                             \
-                    float scale = geometryData[elementIdx + 3].w; \
-                    vec2 p_sdf = vec2(0.0, 700.0) - (pos.xy) * scale;\
-                    float dist2D = sdh(p_sdf);\
-                    float trueDist2D = dist2D / scale;\
-                    float depth = 0.1; \
-                    sdValue = opExtrusion(pos, trueDist2D, depth);\
-/*                     pos = (M * (vec4(p, 1.f) + vec4(geometryData[elementIdx + 3].yz, 0.f, 0.f))).xyz;\ */ \
-                    M[3][0] = geometryData[elementIdx + 3].y; /* matrix[column][row] */  \
-                    M[3][1] = geometryData[elementIdx + 3].z;   \
-                    pos = (M * vec4(p, 1.f)).xyz; \
-                    vec2 p_sdf2 = vec2(0.0, 700.0) - (pos.xy) * scale;\
-                    float dist2D2 = sdh(p_sdf2);\
-                    float trueDist2D2 = dist2D2 / scale;\
-                    sdValue = opUnion(opExtrusion(pos, trueDist2D2, depth), sdValue);\
-/*                     sdValue = sdBox(posBotLeft, vec3(0.01f));                                                               \
- */                    elementIdx += 4; \
+                    int numLetters = floatBitsToInt(geometryData[elementIdx + 3].y);                                                            \
+                    float scale = geometryData[elementIdx + 3].z;                                                                               \
+                    float depth = geometryData[elementIdx + 3].w;                                                                               \
+                    float smoothness = geometryData[elementIdx + 4].w;                                                                          \
+                                                                                                                                                \
+                    sdValue = 3.402823466e+38f;                                                                                                 \
+                    for (int letterIdx = 0; letterIdx < numLetters; letterIdx++) {                                                              \
+                        M[3][0] = geometryData[elementIdx + 4 + letterIdx].x; /* matrix[column][row] */                                         \
+                        M[3][1] = geometryData[elementIdx + 4 + letterIdx].y;                                                                   \
+                        int letterCode = floatBitsToInt(geometryData[elementIdx + 4 + letterIdx].z);                                            \
+                                                                                                                                                \
+                        pos = (M * vec4(p, 1.f)).xyz;                                                                                           \
+                        vec2 p_sdf = vec2(0.0, 700.0) - (pos.xy) * scale; /* from bottom-left to orign of "letter space" */                     \
+                        float dist2D = sdh(p_sdf) / scale;                                                                                      \
+                        sdValue = opSmoothUnion(opExtrusion(pos, dist2D, depth), sdValue, smoothness);                                          \
+                    }                                                                                                                           \
+                    elementIdx += 4 + numLetters;                                                                                               \
             }                                                                                                                                   \
                                                                                                                                                 \
             setDistance(current, sdValue);                                                                                                      \

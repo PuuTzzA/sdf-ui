@@ -1,5 +1,5 @@
 import { SdfCanvas } from "./webgl/sdf-canvas.js";
-import { TextMeter } from "./helper/text-meter.js"
+import { Matrix } from "./helper/matrix.js";
 
 const sdfCanvas = new SdfCanvas("canvas");
 sdfCanvas.initWebgl();
@@ -7,10 +7,10 @@ sdfCanvas.initWebgl();
 /* const sdfCanvas2 = new SdfCanvas("canvas2", [1]);
 sdfCanvas2.initWebgl(); */
 
-const testtext = document.querySelector(".sdf-text")
+/* const testtext = document.querySelector(".sdf-text")
 console.log(testtext.getWordRects())
 console.log(testtext.textContent.replace(/\s+/g, '').length)
-
+ */
 
 const compilingScreen = document.querySelector("#compiling-screen")
 const testDiv = document.querySelector("#test-div");
@@ -62,6 +62,3 @@ function gameLoop(now) {
 }
 
 requestAnimationFrame(gameLoop);
-
-console.log(testDiv.dataset.layerIndex)
-console.log("moin");

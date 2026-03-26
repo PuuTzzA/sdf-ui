@@ -18,7 +18,6 @@ class ASdfElement extends HTMLElement {
         }
 
         this.classList.add("sdf-ui-base-class");
-        this.dataset.elementType = this.getElementType();
 
         SdfCanvas.addTrackedElement(this);
     }
@@ -94,13 +93,21 @@ class SdfText extends ASdfElement {
         return SdfCanvas.ElementType.TEXT;
     }
 
-    getLength() {
-        // in amounts of vec4s
-        const numWords = this.getWordRects().length;
-        const numLetters = this.textContent.replace(/\s+/g, '').length;
-        return numWords * 4 + numLetters * 3;
+    getNumberOfLetters() {
+        return this.textContent.replace(/\s+/g, '').length;
     }
 
+    getLength() {
+        // in amounts of vec4s
+        return 4 + this.getNumberOfLetters(); // each letter only needs x and y offset and letter code
+    }
+
+    /***
+     * Returns a two dimensional array of the split words/letters and their bounding boxes.
+     * E.g. for an element with the text "Hello<br>World" it would return the following array:
+     * [["Hello", rect], ["World", rect]]
+     * Also works for automatically split words (e.g. word-break: break-all or when words just wrap onto new lines)
+     */
     getWordRects() {
         const results = [];
 

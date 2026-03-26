@@ -41,6 +41,9 @@ class Matrix {
         return new Float32Array(values);
     }
 
+    /**
+     * Relatively slow, but works for a general matrix and does not mutate the input 
+     */
     static invertMat4(m) {
         // from ChatGPT
         const a = m;
@@ -88,6 +91,97 @@ class Matrix {
         out[15] = (a20 * b03 - a21 * b01 + a22 * b00) * invDet;
 
         return out;
+    }
+
+    /**
+     * if A = [M    b] => inv(A) = [inv(M)  -inv(M) * b] 
+     *        [0    1]             [  0           1    ]
+     */
+    static invertAffineMat4InPlace(m) {
+        // from gemini  
+        // Extract the 3x3 rotational/scaling matrix (M)
+        const m00 = m[0], m01 = m[4], m02 = m[8];
+        const m10 = m[1], m11 = m[5], m12 = m[9];
+        const m20 = m[2], m21 = m[6], m22 = m[10];
+
+        // Compute cofactors of the first row to find the 3x3 determinant
+        const b00 = m11 * m22 - m12 * m21;
+        const b01 = m12 * m20 - m10 * m22;
+        const b02 = m10 * m21 - m11 * m20;
+
+        const det = m00 * b00 + m01 * b01 + m02 * b02;
+
+        /* if (!det) {
+            return null; // Matrix is not invertible
+        } */
+
+        const invDet = 1.0 / det;
+
+        // Calculate the inverse of the 3x3 matrix M (M^-1)
+        const invM00 = b00 * invDet;
+        const invM10 = b01 * invDet;
+        const invM20 = b02 * invDet;
+
+        const invM01 = (m02 * m21 - m01 * m22) * invDet;
+        const invM11 = (m00 * m22 - m02 * m20) * invDet;
+        const invM21 = (m01 * m20 - m00 * m21) * invDet;
+
+        const invM02 = (m01 * m12 - m02 * m11) * invDet;
+        const invM12 = (m02 * m10 - m00 * m12) * invDet;
+        const invM22 = (m00 * m11 - m01 * m10) * invDet;
+
+        // Extract the original translation vector (b)
+        const tx = m[12];
+        const ty = m[13];
+        const tz = m[14];
+
+        // 1. Output the inverted 3x3 matrix into the 4x4 array
+        m[0] = invM00;
+        m[1] = invM10;
+        m[2] = invM20;
+        m[3] = 0;
+
+        m[4] = invM01;
+        m[5] = invM11;
+        m[6] = invM21;
+        m[7] = 0;
+
+        m[8] = invM02;
+        m[9] = invM12;
+        m[10] = invM22;
+        m[11] = 0;
+
+        // 2. Output the new translation vector (-M^-1 * b)
+        m[12] = -(invM00 * tx + invM01 * ty + invM02 * tz);
+        m[13] = -(invM10 * tx + invM11 * ty + invM12 * tz);
+        m[14] = -(invM20 * tx + invM21 * ty + invM22 * tz);
+        m[15] = 1; // 3. Maintain the affine bottom row
+
+        return m;
+    }
+
+    static extractMat3FromMat4(m) {
+        return new Float32Array([
+            m[0], m[1], m[2],
+            m[4], m[5], m[6],
+            m[8], m[9], m[10],
+        ])
+    }
+
+    static negateMat3InPlace(m) {
+        for (let i = 0; i < 9; i++) {
+            m[i] *= -1;
+        }
+    }
+
+    static mat3TimesVec3InPlace(m, v) {
+        const v0 = v[0];
+        const v1 = v[1];
+        const v2 = v[2];
+
+        v[0] = m[0] * v0 + m[3] * v1 + m[6] * v2;
+        v[1] = m[1] * v0 + m[4] * v1 + m[7] * v2;
+        v[2] = m[2] * v0 + m[5] * v1 + m[8] * v2;
     }
 }
 

@@ -49,8 +49,8 @@ class SdfCanvas {
     static trackedElements = [];
     static trackedElementsSize = 0;
 
-    static getElementSize(elementType) { // in amounts of vec4s
-        switch (elementType) {
+    static getElementSize(element) { // in amounts of vec4s
+        switch (element.getElementType()) {
             case SdfCanvas.ElementType.SPHERE:
                 return 4;
             case SdfCanvas.ElementType.BOX_SIMPLE:
@@ -60,12 +60,12 @@ class SdfCanvas {
             case SdfCanvas.ElementType.ROUND_BOX:
                 return 5;
             case SdfCanvas.ElementType.TEXT: // variable length
-                return 4;
+                return element.getLength();
         }
     }
 
     static addTrackedElement(element) {
-        const size = this.getElementSize(element.elementType);
+        const size = this.getElementSize(element);
 
         if (this.trackedElementsSize + size > SdfCanvas.MAX_SIZE_ELEMENT_BUFFER) {
             throw f`Cannot track more elemtns than the maximum amount (${SdfCanvas.MAX_SIZE_ELEMENT_BUFFER}).`;
@@ -82,7 +82,7 @@ class SdfCanvas {
     }
 
     static removeTrackedElement(element) {
-        const size = this.getElementSize(element.getElementType());
+        const size = this.getElementSize(element);
 
         const index = this.trackedElements.indexOf(element);
         if (index <= -1) {
@@ -369,18 +369,22 @@ class SdfCanvas {
                 continue;
             }
 
-            const elementType = parseInt(element.dataset.elementType);
+            const elementType = element.getElementType();
             const isText = elementType == SdfCanvas.ElementType.TEXT;
 
-            const aj = 0;
-            const firstChildText = isText ? element.getWordRects()[aj][0] : "";
-            const rect = isText ? element.getWordRects()[aj][1] : element.getBoundingClientRect();
+            // don't inlcude empty strings
+            if (isText && element.getNumberOfLetters() <= 0) {
+                continue;
+            }
+
+            const rects = isText ? element.getWordRects() : null;
+            const rect = isText ? rects[0][1] : element.getBoundingClientRect();
 
             const computedStyle = getComputedStyle(element);
             let mat = Matrix.parseMatrix(computedStyle.transform);
 
-            const halfWidth = isText ? element.measure(firstChildText) * oneOverX * 0.5 : element.offsetWidth * oneOverX * 0.5;
-            const halfHeight = isText ? element.measureHeight(firstChildText) * oneOverX * 0.5 : element.offsetHeight * oneOverX * 0.5; //parseInt(computedStyle.getPropertyValue("font-size")) * oneOverX * 0.5 
+            const halfWidth = isText ? element.measure(rects[0][0]) * oneOverX * 0.5 : element.offsetWidth * oneOverX * 0.5;
+            const halfHeight = isText ? element.measureHeight(rects[0][0]) * oneOverX * 0.5 : element.offsetHeight * oneOverX * 0.5; //parseInt(computedStyle.getPropertyValue("font-size")) * oneOverX * 0.5 
             const halfDepth = this.twoDMode ? 100 : parseFloat(computedStyle.getPropertyValue("--depth")) * oneOverX * 0.5;
 
             const offsetX = (rect.left + rect.width * 0.5) * oneOverX;
@@ -399,8 +403,7 @@ class SdfCanvas {
             mat[14] -= mat[10] * halfDepth; */
 
             // invert the matrix
-            let mat2 = mat;
-            mat = Matrix.invertMat4(mat);
+            Matrix.invertAffineMat4InPlace(mat);
 
             // Inverse affine modelview matrix = computedStyle.transform @ T(offsetX, offsetY, offsetZ), computedStyle.transform used without translation since that is already in boundingclientrect
             this.geometryBuffer[elementIdx + 0] = mat[0]; // column 1 [mat[0], mat[1], mat[2], 0]^T
@@ -420,7 +423,7 @@ class SdfCanvas {
             this.geometryBuffer[elementIdx + 11] = mat[14]; // tz
 
             // Element Properties
-            this.geometryBuffer[elementIdx + 12] = SdfCanvas.intToFloatBits(parseInt(element.dataset.elementType)); // Element id
+            this.geometryBuffer[elementIdx + 12] = SdfCanvas.intToFloatBits(elementType); // Element id
 
             switch (elementType) {
                 case SdfCanvas.ElementType.SPHERE:
@@ -453,37 +456,46 @@ class SdfCanvas {
                     this.geometryBuffer[elementIdx + 16] = parseFloat(computedStyle.getPropertyValue("--r")) * oneOverX * 0.5; // border radius
                     break;
                 case SdfCanvas.ElementType.TEXT:
-                    this.geometryBuffer[elementIdx + 9] = mat[12] + halfWidth; // tx, column 4 [tx, ty, tz, 1]^T
+                    // change the offset to be at the start of the word, instead of in the middle
+                    this.geometryBuffer[elementIdx + 9] = mat[12] + halfWidth; // tx
                     this.geometryBuffer[elementIdx + 10] = mat[13] + halfHeight; // ty
 
-                    this.geometryBuffer[elementIdx + 15] = 450 / halfHeight; // 450 because 450 = 900 / 2 and haldHeight has the implicit 0.5 * ...
-                    //console.log(rect.height, element.offsetHeight)
-                    // console.log(element.getClientRects())
-                    // console.log(element.textContent)
-                    // console.log(element.textMeter.measure("hallo welt"));
+                    const numLetters = element.getNumberOfLetters();
+                    this.geometryBuffer[elementIdx + 13] = SdfCanvas.intToFloatBits(numLetters); // amount of letters
+                    this.geometryBuffer[elementIdx + 14] = 450 / halfHeight; // letter scale, 450 because 450 = 900 / 2 and haldHeight has the implicit 0.5 * ...
+                    this.geometryBuffer[elementIdx + 15] = halfDepth; // depth 
+                    this.geometryBuffer[elementIdx + 16 + 3] = 0.002; // smoothness
 
+                    let inverseMat3 = Matrix.extractMat3FromMat4(mat);
+                    let currentTranslation = new Float32Array(3);
+                    const originalTz = mat[14];
 
+                    let letterIdx = 0;
+                    for (let wordIdx = 0; wordIdx < rects.length; wordIdx++) {
+                        const currentWord = rects[wordIdx];
 
-                    const rectNew = element.getWordRects()[aj + 1][1];
-                    const nextChildText = element.getWordRects()[aj + 1][0];
+                        const currentText = currentWord[0];
+                        const currentRect = currentWord[1];
 
-                    const offsetXNew = (rectNew.left + rectNew.width * 0.5) * oneOverX;
-                    const offsetYNew = (rectNew.top + rectNew.height * 0.5) * oneOverX;
+                        const currentOffsetX = (currentRect.left + currentRect.width * 0.5) * oneOverX;
+                        const currentOffsetY = (currentRect.top + currentRect.height * 0.5) * oneOverX;
+                        const currentHalfWidth = element.measure(currentText) * 0.5 * oneOverX;
 
-                    const halfWidthNew = element.measure(nextChildText) * oneOverX * 0.5;
-                    const halfHeightNew = element.measureHeight(nextChildText) * oneOverX * 0.5; //parseInt(computedStyle.getPropertyValue("font-size")) * oneOverX * 0.5 
+                        for (let currentLetterIdx = 0; currentLetterIdx < currentWord[0].length; currentLetterIdx++) {
+                            const currentSubstringWidth = element.measure(currentText.substring(0, currentLetterIdx)) * oneOverX;
 
-                    this.geometryBuffer[elementIdx + 13] = offsetXNew * oneOverX + halfWidthNew; //(rect.left - rectNew.left) * oneOverX + halfWidthNew; // offset x 
-                    this.geometryBuffer[elementIdx + 14] = offsetYNew * oneOverX + halfHeightNew;// (rect.top - rectNew.top) * oneOverX + halfHeightNew; // offset y 
-                    //this.geometryBuffer[elementIdx + 15] = halfDepth; // depth
+                            currentTranslation[0] = currentOffsetX;
+                            currentTranslation[1] = currentOffsetY;
+                            currentTranslation[2] = originalTz;
+                            Matrix.mat3TimesVec3InPlace(inverseMat3, currentTranslation); // inv(v) = - inv(M) * v
 
-                    mat2[12] = offsetXNew;
-                    mat2[13] = offsetYNew;
+                            this.geometryBuffer[elementIdx + 16 + letterIdx * 4 + 0] = -currentTranslation[0] + currentHalfWidth - currentSubstringWidth;// offsetX
+                            this.geometryBuffer[elementIdx + 16 + letterIdx * 4 + 1] = -currentTranslation[1] + halfHeight; // offsetY
+                            this.geometryBuffer[elementIdx + 16 + letterIdx * 4 + 2] = 0; // letterCode
 
-                    mat2 = Matrix.invertMat4(mat2);
-                    // console.log(mat[12], "-", offsetX)
-                    this.geometryBuffer[elementIdx + 13] = mat2[12] + halfWidthNew;// - element.measure("h") * oneOverX;
-                    this.geometryBuffer[elementIdx + 14] = mat2[13] + halfHeightNew;
+                            letterIdx++;
+                        }
+                    }
                     break;
             }
 
@@ -498,7 +510,7 @@ class SdfCanvas {
             this.shadingBuffer[elementIdx + 6] = parseFloat(computedStyle.getPropertyValue("--ka")); // ambient material property
             this.shadingBuffer[elementIdx + 7] = 1.; // unused for now
 
-            elementIdx += SdfCanvas.getElementSize(elementType) * 4;
+            elementIdx += SdfCanvas.getElementSize(element) * 4;
         }
 
         /* const rectvis = document.getElementById("rect-vis");
