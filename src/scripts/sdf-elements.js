@@ -86,7 +86,7 @@ class SdfText extends ASdfElement {
         this.classList.add("sdf-ui-text-base-class");
         this.textMeter = new TextMeter(this);
 
-        this.size = this.getSize();
+        this.size = this.calculateSize();
     }
 
     getElementType() {
@@ -99,11 +99,15 @@ class SdfText extends ASdfElement {
 
     getSize() {
         // in amounts of vec4s
+        return this.size
+    }
+
+    calculateSize() {
         return 5 + this.getNumberOfLetters(); // each letter only needs x and y offset and letter code
     }
 
     updateSize() {
-        const currentSize = this.getSize();
+        const currentSize = this.calculateSize();
         if (currentSize != this.size) {
             this.size = SdfCanvas.updateTrackedElementSize(this, this.size, currentSize);
         }

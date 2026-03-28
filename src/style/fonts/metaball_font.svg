@@ -7,7 +7,7 @@
    viewBox="0 0 1024 1024"
    version="1.1"
    id="svg5"
-   inkscape:version="1.3 (0e150ed6c4, 2023-07-21)"
+   inkscape:version="1.4.2 (f4327f4, 2025-05-13)"
    sodipodi:docname="metaball_font.svg"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
@@ -24,15 +24,15 @@
      inkscape:deskcolor="#000000"
      inkscape:document-units="px"
      showgrid="false"
-     inkscape:zoom="8.0240319"
-     inkscape:cx="13.334942"
-     inkscape:cy="773.67588"
-     inkscape:window-width="1920"
-     inkscape:window-height="1058"
-     inkscape:window-x="389"
-     inkscape:window-y="-6"
+     inkscape:zoom="0.70923093"
+     inkscape:cx="426.51834"
+     inkscape:cy="346.85459"
+     inkscape:window-width="2880"
+     inkscape:window-height="1760"
+     inkscape:window-x="-12"
+     inkscape:window-y="1878"
      inkscape:window-maximized="1"
-     inkscape:current-layer="layer77"
+     inkscape:current-layer="layer27"
      inkscape:lockguides="false"
      showguides="true">
     <sodipodi:guide
@@ -195,7 +195,7 @@
          glyph-name="three"
          unicode="3"
          id="glyph164"
-         d="M 22.5,900 A 22.5,22.5 0 0 1 0,877.5 22.5,22.5 0 0 1 22.5,855 h 45 A 22.5,22.5 0 0 0 90,832.5 V 700 A 22.5,22.5 0 0 0 67.5,677.5 h -45 A 22.5,22.5 0 0 1 0,655 22.5,22.5 0 0 1 22.5,632.5 h 45 A 22.5,22.5 0 0 0 90,610 V 267.5 A 22.5,22.5 0 0 0 67.5,245 h -45 A 22.5,22.5 0 0 1 0,222.5 22.5,22.5 0 0 1 22.5,200 h 45 a 67.5,67.5 0 0 1 67.5,67.5 v 565 A 67.5,67.5 0 0 1 67.5,900 Z" />
+         d="M 22.5,900 A 22.5,22.5 0 0 1 0,877.5 22.5,22.5 0 0 1 22.5,855 h 45 A 22.5,22.5 0 0 0 90,832.5 V 700 A 22.5,22.5 0 0 0 67.5,677.5 H 45 A 22.5,22.5 0 0 1 22.5,655 22.5,22.5 0 0 1 45,632.5 H 67.5 A 22.5,22.5 0 0 0 90,610 V 267.5 A 22.5,22.5 0 0 0 67.5,245 h -45 A 22.5,22.5 0 0 1 0,222.5 22.5,22.5 0 0 1 22.5,200 h 45 a 67.5,67.5 0 0 1 67.5,67.5 v 565 A 67.5,67.5 0 0 1 67.5,900 Z" />
       <glyph
          glyph-name="four"
          unicode="4"
@@ -1099,8 +1099,8 @@
        id="rect163"
        width="45"
        height="182.5"
-       x="-207.74356"
-       y="620.25"
+       x="-182.43474"
+       y="308.04123"
        ry="22.5"
        rx="22.5" />
     <path
@@ -1112,8 +1112,8 @@
        id="rect5"
        width="45"
        height="192.25359"
-       x="-362.60712"
-       y="548.44958" />
+       x="-473.99539"
+       y="265.04401" />
     <circle
        style="fill:#ffff00;stroke:none;stroke-width:5;stroke-linecap:round;stroke-linejoin:round;paint-order:stroke markers fill"
        id="path8"
@@ -1129,8 +1129,8 @@
        id="rect15"
        width="45"
        height="192.25359"
-       x="-476.77136"
-       y="458.4382" />
+       x="-414.02734"
+       y="547.26685" />
     <g
        inkscape:groupmode="layer"
        id="layer4"
@@ -9313,68 +9313,6 @@
          r="22.5"
          transform="scale(-1)" />
       <rect
-         style="display:inline;fill:#ffffff;stroke:none;stroke-width:4.99999;stroke-linecap:round;stroke-linejoin:round;paint-order:stroke markers fill"
-         id="rect1178"
-         width="45"
-         height="90"
-         x="-2095.6602"
-         y="-1623.4093"
-         transform="scale(-1,1)" />
-      <path
-         id="path1181"
-         style="display:inline;fill:#00ff00;stroke:none;stroke-width:4.99998;stroke-linecap:round;stroke-linejoin:round;paint-order:stroke markers fill"
-         d="m 2095.6602,-1533.4093 a 67.5,67.5 0 0 1 -67.5,67.5 v -45 a 22.5,22.5 0 0 0 22.5,-22.5 z" />
-      <path
-         id="path1182"
-         style="display:inline;fill:#00ff00;stroke:none;stroke-width:4.99998;stroke-linecap:round;stroke-linejoin:round;paint-order:stroke markers fill"
-         d="m 1960.6602,-1443.4093 a 67.5,67.5 0 0 1 67.5,-67.5 v 45 a 22.5,22.5 0 0 0 -22.5,22.5 z" />
-      <rect
-         style="display:inline;fill:#ffffff;stroke:none;stroke-width:5;stroke-linecap:round;stroke-linejoin:round;paint-order:stroke markers fill"
-         id="rect1182"
-         width="45"
-         height="185.00011"
-         x="-2005.6602"
-         y="-1443.4093"
-         transform="scale(-1,1)" />
-      <rect
-         style="display:inline;fill:#ffffff;stroke:none;stroke-width:4.99999;stroke-linecap:round;stroke-linejoin:round;paint-order:stroke markers fill"
-         id="rect1183"
-         width="45"
-         height="45"
-         x="1983.1602"
-         y="1645.9093"
-         transform="scale(1,-1)" />
-      <circle
-         style="display:inline;fill:#ffff00;stroke:none;stroke-width:5;stroke-linecap:round;stroke-linejoin:round;paint-order:stroke markers fill"
-         id="circle1183"
-         cx="-1983.1602"
-         cy="-1668.4093"
-         r="22.5"
-         transform="scale(-1,1)" />
-      <path
-         id="path1183"
-         style="display:inline;fill:#00ff00;stroke:none;stroke-width:4.99998;stroke-linecap:round;stroke-linejoin:round;paint-order:stroke markers fill"
-         d="m 2028.1602,-1690.9093 a 67.5,67.5 0 0 1 67.5,67.5 h -45 a 22.5,22.5 0 0 0 -22.5,-22.5 z" />
-      <rect
-         style="display:inline;fill:#ffffff;stroke:none;stroke-width:4.99999;stroke-linecap:round;stroke-linejoin:round;paint-order:stroke markers fill"
-         id="rect1184"
-         width="45"
-         height="45"
-         x="-2073.1604"
-         y="-1235.9092"
-         transform="scale(-1,1)" />
-      <circle
-         style="display:inline;fill:#ffff00;stroke:none;stroke-width:5;stroke-linecap:round;stroke-linejoin:round;paint-order:stroke markers fill"
-         id="circle1184"
-         cx="2073.1604"
-         cy="1213.4092"
-         r="22.5"
-         transform="scale(1,-1)" />
-      <path
-         id="path1184"
-         style="display:inline;fill:#00ff00;stroke:none;stroke-width:4.99998;stroke-linecap:round;stroke-linejoin:round;paint-order:stroke markers fill"
-         d="m 2028.1602,-1190.9092 a 67.5,67.5 0 0 1 -67.5,-67.5 h 45 a 22.5,22.5 0 0 0 22.5,22.5 z" />
-      <rect
          style="fill:#ff00ff;stroke-width:50;stroke-linecap:round;stroke-linejoin:round;paint-order:stroke markers fill"
          id="rect6"
          width="45"
@@ -13049,10 +12987,6 @@
          x="-1302.2773"
          y="2587.1436" />
     </g>
-    <path
-       id="path75"
-       style="fill:#ff0000;stroke:none;stroke-width:4.99999;stroke-linecap:round;stroke-linejoin:round;paint-order:stroke markers fill"
-       d="m -162.74356,474.67991 a 22.5,22.5 0 0 1 -22.5,22.5 v 45 a 22.5,22.5 0 0 1 22.5,22.5 v -22.5 -45 z" />
     <rect
        style="fill:#008080;stroke:none;stroke-width:5.00001;stroke-linecap:round;stroke-linejoin:round;paint-order:stroke markers fill"
        id="rect390"
@@ -13294,6 +13228,14 @@
        id="path855"
        style="fill:#00ff00;stroke:none;stroke-width:4.99998;stroke-linecap:round;stroke-linejoin:round;paint-order:stroke markers fill"
        d="m 3494.0948,1990.2506 a 67.5,67.5 0 0 0 67.5,-67.5 h -45 a 22.5,22.5 0 0 1 -22.5,22.5 z" />
+    <path
+       id="path21"
+       style="fill:#00ff00;stroke:none;stroke-width:4.99998;stroke-linecap:round;stroke-linejoin:round;paint-order:stroke markers fill"
+       d="m -176.36196,6.5 a 67.5,67.5 0 0 0 -67.5,67.5 h 45 a 22.5,22.5 0 0 1 22.5,-22.5 z" />
+    <path
+       id="path203"
+       style="fill:#ff0000;stroke:none;stroke-width:4.99999;stroke-linecap:round;stroke-linejoin:round;paint-order:stroke markers fill"
+       d="m -185.34932,529.38303 a 22.5,22.5 0 0 1 -22.5,22.5 v 45 a 22.5,22.5 0 0 1 22.5,22.5 v -22.5 -45 z" />
   </g>
   <g
      inkscape:groupmode="layer"
@@ -14319,7 +14261,8 @@
        inkscape:groupmode="layer"
        id="layer77"
        inkscape:label="U+000066 f f"
-       style="display:inline">
+       style="display:none"
+       sodipodi:insensitive="true">
       <path
          d=""
          id="path627" />
@@ -15471,12 +15414,12 @@
        inkscape:groupmode="layer"
        id="layer27"
        inkscape:label="U+000033 3 three"
-       style="display:none"
+       style="display:inline"
        sodipodi:insensitive="true">
       <path
-         id="rect436"
+         id="circle1183"
          style="display:inline;fill:#ffffff;stroke:none;stroke-width:5;stroke-linecap:round;stroke-linejoin:round;paint-order:stroke markers fill"
-         d="M 22.5,124 A 22.5,22.5 0 0 0 0,146.5 22.5,22.5 0 0 0 22.5,169 h 45 A 22.5,22.5 0 0 1 90,191.5 V 324 a 22.5,22.5 0 0 1 -22.5,22.5 h -45 A 22.5,22.5 0 0 0 0,369 22.5,22.5 0 0 0 22.5,391.5 h 45 A 22.5,22.5 0 0 1 90,414 V 756.5 A 22.5,22.5 0 0 1 67.5,779 h -45 A 22.5,22.5 0 0 0 0,801.5 22.5,22.5 0 0 0 22.5,824 h 45 A 67.5,67.5 0 0 0 135,756.5 v -565 A 67.5,67.5 0 0 0 67.5,124 Z" />
+         d="M 22.5,124 A 22.5,22.5 0 0 0 0,146.5 22.5,22.5 0 0 0 22.5,169 h 45 A 22.5,22.5 0 0 1 90,191.5 V 324 A 22.5,22.5 0 0 1 67.5,346.5 H 45 A 22.5,22.5 0 0 0 22.5,369 22.5,22.5 0 0 0 45,391.5 H 67.5 A 22.5,22.5 0 0 1 90,414 V 756.5 A 22.5,22.5 0 0 1 67.5,779 h -45 A 22.5,22.5 0 0 0 0,801.5 22.5,22.5 0 0 0 22.5,824 h 45 A 67.5,67.5 0 0 0 135,756.5 v -565 A 67.5,67.5 0 0 0 67.5,124 Z" />
     </g>
     <g
        inkscape:groupmode="layer"

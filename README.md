@@ -77,7 +77,7 @@ A box where all edges are rounded.
 * **--r:** Controls the border radius that is applied to all edges.
 
 ### 5. Text
-A element that contains text that which is rendered as sdf elements. As of now there is one supported font **metaballs** (only lower case letters for now). All the letters inside one sdf-text elment will have the same material and size. Sdf-text elements support `letter-spacing`, `word-spacing` and `word-break`.
+A element that contains text that which is rendered as sdf elements. As of now there is one supported font **metaballs** (only lower case letters and numbers for now). All the letters inside one sdf-text elment will have the same material and size. Sdf-text elements support `letter-spacing`, `word-spacing` and `word-break`.
 
 ```html
 <sdf-text id="test-sdf-box-round" data-layer-index="1">Text</sdf-text>

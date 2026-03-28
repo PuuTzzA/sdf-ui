@@ -129,7 +129,7 @@ html,
 
 @font-face {
     font-family: metaballs;
-    src: url(./fonts/metaball_font_big.ttf);
+    src: url(./fonts/metaball.ttf);
 }
 
 .sdf-ui-text-base-class {
@@ -246,14 +246,14 @@ html,
     left: 10rem;
 
     text-align: center;
-    font-size: 10rem;
+    font-size: 20rem;
     letter-spacing: 1rem;
-    word-spacing: 10rem;
-    /*     color: rgba(255, 255, 255, 0.5) !important;
+/*     word-spacing: 10rem;
+ */    
+ /*     color: rgba(255, 255, 255, 0.5) !important;
  */
     --letterSmoothness: 0.1rem;
 
-    width: 20rem;
     /*     transform: translateZ(1rem) rotateY(40deg) rotateX(30deg);
  */
     /*     transform: rotate(100deg);

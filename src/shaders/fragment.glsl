@@ -413,6 +413,105 @@ float sdz(in vec2 p) {
     return c;
 }
 
+float sd1(in vec2 p) {
+    return sdl(p);
+}
+
+float sd2(in vec2 p) {
+    float c = sdRoundedBox2d(p + vec2(67.5 / 2., -700. + d / 2.), vec2(67.5 / 2., d / 2.), vec4(d / 2., d / 2., 0., 0.));
+    c = min(sdRing2d(rotate2d(p + vec2(d * 1.5, -700. + d * 1.5), pi * -0.25), vec2(cos(pi / 4.), sin(pi / 4.)), d, d), c);
+    c = min(sdBox2d(p + vec2(d * 2.5, -566.25), vec2(d / 2., 66.25)), c);
+    c = min(sdRing2d(rotate2d(p + vec2(d * 1.5, -500.), pi * -0.75), vec2(cos(pi / 4.), sin(pi / 4.)), d, d), c);
+    c = min(sdRing2d(rotate2d(p + vec2(d * 1.5, -500. + 67.5 + 45./2.), pi * 0.25), vec2(cos(pi / 4.), sin(pi / 4.)), d, d), c);
+    c = min(sdBox2d(p + vec2(d * 0.5, -342.5 / 2. - 67.5), vec2(d / 2., 342.5 / 2.)), c);
+    c = min(sdRoundedBox2d(p + vec2(67.5  * 1.5, -d / 2.), vec2(67.5 / 2., d / 2.), vec4(0., 0., d / 2., d / 2.)), c);
+    c = min(sdRing2d(rotate2d(p + vec2(d * 1.5, -d * 1.5), pi * 0.75), vec2(cos(pi / 4.), sin(pi / 4.)), d, d), c);
+    return c;
+}
+
+float sdE(in vec2 p) {
+    float c = sdRoundedBox2d(p + vec2(67.5  * 1.5, -700. + d / 2.), vec2(67.5 / 2., d / 2.), vec4(0., 0., d / 2., d / 2.));
+    c = min(sdRing2d(rotate2d(p + vec2(d * 1.5, -700. + d * 1.5), pi * 0.25), vec2(cos(pi / 4.), sin(pi / 4.)), d, d), c);
+    c = min(sdBox2d(p + vec2(d * 0.5, -565. / 2. - 67.5), vec2(d / 2., 565. / 2.)), c);
+    c = smin2d(sdBox2d(p + vec2(d * 1.25, -455.), vec2(d / 4., d / 2.)), c, d / 8.);
+    c = min(sdRoundedBox2d(p + vec2(67.5 + d / 2., -500. + d), vec2(d / 2.), vec4(0., 0., d / 2., d / 2.)), c);
+    c = min(sdRoundedBox2d(p + vec2(67.5  * 1.5, -d / 2.), vec2(67.5 / 2., d / 2.), vec4(0., 0., d / 2., d / 2.)), c);
+    c = min(sdRing2d(rotate2d(p + vec2(d * 1.5, -d * 1.5), pi * 0.75), vec2(cos(pi / 4.), sin(pi / 4.)), d, d), c);
+    return c;
+}
+
+float sd3(in vec2 p) {
+    return sdE((p * vec2(-1., 1.) - vec2(135., 0.)));
+}
+
+float sd4(in vec2 p) {
+    float g = sdRoundedBox2d(p + vec2(d * 2.5, -350.), vec2(d / 2., 350.), vec4(d / 2.)); // rectangle right
+    g = smin2d(sdBox2d(p + vec2(d * 1.75, -500. + d), vec2(d / 4., d / 2.)), g, d / 8.); 
+    g = min(sdRing2d(rotate2d(p + vec2(d * 1.5, -500.), pi * 0.75), vec2(cos(pi / 4.), sin(pi / 4.)), d, d), g); // quarter ring
+    g = min(sdRoundedBox2d(p + vec2(d / 2., -600.), vec2(d / 2., 100.), vec4(d / 2., 0., d / 2., 0.)), g); // rectangle left
+    return g;
+}
+
+float sd5(in vec2 p) {
+    float c = sdRing2d(p + vec2(d * 1.5, -d * 1.5), vec2(cos(pi / -2.), sin(pi / -2.)), d, d); // ring bottom
+    c = min(sdRoundedBox2d(p + vec2(d * 0.5, -67.5 * 1.5), vec2(d / 2., 67.5 / 2.), vec4(d / 2., 0., d / 2., 0.)), c); // box bottom
+    c = min(sdBox2d(p + vec2(d * 2.5, -67.5 - 342.5 / 2.), vec2(d / 2., 342.5 / 2.)), c);
+    c = min(sdRing2d(rotate2d(p + vec2(d * 1.5, -342.5 - 67.5 - d * 2.), pi * 0.75), vec2(cos(pi / 4.), sin(pi / 4.)), d, d), c);
+    c = min(sdRing2d(rotate2d(p + vec2(d * 1.5, -342.5 - 67.5), pi * -0.25), vec2(cos(pi / 4.), sin(pi / 4.)), d, d), c);
+    c = min(sdBox2d(p + vec2(d / 2., -566.25), vec2(d / 2., 66.25)), c);
+    c = min(sdRing2d(rotate2d(p + vec2(d * 1.5, -700. + d * 1.5), pi * 0.25), vec2(cos(pi / 4.), sin(pi / 4.)), d, d), c);
+    c = min(sdRoundedBox2d(p + vec2(67.5  * 1.5, -700. + d / 2.), vec2(67.5 / 2., d / 2.), vec4(0., 0., d / 2., d / 2.)), c);
+    return c;
+}
+
+float sd6(in vec2 p) {
+    float c = sdRing2d(p + vec2(d * 1.5, -d * 1.5), vec2(cos(pi / -2.), sin(pi / -2.)), d, d); // ring bottom
+    c = min(sdBox2d(p + vec2(d / 2., -565. / 2. - 67.5), vec2(d / 2., 565. / 2.)), c); // rectangle left
+    c = smin2d(sdBox2d(p + vec2(d * 1.25, -455.), vec2(d / 4., d / 2.)), c, d / 8.); // small rectangle middle
+    c = min(sdRing2d(p + vec2(d * 1.5, -632.5), vec2(cos(pi / 2.), sin(pi / 2.)), d, d), c); // ring top
+    c = min(sdBox2d(p + vec2(d * 2.5, -67.5 - 342.5 / 2.), vec2(d / 2., 342.5 / 2.)), c);
+    c = min(sdRing2d(rotate2d(p + vec2(d * 1.5, -342.5 - 67.5), pi * -0.25), vec2(cos(pi / 4.), sin(pi / 4.)), d, d), c);
+    c = min(sdRoundedBox2d(p + vec2(d * 2.5, -632.5 + 67.5 / 2.), vec2(d / 2., 67.5 / 2.), vec4(0., d / 2., 0., d / 2.)), c);
+    return c;
+}
+
+float sd7(in vec2 p) {
+    float c = sdRoundedBox2d(p + vec2(67.5 / 2., -700. + d / 2.), vec2(67.5 / 2., d / 2.), vec4(d / 2., d / 2., 0., 0.)); // ring bottom
+    c = min(sdRing2d(rotate2d(p + vec2(d * 1.5, -700. + d * 1.5), pi * -0.25), vec2(cos(pi / 4.), sin(pi / 4.)), d, d), c);
+    c = min(sdRoundedBox2d(p + vec2(d * 2.5, -632.5 / 2.), vec2(d / 2., 632.5 / 2.), vec4(0., d / 2., 0., d / 2.)), c);
+    return c;
+}
+
+float sd8(in vec2 p) {
+    float c = sdRing2d(p + vec2(d * 1.5, -d * 1.5), vec2(cos(pi / -2.), sin(pi / -2.)), d, d); // ring bottom
+    c = min(sdBox2d(p + vec2(d / 2., -565. / 2. - 67.5), vec2(d / 2., 565. / 2.)), c); // rectangle left
+    c = smin2d(sdBox2d(p + vec2(d * 1.25, -455.), vec2(d / 4., d / 2.)), c, d / 8.); // small rectange left
+    c = min(sdRing2d(p + vec2(d * 1.5, -700. + 67.5), vec2(cos(pi / 2.), sin(pi / 2.)), d, d), c); // ring top
+    float c2 = sdBox2d(p + vec2(d * 2.5, -565. / 2. - 67.5), vec2(d / 2., 565. / 2.)); // rectangle right
+    c2 = smin2d(sdBox2d(p + vec2(d * 1.75, -455.), vec2(d / 4., d / 2.)), c2, d / 8.); // small rectange left
+    c = min(c, c2); 
+    return c;
+}
+
+float sd9(in vec2 p) {
+    float g = sdRing2d(p + vec2(d * 1.5, -632.5), vec2(cos(pi / 2.), sin(pi / 2.)), d, d); // ring top
+    g = min(sdBox2d(p + vec2(d * 2.5, -565. / 2. - 67.5), vec2(d / 2., 565. / 2.)), g); // rectangle left
+    g = smin2d(sdBox2d(p + vec2(d * 1.75, -455.), vec2(d / 4., d / 2.)), g, d / 8.); // rectangle bot
+    g = min(sdRing2d(rotate2d(p + vec2(d * 1.5, -500.), pi * 0.75), vec2(cos(pi / 4.), sin(pi / 4.)), d, d), g); // quarter ring
+    g = min(sdBox2d(p + vec2(d / 2., -500. - 132.5 / 2.), vec2(d / 2., 132.5 / 2.)), g); // rectangle left
+    g = min(sdRing2d(p + vec2(d * 1.5, -d * 1.5), vec2(cos(pi / -2.), sin(pi / -2.)), d, d), g); // ring bottom
+    g = min(sdRoundedBox2d(p + vec2(d * 0.5, -67.5 * 1.5), vec2(d / 2., 67.5 / 2.), vec4(d / 2., 0., d / 2., 0.)), g); // box bottom
+    return g;
+}
+
+float sd0(in vec2 p) {
+    float c = sdRing2d(p + vec2(d * 1.5, -d * 1.5), vec2(cos(pi / -2.), sin(pi / -2.)), d, d); // ring bottom
+    c = min(sdBox2d(p + vec2(d / 2., -565. / 2. - 67.5), vec2(d / 2., 565. / 2.)), c); // rectangle left
+    c = min(sdRing2d(p + vec2(d * 1.5, -700. + 67.5), vec2(cos(pi / 2.), sin(pi / 2.)), d, d), c); // ring top
+    c = min(sdBox2d(p + vec2(d * 2.5, -565. / 2. - 67.5), vec2(d / 2., 565. / 2.)), c); // rectangle right
+    return c;
+}
+
 float sdNotDefined(in vec2 p) {
     return sdRoundedBox2d(p + vec2(d * 1.5, -350.), vec2(d * 1.5, 350.), vec4(d / 2.));
 }
@@ -705,6 +804,36 @@ RETURN_TYPE FUNCTION_NAME(vec3 p) {                                             
                         vec2 p_sdf = vec2(0.0, 700.0) - (pos.xy) * scale; /* from bottom-left to orign of "letter space" */                     \
                         float dist2D = MAX_FLOAT;                                                                                               \
                         switch (letterCode) {                                                                                                   \
+                            case 48:                                                                                                            \
+                                dist2D = sd0(p_sdf) / scale;                                                                                    \
+                                break;                                                                                                          \
+                            case 49:                                                                                                            \
+                                dist2D = sd1(p_sdf) / scale;                                                                                    \
+                                break;                                                                                                          \
+                            case 50:                                                                                                            \
+                                dist2D = sd2(p_sdf) / scale;                                                                                    \
+                                break;                                                                                                          \
+                            case 51:                                                                                                            \
+                                dist2D = sd3(p_sdf) / scale;                                                                                    \
+                                break;                                                                                                          \
+                            case 52:                                                                                                            \
+                                dist2D = sd4(p_sdf) / scale;                                                                                    \
+                                break;                                                                                                          \
+                            case 53:                                                                                                            \
+                                dist2D = sd5(p_sdf) / scale;                                                                                    \
+                                break;                                                                                                          \
+                            case 54:                                                                                                            \
+                                dist2D = sd6(p_sdf) / scale;                                                                                    \
+                                break;                                                                                                          \
+                            case 55:                                                                                                            \
+                                dist2D = sd7(p_sdf) / scale;                                                                                    \
+                                break;                                                                                                          \
+                            case 56:                                                                                                            \
+                                dist2D = sd8(p_sdf) / scale;                                                                                    \
+                                break;                                                                                                          \
+                            case 57:                                                                                                            \
+                                dist2D = sd9(p_sdf) / scale;                                                                                    \
+                                break;                                                                                                          \
                             case 97:                                                                                                            \
                                 dist2D = sda(p_sdf) / scale;                                                                                    \
                                 break;                                                                                                          \
