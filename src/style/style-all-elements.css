@@ -21,21 +21,17 @@
     text-align: center;
     display: grid;
     align-items: center;
+    --depth: 1rem;
+    --z: 0;
 }
 
 .test-sdf-sphere {
     --r: 10rem;
-    --z: 10.1rem;
 }
 
 #test-sdf-box-simple{
     width: 10rem;
     height: 5rem;
-    --depth: 10rem;
-
-    border-radius: 2rem;
-
-    --z: 10rem;
     --ks: 0.1;
 }
 
@@ -43,23 +39,19 @@
 #test-sdf-box-2{
     width: 10rem;
     height: 5rem;
-    --depth: 10rem;
 
     border-radius: 2rem 1rem 2.5rem;
     --border-radius-type: 0;
-
-    --z: 10rem;
     --ks: 0.1;
 }
 
 #test-sdf-box-2{
-    --ks: 1;
     --rotation-offset: 2;
+    --depth: 5rem;
 }
 
 #test-sdf-box-round{
     width: 10rem;
     height: 10rem;
-    --depth: 10rem;
     --r: 5rem;
 }

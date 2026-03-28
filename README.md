@@ -33,6 +33,9 @@ All objects can be rotated, translated or skewed (in 2D or 3D) with the css `tra
 
 The supported primitive objects are:
 
+> [!Important]
+> For all elements with border roundings, keep in mind that in order for the element to be rendered correctly the width/height/depth has to be large enough. E.g. if you have `border-radius: 5rem;` with `width: 7rem;` then the element is not rendered correctly because it is not wide enough.
+
 ### 1. Sphere: 
 A normal sphere.
 ```html
@@ -72,6 +75,16 @@ A box where all edges are rounded.
 ```
 * **width, heigth, depth:** Controled in the same way as for the simple box (css properties width, height, --depth).
 * **--r:** Controls the border radius that is applied to all edges.
+
+### 5. Text
+A element that contains text that which is rendered as sdf elements. As of now there is one supported font **metaballs** (only lower case letters for now). All the letters inside one sdf-text elment will have the same material and size. Sdf-text elements support `letter-spacing`, `word-spacing` and `word-break`.
+
+```html
+<sdf-text id="test-sdf-box-round" data-layer-index="1">Text</sdf-text>
+```
+
+* **--depth:** Controls the depth of the letters.
+* **--letterSmoothness:** Controls the smoothing between individual letters, wich are internally combined using a `SMOOTH_UNION` function. A value of 0 means no smoothing at all.
 
 ## Layers
 

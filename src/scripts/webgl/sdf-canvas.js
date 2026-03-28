@@ -60,7 +60,7 @@ class SdfCanvas {
             case SdfCanvas.ElementType.ROUND_BOX:
                 return 5;
             case SdfCanvas.ElementType.TEXT: // variable length
-                return element.getLength();
+                return element.getSize();
         }
     }
 
@@ -68,7 +68,7 @@ class SdfCanvas {
         const size = this.getElementSize(element);
 
         if (this.trackedElementsSize + size > SdfCanvas.MAX_SIZE_ELEMENT_BUFFER) {
-            throw f`Cannot track more elemtns than the maximum amount (${SdfCanvas.MAX_SIZE_ELEMENT_BUFFER}).`;
+            console.error(f`Cannot track more elemtns than the maximum amount (${SdfCanvas.MAX_SIZE_ELEMENT_BUFFER}).`);
         }
 
         this.trackedElements.push(element);
@@ -96,6 +96,17 @@ class SdfCanvas {
         })
     }
 
+    static updateTrackedElementSize(element, oldSize, newSize) {
+        // This method is only important for elements with variable size (e.g. TEXT)
+        if (this.trackedElementsSize - oldSize + newSize > SdfCanvas.MAX_SIZE_ELEMENT_BUFFER) {
+            console.error(f`ERROR: cannot increse the size of ${element} from ${oldSize} to ${newSize}. Current total size: ${this.trackedElementsSize}, max size: ${SdfCanvas.MAX_SIZE_ELEMENT_BUFFER}.`);
+            return oldSize;
+        }
+        this.trackedElementsSize -= oldSize;
+        this.trackedElementsSize += newSize;
+        return newSize;
+    }
+
     static sortTrackedElements() {
         this.trackedElements.sort((a, b) => (a.dataset.layerIndex - b.dataset.layerIndex));
 
@@ -110,7 +121,8 @@ class SdfCanvas {
         this.canvasName = canvasName;
         this.renderLayers = renderLayers;
         this.ready = false;
-        this.downscaleFactor = 2;
+        this.downscaleFactorX = 1;
+        this.downscaleFactorY = 10;
 
         this.cameraZ = 10;
         this.twoDMode = false;
@@ -374,11 +386,15 @@ class SdfCanvas {
 
             // don't inlcude empty strings
             if (isText && element.getNumberOfLetters() <= 0) {
+                element.updateSize();
+                this.geometryBuffer[elementIdx + 12] = SdfCanvas.intToFloatBits(elementType); // Element id
+                this.geometryBuffer[elementIdx + 13] = SdfCanvas.intToFloatBits(0); // amount of letters
+                elementIdx += SdfCanvas.getElementSize(element) * 4;
                 continue;
             }
 
             const rects = isText ? element.getWordRects() : null;
-            const rect = isText ? rects[0][1] : element.getBoundingClientRect();
+            const rect = element.getBoundingClientRect();
 
             const computedStyle = getComputedStyle(element);
             let mat = Matrix.parseMatrix(computedStyle.transform);
@@ -396,6 +412,8 @@ class SdfCanvas {
             mat[13] = offsetY; // + mat[13] * oneOverX;
             mat[14] = offsetZ + mat[14] * oneOverX; // for tx and ty this is covered by the boundingClientRect
             mat[15] = 1;
+
+            const originalTz = mat[14];
 
             // if I want the surface to be the top surface
             /* mat[12] -= mat[8] * halfDepth;
@@ -456,43 +474,59 @@ class SdfCanvas {
                     this.geometryBuffer[elementIdx + 16] = parseFloat(computedStyle.getPropertyValue("--r")) * oneOverX * 0.5; // border radius
                     break;
                 case SdfCanvas.ElementType.TEXT:
-                    // change the offset to be at the start of the word, instead of in the middle
-                    this.geometryBuffer[elementIdx + 9] = mat[12] + halfWidth; // tx
-                    this.geometryBuffer[elementIdx + 10] = mat[13] + halfHeight; // ty
-
+                    element.updateSize();
                     const numLetters = element.getNumberOfLetters();
                     this.geometryBuffer[elementIdx + 13] = SdfCanvas.intToFloatBits(numLetters); // amount of letters
                     this.geometryBuffer[elementIdx + 14] = 450 / halfHeight; // letter scale, 450 because 450 = 900 / 2 and haldHeight has the implicit 0.5 * ...
                     this.geometryBuffer[elementIdx + 15] = halfDepth; // depth 
-                    this.geometryBuffer[elementIdx + 16 + 3] = 0.002; // smoothness
+
+                    this.geometryBuffer[elementIdx + 16] = Math.max(parseFloat(computedStyle.getPropertyValue("--letterSmoothness")) * oneOverX, 0.0001); // smoothness between letters (this memory location always exists, since TEXT-elements with 0 letters are skipped)
+                    // this.geometryBuffer[elementIdx + 17] = 0; // unused (maybe later for font, e.g.) 
+                    // this.geometryBuffer[elementIdx + 18] = 0; // unused 
+                    // this.geometryBuffer[elementIdx + 19] = 0; // unused 
 
                     let inverseMat3 = Matrix.extractMat3FromMat4(mat);
-                    let currentTranslation = new Float32Array(3);
-                    const originalTz = mat[14];
+                    let wordCenterLocal = new Float32Array(3);
 
                     let letterIdx = 0;
                     for (let wordIdx = 0; wordIdx < rects.length; wordIdx++) {
                         const currentWord = rects[wordIdx];
-
                         const currentText = currentWord[0];
                         const currentRect = currentWord[1];
 
+                        // Get the screen/world space X and Y for the word's center
                         const currentOffsetX = (currentRect.left + currentRect.width * 0.5) * oneOverX;
                         const currentOffsetY = (currentRect.top + currentRect.height * 0.5) * oneOverX;
-                        const currentHalfWidth = element.measure(currentText) * 0.5 * oneOverX;
+
+                        const offsetX = (rect.left + rect.width * 0.5) * oneOverX;
+                        const offsetY = (rect.top + rect.height * 0.5) * oneOverX;
+
+                        // Solve for the exact World Z-depth of this specific word
+                        let offsetZ = originalTz; // Fallback in case the element is viewed perfectly edge-on
+                        const dx = currentOffsetX - offsetX;
+                        const dy = currentOffsetY - offsetY;
+
+                        if (Math.abs(mat[10]) > 1e-6) {
+                            offsetZ = originalTz + (-(mat[2] * dx + mat[6] * dy)) / mat[10];
+                        }
+
+                        // center the current word in world space and transform them into local space
+                        wordCenterLocal[0] = currentOffsetX;
+                        wordCenterLocal[1] = currentOffsetY;
+                        wordCenterLocal[2] = offsetZ;
+                        Matrix.mat3TimesVec3InPlace(inverseMat3, wordCenterLocal);
+
+                        // In local space, the word is unrotated and its own center is at (0,0).
+                        const wordLeftEdgeLocalX = -element.measure(currentText) * 0.5 * oneOverX; // currentHalfWidth
+                        const wordBottomEdgeLocalY = -halfHeight;
 
                         for (let currentLetterIdx = 0; currentLetterIdx < currentWord[0].length; currentLetterIdx++) {
                             const currentSubstringWidth = element.measure(currentText.substring(0, currentLetterIdx)) * oneOverX;
 
-                            currentTranslation[0] = currentOffsetX;
-                            currentTranslation[1] = currentOffsetY;
-                            currentTranslation[2] = originalTz;
-                            Matrix.mat3TimesVec3InPlace(inverseMat3, currentTranslation); // inv(v) = - inv(M) * v
-
-                            this.geometryBuffer[elementIdx + 16 + letterIdx * 4 + 0] = -currentTranslation[0] + currentHalfWidth - currentSubstringWidth;// offsetX
-                            this.geometryBuffer[elementIdx + 16 + letterIdx * 4 + 1] = -currentTranslation[1] + halfHeight; // offsetY
-                            this.geometryBuffer[elementIdx + 16 + letterIdx * 4 + 2] = 0; // letterCode
-
+                            this.geometryBuffer[elementIdx + 20 + letterIdx * 4 + 0] = -wordCenterLocal[0] - (wordLeftEdgeLocalX + currentSubstringWidth); // offsetX
+                            this.geometryBuffer[elementIdx + 20 + letterIdx * 4 + 1] = -wordCenterLocal[1] - wordBottomEdgeLocalY; // offsetY
+                            this.geometryBuffer[elementIdx + 20 + letterIdx * 4 + 2] = -wordCenterLocal[2]; // offsetZ
+                            this.geometryBuffer[elementIdx + 20 + letterIdx * 4 + 3] = SdfCanvas.intToFloatBits(currentText.charCodeAt(currentLetterIdx)); // letterCode (update this as needed)
                             letterIdx++;
                         }
                     }
@@ -512,19 +546,6 @@ class SdfCanvas {
 
             elementIdx += SdfCanvas.getElementSize(element) * 4;
         }
-
-        /* const rectvis = document.getElementById("rect-vis");
-
-        const element = SdfCanvas.trackedElements[0];
-        const rect = element.getBoundingClientRect();
-        const cs = getComputedStyle(element);
-
-        rectvis.style.top = rect.top + "px";
-        rectvis.style.left = rect.left + "px";
-        rectvis.style.width = (rect.right - rect.left) + "px";
-        rectvis.style.height = (rect.bottom - rect.top) + "px";
-
-        console.log(cs.transform); */
     }
 
     resizeCanvasToDisplaySize() {
@@ -537,8 +558,8 @@ class SdfCanvas {
 
         // 3. Apply your downscale factor to determine the WebGL rendering resolution
         // (Math.max is used to prevent the canvas from ever being 0x0 pixels)
-        const renderWidth = Math.max(1, Math.round(displayWidth / this.downscaleFactor));
-        const renderHeight = Math.max(1, Math.round(displayHeight / this.downscaleFactor));
+        const renderWidth = Math.max(1, Math.round(displayWidth / this.downscaleFactorX));
+        const renderHeight = Math.max(1, Math.round(displayHeight / this.downscaleFactorY));
 
         // 4. If the rendering resolution changed, update the canvas and viewport
         if (this.canvas.width !== renderWidth || this.canvas.height !== renderHeight) {

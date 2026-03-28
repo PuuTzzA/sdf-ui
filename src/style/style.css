@@ -61,6 +61,12 @@ html,
     initial-value: 10px;
 }
 
+@property --letterSmoothness {
+    syntax: "<length>";
+    inherits: true;
+    initial-value: 1px;
+}
+
 @property --border-radius-type {
     syntax: "<number>";
     inherits: false;
@@ -117,8 +123,17 @@ html,
 
 .sdf-ui-base-class {
     display: block;
-    /*     background-color: rgba(0, 0, 0, 0)!important;
- */
+    background-color: rgba(0, 0, 0, 0) !important;
+    color: rgba(0, 0, 0, 0) !important;
+}
+
+@font-face {
+    font-family: metaballs;
+    src: url(./fonts/metaball_font_big.ttf);
+}
+
+.sdf-ui-text-base-class {
+    font-family: metaballs;
 }
 
 /* @property --depth {
@@ -145,9 +160,9 @@ html,
     transform-origin: 0px 70px;
 
     --diffuse-color: blue;
-    --z: 10rem;
+    --z: 5rem;
 
-    --depth: 10rem;
+    --depth: 1rem;
     --r: 10rem;
 
     border-top-left-radius: 3rem;
@@ -176,17 +191,7 @@ html,
 
 #test-div:active {
     --diffuse-color: red;
-    /*     --specular-color: blue;
- */
-    /*     transform: translate(-50%, -50%) rotate(100deg);
- */
-    --z: 10;
-
-    /*     --specular-color: rgb(255, 255, 200);
-    --z: 0rem;
-    --kd: 0.1;
-    --ks: 0.1;
-    --ka: 0.1; */
+    --z: -5rem;
 }
 
 .test-class {
@@ -233,35 +238,42 @@ html,
     padding: 0.2rem;
 }
 
-@font-face {
-    font-family: metaballs;
-    src: url(./fonts/metaball_font_big.ttf);
-}
+
 
 .sdf-text {
-    margin-top: 10rem;
-    display: block;
-    font-family: metaballs;
-    /*     background-color: red;
- */
+    position: absolute;
+    top: 15rem;
+    left: 10rem;
+
     text-align: center;
-    font-size: 5rem;
+    font-size: 10rem;
     letter-spacing: 1rem;
     word-spacing: 10rem;
-    color: rgba(255, 255, 255, 0.5) !important;
-    /*     background-color: blue;
+    /*     color: rgba(255, 255, 255, 0.5) !important;
  */
-    width: 20rem;
-    transform: rotate(100deg);
+    --letterSmoothness: 0.1rem;
 
+    width: 20rem;
+    /*     transform: translateZ(1rem) rotateY(40deg) rotateX(30deg);
+ */
+    /*     transform: rotate(100deg);
+ */
     word-break: break-all;
 
-
+    /*     background-color: rgba(255, 0, 255, 0.2);
+ */
     --diffuse-color: red;
-    --depth: 10rem;
-    --z: 10;
+    --depth: 2rem;
+    --z: 1rem;
 }
 
-#lkj{
+.ddd {
+    left: 30rem;
+    height: 26rem;
+    /*     transform: rotate3d(1, 1, 1, 45deg) translateX(40rem);
+ */
+}
+
+#lkj {
     transform: rotate(-100deg);
 }

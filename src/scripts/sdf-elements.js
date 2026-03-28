@@ -83,10 +83,10 @@ class SdfText extends ASdfElement {
     connectedCallback() {
         super.connectedCallback();
 
+        this.classList.add("sdf-ui-text-base-class");
         this.textMeter = new TextMeter(this);
 
-        this.numWords = this.getWordRects().length;
-        this.numLetters = this.textContent.replace(/\s+/g, '').length;
+        this.size = this.getSize();
     }
 
     getElementType() {
@@ -97,9 +97,16 @@ class SdfText extends ASdfElement {
         return this.textContent.replace(/\s+/g, '').length;
     }
 
-    getLength() {
+    getSize() {
         // in amounts of vec4s
-        return 4 + this.getNumberOfLetters(); // each letter only needs x and y offset and letter code
+        return 5 + this.getNumberOfLetters(); // each letter only needs x and y offset and letter code
+    }
+
+    updateSize() {
+        const currentSize = this.getSize();
+        if (currentSize != this.size) {
+            this.size = SdfCanvas.updateTrackedElementSize(this, this.size, currentSize);
+        }
     }
 
     /***

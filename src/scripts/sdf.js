@@ -1,5 +1,4 @@
 import { SdfCanvas } from "./webgl/sdf-canvas.js";
-import { Matrix } from "./helper/matrix.js";
 
 const sdfCanvas = new SdfCanvas("canvas");
 sdfCanvas.initWebgl();
@@ -7,10 +6,12 @@ sdfCanvas.initWebgl();
 /* const sdfCanvas2 = new SdfCanvas("canvas2", [1]);
 sdfCanvas2.initWebgl(); */
 
-/* const testtext = document.querySelector(".sdf-text")
-console.log(testtext.getWordRects())
-console.log(testtext.textContent.replace(/\s+/g, '').length)
- */
+const testtext = document.querySelector("#test-sdf-text")
+
+document.getElementById("myInput").addEventListener("input", () => {
+    let text = document.getElementById("myInput").value;
+    testtext.innerHTML = text;
+});
 
 const compilingScreen = document.querySelector("#compiling-screen")
 const testDiv = document.querySelector("#test-div");
@@ -24,11 +25,11 @@ for (let i = 0; i < SIZE; i++) {
 let i = 0;
 
 let mousePos = [0, 0];
-window.addEventListener("mousemove", (e) => {
+/* window.addEventListener("mousemove", (e) => {
     mousePos = [e.clientX, e.clientY];
     testDiv.style.left = e.clientX + "px";
     testDiv.style.top = e.clientY + "px";
-});
+}); */
 
 let lastTime = performance.now();
 let fps = 0;
