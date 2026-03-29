@@ -122,7 +122,7 @@ class SdfCanvas {
         this.renderLayers = renderLayers;
         this.ready = false;
         this.downscaleFactorX = 1;
-        this.downscaleFactorY = 5;
+        this.downscaleFactorY = 10;
 
         this.cameraZ = 10;
         this.twoDMode = false;
@@ -476,8 +476,9 @@ class SdfCanvas {
                 case SdfCanvas.ElementType.TEXT:
                     element.updateSize();
                     const numLetters = element.getNumberOfLetters();
+                    const letterScale = 450 / halfHeight; // 450 because 450 = 900 / 2 and halfHeight has the implicit 0.5 * ...
                     this.geometryBuffer[elementIdx + 13] = SdfCanvas.intToFloatBits(numLetters); // amount of letters
-                    this.geometryBuffer[elementIdx + 14] = 450 / halfHeight; // letter scale, 450 because 450 = 900 / 2 and haldHeight has the implicit 0.5 * ...
+                    this.geometryBuffer[elementIdx + 14] = letterScale; // letter scale 
                     this.geometryBuffer[elementIdx + 15] = halfDepth; // depth 
 
                     this.geometryBuffer[elementIdx + 16] = Math.max(parseFloat(computedStyle.getPropertyValue("--letterSmoothness")) * oneOverX, 0.0001); // smoothness between letters (this memory location always exists, since TEXT-elements with 0 letters are skipped)
@@ -489,6 +490,7 @@ class SdfCanvas {
                     let wordCenterLocal = new Float32Array(3);
 
                     let letterIdx = 0;
+                    outerLoop:
                     for (let wordIdx = 0; wordIdx < rects.length; wordIdx++) {
                         const currentWord = rects[wordIdx];
                         const currentText = currentWord[0];
@@ -507,7 +509,7 @@ class SdfCanvas {
                         const dy = currentOffsetY - offsetY;
 
                         if (Math.abs(mat[10]) > 1e-6) {
-                            offsetZ = originalTz + (-(mat[2] * dx + mat[6] * dy)) / mat[10];
+                            offsetZ = originalTz + (-(inverseMat3[2] * dx + inverseMat3[5] * dy)) / inverseMat3[8];
                         }
 
                         // center the current word in world space and transform them into local space
@@ -521,13 +523,20 @@ class SdfCanvas {
                         const wordBottomEdgeLocalY = -halfHeight;
 
                         for (let currentLetterIdx = 0; currentLetterIdx < currentWord[0].length; currentLetterIdx++) {
-                            const currentSubstringWidth = element.measure(currentText.substring(0, currentLetterIdx)) * oneOverX;
+                            let currentSubstringWidth = element.measure(currentText.substring(0, currentLetterIdx)) * oneOverX;
+                            const currentLetterCode = currentText.charCodeAt(currentLetterIdx);
+                            if (currentLetterCode == 't'.charCodeAt(0)) {
+                                currentSubstringWidth += 45 / 2 / letterScale// * oneOverX;
+                            }
 
                             this.geometryBuffer[elementIdx + 20 + letterIdx * 4 + 0] = -wordCenterLocal[0] - (wordLeftEdgeLocalX + currentSubstringWidth); // offsetX
                             this.geometryBuffer[elementIdx + 20 + letterIdx * 4 + 1] = -wordCenterLocal[1] - wordBottomEdgeLocalY; // offsetY
                             this.geometryBuffer[elementIdx + 20 + letterIdx * 4 + 2] = -wordCenterLocal[2]; // offsetZ
-                            this.geometryBuffer[elementIdx + 20 + letterIdx * 4 + 3] = SdfCanvas.intToFloatBits(currentText.charCodeAt(currentLetterIdx)); // letterCode (update this as needed)
+                            this.geometryBuffer[elementIdx + 20 + letterIdx * 4 + 3] = SdfCanvas.intToFloatBits(currentLetterCode); // letterCode
                             letterIdx++;
+                            if (letterIdx >= numLetters) {
+                                break outerLoop;
+                            }
                         }
                     }
                     break;

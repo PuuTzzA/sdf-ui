@@ -367,7 +367,7 @@ float sds(in vec2 p) {
 
 float sdt(in vec2 p) {
     float t = sdRoundedBox2d(p + vec2(0., -350.), vec2(d / 2., 350.), vec4(d / 2.));
-    t = smin2d(sdRoundedBox2d(p + vec2(0., -500. - d / 4.), vec2(135. / 2., d / 2.), vec4(d / 2.)), t, d / 8.);
+    t = smin2d(sdRoundedBox2d(p + vec2(0., -500. - d / 2.), vec2(135. / 2., d / 2.), vec4(d / 2.)), t, d / 8.);
     return t;
 }
 
@@ -708,6 +708,48 @@ void setDistance(inout Surface destination, float distance) {
     destination.distance = distance;
 }
 
+float evaluateLetterDistance2d(int letterCode, vec2 p_sdf, float scale) {
+    switch (letterCode) {
+        case 48: return sd0(p_sdf) / scale;
+        case 49: return sd1(p_sdf) / scale;
+        case 50: return sd2(p_sdf) / scale;
+        case 51: return sd3(p_sdf) / scale;
+        case 52: return sd4(p_sdf) / scale;
+        case 53: return sd5(p_sdf) / scale;
+        case 54: return sd6(p_sdf) / scale;
+        case 55: return sd7(p_sdf) / scale;
+        case 56: return sd8(p_sdf) / scale;
+        case 57: return sd9(p_sdf) / scale;
+        case 97: return sda(p_sdf) / scale;
+        case 98: return sdb(p_sdf) / scale;
+        case 99: return sdc(p_sdf) / scale;
+        case 100: return sdd(p_sdf) / scale;
+        case 101: return sde(p_sdf) / scale;
+        case 102: return sdf(p_sdf) / scale;
+        case 103: return sdg(p_sdf) / scale;
+        case 104: return sdh(p_sdf) / scale;
+        case 105: return sdi(p_sdf) / scale;
+        case 106: return sdj(p_sdf) / scale;
+        case 107: return sdk(p_sdf) / scale;
+        case 108: return sdl(p_sdf) / scale;
+        case 109: return sdm(p_sdf) / scale;
+        case 110: return sdn(p_sdf) / scale;
+        case 111: return sdo(p_sdf) / scale;
+        case 112: return sdp(p_sdf + vec2(135.f, 0.f)) / scale;
+        case 113: return sdq(p_sdf) / scale;
+        case 114: return sdr(p_sdf) / scale;
+        case 115: return sds(p_sdf) / scale;
+        case 116: return sdt(p_sdf) / scale;
+        case 117: return sdu(p_sdf) / scale;
+        case 118: return sdv(p_sdf) / scale;
+        case 119: return sdw(p_sdf) / scale;
+        case 120: return sdx(p_sdf) / scale;
+        case 121: return sdy(p_sdf) / scale;
+        case 122: return sdz(p_sdf) / scale;
+        default: return sdNotDefined(p_sdf) / scale;
+    }
+}
+
 #define GENERATE_MAP_FUNCTION(FUNCTION_NAME, RETURN_TYPE)                                                                                       \
 RETURN_TYPE FUNCTION_NAME(vec3 p) {                                                                                                             \
     RETURN_TYPE result;                                                                                                                         \
@@ -802,121 +844,15 @@ RETURN_TYPE FUNCTION_NAME(vec3 p) {                                             
                                                                                                                                                 \
                         pos = (M * vec4(p, 1.f)).xyz;                                                                                           \
                         vec2 p_sdf = vec2(0.0, 700.0) - (pos.xy) * scale; /* from bottom-left to orign of "letter space" */                     \
-                        float dist2D = MAX_FLOAT;                                                                                               \
-                        switch (letterCode) {                                                                                                   \
-                            case 48:                                                                                                            \
-                                dist2D = sd0(p_sdf) / scale;                                                                                    \
-                                break;                                                                                                          \
-                            case 49:                                                                                                            \
-                                dist2D = sd1(p_sdf) / scale;                                                                                    \
-                                break;                                                                                                          \
-                            case 50:                                                                                                            \
-                                dist2D = sd2(p_sdf) / scale;                                                                                    \
-                                break;                                                                                                          \
-                            case 51:                                                                                                            \
-                                dist2D = sd3(p_sdf) / scale;                                                                                    \
-                                break;                                                                                                          \
-                            case 52:                                                                                                            \
-                                dist2D = sd4(p_sdf) / scale;                                                                                    \
-                                break;                                                                                                          \
-                            case 53:                                                                                                            \
-                                dist2D = sd5(p_sdf) / scale;                                                                                    \
-                                break;                                                                                                          \
-                            case 54:                                                                                                            \
-                                dist2D = sd6(p_sdf) / scale;                                                                                    \
-                                break;                                                                                                          \
-                            case 55:                                                                                                            \
-                                dist2D = sd7(p_sdf) / scale;                                                                                    \
-                                break;                                                                                                          \
-                            case 56:                                                                                                            \
-                                dist2D = sd8(p_sdf) / scale;                                                                                    \
-                                break;                                                                                                          \
-                            case 57:                                                                                                            \
-                                dist2D = sd9(p_sdf) / scale;                                                                                    \
-                                break;                                                                                                          \
-                            case 97:                                                                                                            \
-                                dist2D = sda(p_sdf) / scale;                                                                                    \
-                                break;                                                                                                          \
-                            case 98:                                                                                                            \
-                                dist2D = sdb(p_sdf) / scale;                                                                                    \
-                                break;                                                                                                          \
-                            case 99:                                                                                                            \
-                                dist2D = sdc(p_sdf) / scale;                                                                                    \
-                                break;                                                                                                          \
-                            case 100:                                                                                                           \
-                                dist2D = sdd(p_sdf) / scale;                                                                                    \
-                                break;                                                                                                          \
-                            case 101:                                                                                                           \
-                                dist2D = sde(p_sdf) / scale;                                                                                    \
-                                break;                                                                                                          \
-                            case 102:                                                                                                           \
-                                dist2D = sdf(p_sdf) / scale;                                                                                    \
-                                break;                                                                                                          \
-                            case 103:                                                                                                           \
-                                dist2D = sdg(p_sdf) / scale;                                                                                    \
-                                break;                                                                                                          \
-                            case 104:                                                                                                           \
-                                dist2D = sdh(p_sdf) / scale;                                                                                    \
-                                break;                                                                                                          \
-                            case 105:                                                                                                           \
-                                dist2D = sdi(p_sdf) / scale;                                                                                    \
-                                break;                                                                                                          \
-                            case 106:                                                                                                           \
-                                dist2D = sdj(p_sdf) / scale;                                                                                    \
-                                break;                                                                                                          \
-                            case 107:                                                                                                           \
-                                dist2D = sdk(p_sdf) / scale;                                                                                    \
-                                break;                                                                                                          \
-                            case 108:                                                                                                           \
-                                dist2D = sdl(p_sdf) / scale;                                                                                    \
-                                break;                                                                                                          \
-                            case 109:                                                                                                           \
-                                dist2D = sdm(p_sdf) / scale;                                                                                    \
-                                break;                                                                                                          \
-                            case 110:                                                                                                           \
-                                dist2D = sdn(p_sdf) / scale;                                                                                    \
-                                break;                                                                                                          \
-                            case 111:                                                                                                           \
-                                dist2D = sdo(p_sdf) / scale;                                                                                    \
-                                break;                                                                                                          \
-                            case 112:                                                                                                           \
-                                dist2D = sdp(p_sdf + vec2(135.f, 0.f)) / scale;                                                                 \
-                                break;                                                                                                          \
-                            case 113:                                                                                                           \
-                                dist2D = sdq(p_sdf) / scale;                                                                                    \
-                                break;                                                                                                          \
-                            case 114:                                                                                                           \
-                                dist2D = sdr(p_sdf) / scale;                                                                                    \
-                                break;                                                                                                          \
-                            case 115:                                                                                                           \
-                                dist2D = sds(p_sdf) / scale;                                                                                    \
-                                break;                                                                                                          \
-                            case 116:                                                                                                           \
-                                dist2D = sdt(p_sdf) / scale;                                                                                    \
-                                break;                                                                                                          \
-                            case 117:                                                                                                           \
-                                dist2D = sdu(p_sdf) / scale;                                                                                    \
-                                break;                                                                                                          \
-                            case 118:                                                                                                           \
-                                dist2D = sdv(p_sdf) / scale;                                                                                    \
-                                break;                                                                                                          \
-                            case 119:                                                                                                           \
-                                dist2D = sdw(p_sdf) / scale;                                                                                    \
-                                break;                                                                                                          \
-                            case 120:                                                                                                           \
-                                dist2D = sdx(p_sdf) / scale;                                                                                    \
-                                break;                                                                                                          \
-                            case 121:                                                                                                           \
-                                dist2D = sdy(p_sdf) / scale;                                                                                    \
-                                break;                                                                                                          \
-                            case 122:                                                                                                           \
-                                dist2D = sdz(p_sdf) / scale;                                                                                    \
-                                break;                                                                                                          \
-                            default:                                                                                                            \
-                                dist2D = sdNotDefined(p_sdf) / scale;                                                                           \
-                                break;                                                                                                          \
+                        float dist2d = MAX_FLOAT;                                                                                               \
+                        if (letterCode == 46) { /* The '.' glyph is an actual 3d sphere, not an extruded 2d element */                          \
+                            float radius = 22.5 / scale;                                                                                        \
+                            vec3 offset = vec3(-radius, -700.0 / scale + radius, radius);                                                        \
+                            sdValue = opSmoothUnion(sdSphere(pos + offset, radius), sdValue, smoothness);                                       \
+                        } else {                                                                                                                \
+                            dist2d = evaluateLetterDistance2d(letterCode, p_sdf, scale);                                                        \
+                            sdValue = opSmoothUnion(opExtrusion(pos, dist2d, depth), sdValue, smoothness);                                      \
                         }                                                                                                                       \
-                        sdValue = opSmoothUnion(opExtrusion(pos, dist2D, depth), sdValue, smoothness);                                          \
                     }                                                                                                                           \
                     elementIdx += 5 + numLetters;                                                                                               \
             }                                                                                                                                   \
@@ -1010,7 +946,7 @@ HitInfo trace(vec3 ro, vec3 rd) {
 
     int directionalDerivativeZero = 0;
 
-    for (int i = 0; i < 200; i++) {
+    for (int i = ZERO; i < 200; i++) {
         // Intersection found if raymarching
         bool raymarchingIntersection = rCurr < 0.0f;
         if (raymarchingIntersection) {
@@ -1090,7 +1026,7 @@ HitInfo trace(vec3 ro, vec3 rd) {
 // ╚══════════════════════════════════════════════════════════╝
 float shadow(in vec3 ro, in vec3 rd, float mint, float maxt) {
     float t = mint;
-    for (int i = 0; i < 256 && t < maxt; i++) {
+    for (int i = ZERO; i < 256 && t < maxt; i++) {
         float h = map(ro + rd * t);
         if (h < EPSILON)
             return 0.0f;
@@ -1103,7 +1039,7 @@ float shadow(in vec3 ro, in vec3 rd, float mint, float maxt) {
 float softshadow(in vec3 ro, in vec3 rd, float mint, float maxt, float w) {
     float res = 1.0f;
     float t = mint;
-    for (int i = 0; i < 256 && t < maxt; i++) {
+    for (int i = ZERO; i < 256 && t < maxt; i++) {
         float h = map(ro + t * rd);
         res = min(res, h / (w * t));
         t += clamp(h, 0.005f, 0.50f);
@@ -1117,7 +1053,7 @@ float softshadow(in vec3 ro, in vec3 rd, float mint, float maxt, float w) {
 float calcSoftshadow(in vec3 ro, in vec3 rd, float tmin, float tmax, const float k) {
     float res = 1.0f;
     float t = tmin;
-    for (int i = 0; i < 50; i++) {
+    for (int i = ZERO; i < 50; i++) {
         float h = map(ro + rd * t);
         res = min(res, k * h / t);
         t += clamp(h, 0.02f, 0.20f);

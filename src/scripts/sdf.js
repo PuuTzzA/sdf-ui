@@ -31,6 +31,8 @@ let mousePos = [0, 0];
     testDiv.style.top = e.clientY + "px";
 }); */
 
+const loadStartTime = performance.now();
+let firstTime = true;
 let lastTime = performance.now();
 let fps = 0;
 
@@ -51,7 +53,12 @@ function gameLoop(now) {
 
     // Draw Scene
     if (sdfCanvas.ready) {
-        compilingScreen.remove();
+        if (firstTime) {
+            compilingScreen.remove();
+            const loadTime = performance.now() - loadStartTime; 
+            console.log("Until everything setup: " + (loadTime / 60000).toFixed(4) +   " minutes, (" + loadTime.toFixed(4) + "ms)")
+            firstTime = false;
+        }
         sdfCanvas.draw();
     }
 
