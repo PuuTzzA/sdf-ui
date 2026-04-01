@@ -25,11 +25,11 @@ for (let i = 0; i < SIZE; i++) {
 let i = 0;
 
 let mousePos = [0, 0];
-/* window.addEventListener("mousemove", (e) => {
+window.addEventListener("mousemove", (e) => {
     mousePos = [e.clientX, e.clientY];
     testDiv.style.left = e.clientX + "px";
     testDiv.style.top = e.clientY + "px";
-}); */
+});
 
 const loadStartTime = performance.now();
 let firstTime = true;

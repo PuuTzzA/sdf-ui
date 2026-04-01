@@ -10,12 +10,17 @@ precision highp float;
 // ╔══════════════════════════════════════════════════════════╗
 // ║                       UNIFORMS                           ║
 // ╚══════════════════════════════════════════════════════════╝
+layout (std140) uniform CommandBlock {
+    ivec4 commandData[MAX_SIZE_ELEMENT_BUFFER];
+};
 layout (std140) uniform GeometryBlock {
     vec4 geometryData[MAX_SIZE_ELEMENT_BUFFER];
 };
 layout (std140) uniform ShadingBlock {
     vec4 shadingData[MAX_SIZE_ELEMENT_BUFFER];
 };
+
+uniform int uNumCommands;
 
 uniform vec2 uResolution;
 uniform float uTopOffset;
@@ -30,6 +35,11 @@ uniform int uLayerOperations[MAX_LAYERS];
 uniform int uElementsInLayer[MAX_LAYERS];
 uniform float uSmoothingFactors[MAX_LAYERS];
 uniform int uNumLayers;
+
+// Uniforms for the Glyph Texture
+uniform highp sampler2DArray uSdfArray;
+uniform vec2 uBoxMin; 
+uniform vec2 uBoxMax;
 
 // ╔══════════════════════════════════════════════════════════╗
 // ║              SHADER INPUT, OUTPUT, STRUCTS               ║
@@ -169,351 +179,6 @@ float opExtrusion(in vec3 p, in float sdf, in float h) {
 
 float opRound(in float primitive, in float rad) {
     return primitive - rad;
-}
-
-// ╔══════════════════════════════════════════════════════════╗
-// ║                     SDF of letters                       ║
-// ╚══════════════════════════════════════════════════════════╝
-const float d = 45.; // stroke width
-const float _h = 365.; // verical length of straight lines that have a halve circe on both sides  (e.g. straight section in c)
-const float pi = 3.1415926535897932384626433832795;
-
-vec2 rotate2d(vec2 v, float a) {
-    float s = sin(a);
-    float c = cos(a);
-    mat2 m = mat2(c, s, -s, c);
-    return m * v;
-}
-
-float smin2d(float a, float b, float k) {
-    k *= 1.0 / (1.0 - sqrt(0.5));
-    float h = max(k - abs(a - b), 0.0) / k;
-    return min(a, b) - k * 0.5 * (1.0 + h - sqrt(1.0 - h * (h - 2.0)));
-}
-
-float sdCircle2d(vec2 p, float r) {
-    return length(p) - r;
-}
-
-float sdBox2d(in vec2 p, in vec2 b) {
-    vec2 d = abs(p) - b;
-    return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
-}
-
-float sdRoundedBox2d(in vec2 p, in vec2 b, in vec4 r) {
-    r.xy = (p.x > 0.0) ? r.xy : r.zw;
-    r.x = (p.y > 0.0) ? r.x : r.y;
-    vec2 q = abs(p) - b + r.x;
-    return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r.x;
-}
-
-float sdRing2d(in vec2 p, in vec2 n, in float r, float th) {
-    p.x = abs(p.x);
-
-    p = mat2x2(n.x, n.y, -n.y, n.x) * p;
-
-    return max(abs(length(p) - r) - th * 0.5, length(vec2(p.x, max(0.0, abs(r - p.y) - th * 0.5))) * sign(p.x));
-}
-
-float sda(in vec2 p) {
-    float a = sdRing2d(p + vec2(d * 1.5, -_h - d * 1.5), vec2(cos(pi / 2.), sin(pi / 2.)), d, d); // ring top
-    a = min(sdRoundedBox2d(p + vec2(d / 2., -d * 1.5 - _h + 115. / 2.), vec2(d / 2., 115. / 2.), vec4(0., d / 2., 0., d / 2.)), a);
-    a = min(sdBox2d(p + vec2(d * 2.5, -_h / 2. - d * 1.5), vec2(d / 2., _h / 2.)), a); // rectangle right
-    a = min(sdRing2d(p + vec2(d * 1.5, -d * 1.5), vec2(cos(pi / -2.), sin(pi / -2.)), d, d), a); // ring bottom
-    a = smin2d(sdBox2d(p + vec2(d * 1.75, -137.5 - d * 2.5), vec2(d / 4., d / 2.)), a, d / 8.); // small rectangle middle
-    a = min(sdBox2d(p + vec2(d / 2., -137.5 / 2. - d * 1.5), vec2(d / 2., 137.5 / 2.)), a); // rectangle left bottom
-    a = min(sdRing2d(rotate2d(p + vec2(d * 1.5, -137.5 - d * 1.5), pi / 4.), vec2(cos(pi / 4.), sin(pi / 4.)), d, d), a); // quarter ring
-    return a;
-}
-
-float sdb(in vec2 p) {
-    float b = sdRing2d(p + vec2(d * 1.5, -d * 1.5), vec2(cos(pi / -2.), sin(pi / -2.)), d, d); // ring bottom
-    b = min(sdRoundedBox2d(p + vec2(d / 2., -632.5 / 2. - d * 1.5), vec2(d / 2., 632.5 / 2.), vec4(d / 2., 0., d / 2., 0.)), b); // rectangle left
-    b = smin2d(sdBox2d(p + vec2(d * 1.25, -_h - d * 2.5), vec2(d / 4., d / 2.)), b, d / 8.); // small rectangle middle
-    b = min(sdBox2d(p + vec2(d * 2.5, -_h / 2. - d * 1.5), vec2(d / 2., _h / 2.)), b); // rectangle left
-    b = min(sdRing2d(rotate2d(p + vec2(d * 1.5, -_h - d * 1.5), -pi / 4.), vec2(cos(pi / 4.), sin(pi / 4.)), d, d), b); // quarter ring
-    return b;
-}
-
-float sdc(in vec2 p) {
-    float c = sdRing2d(p + vec2(d * 1.5, -d * 1.5), vec2(cos(pi / -2.), sin(pi / -2.)), d, d); // ring bottom
-    c = min(sdBox2d(p + vec2(d / 2., -_h / 2. - d * 1.5), vec2(d / 2., _h / 2.)), c); // rectangle left
-    c = min(sdRing2d(p + vec2(d * 1.5, -_h - d * 1.5), vec2(cos(pi / 2.), sin(pi / 2.)), d, d), c); // ring top
-    c = min(sdRoundedBox2d(p + vec2(d * 2.5, -d * 2.25), vec2(d / 2., d * 0.75), vec4(d / 2., 0., d / 2., 0.)), c); // box bottom
-    c = min(sdRoundedBox2d(p + vec2(d * 2.5, -_h - d * 0.75), vec2(d / 2., d * 0.75), vec4(0., d / 2., 0., d / 2.)), c); // box top
-    return c;
-}
-
-float sdd(in vec2 p) {
-    return sdb(p * vec2(-1., 1.) + vec2(-d * 3., 0.));
-}
-
-float sde(in vec2 p) {
-    return sda(p * vec2(-1., -1.) + vec2(-d * 3., d * 3. + _h));
-}
-
-float sdf(in vec2 p) {
-    float f = sdRoundedBox2d(p + vec2(d / 2., -632.5 / 2.), vec2(d / 2., 632.5 / 2.), vec4(0., d / 2., 0., d / 2.)); // rectangle
-    f = min(sdRing2d(p + vec2(d * 1.5, -632.5), vec2(cos(pi / 2.), sin(pi / 2.)), d, d), f); // ring top
-    f = min(sdRoundedBox2d(p + vec2(d * 2.5, -632.5 + d / 2.), vec2(d / 2., d / 2.), vec4(0., d / 2., 0., d / 2.)), f); // box bottom
-    f = smin2d(sdRoundedBox2d(p + vec2(d * 1.5 - d, -545. + d / 2.), vec2(d * 1.5, d / 2.), vec4(d / 2.)), f, d / 8.); // crossbar
-    return f;
-}
-
-float sdg(in vec2 p) {
-    float g = sdRing2d(p + vec2(d * 1.5, -432.5), vec2(cos(pi / 2.), sin(pi / 2.)), d, d); // ring top
-    g = min(sdBox2d(p + vec2(d * 2.5, -150.), vec2(d / 2., 565. / 2.)), g); // rectangle right
-    g = smin2d(sdBox2d(p + vec2(d * 1.75, -d / 2.), vec2(d / 4., d / 2.)), g, d / 8.); // rectangle bot
-    g = min(sdRing2d(rotate2d(p + vec2(d * 1.5, d * -1.5), pi * 0.75), vec2(cos(pi / 4.), sin(pi / 4.)), d, d), g); // quarter ring
-    g = min(sdBox2d(p + vec2(d / 2., -_h / 2. - d * 1.5), vec2(d / 2., _h / 2.)), g); // rectangle left
-    g = min(sdRing2d(p + vec2(d * 1.5, 132.5), vec2(cos(pi / -2.), sin(pi / -2.)), d, d), g); // ring bottom
-    g = min(sdRoundedBox2d(p + vec2(d / 2., 132.5 - d / 2.), vec2(d / 2., d * 0.75), vec4(d / 2., 0., d / 2., 0.)), g); // box bottom
-    return g;
-}
-
-float sdh(in vec2 p) {
-    float h = sdRoundedBox2d(p + vec2(d / 2., -700. / 2.), vec2(d / 2., 700. / 2.), vec4(d / 2.)); // rectangle left
-    h = smin2d(sdBox2d(p + vec2(d * 1.25, -_h - d * 2.5), vec2(d / 4., d / 2.)), h, d / 8.); // small rectangle middle
-    h = min(sdRoundedBox2d(p + vec2(d * 2.5, -432.5 / 2.), vec2(d / 2., 432.5 / 2.), vec4(0., d / 2., 0., d / 2.)), h); // rectangle left
-    h = min(sdRing2d(rotate2d(p + vec2(d * 1.5, -_h - d * 1.5), -pi / 4.), vec2(cos(pi / 4.), sin(pi / 4.)), d, d), h); // quarter ring
-    return h;
-}
-
-float sdi(in vec2 p) {
-    float i = sdRoundedBox2d(p + vec2(d / 2., -250.), vec2(d / 2., 250.), vec4(d / 2.));
-    i = min(sdCircle2d(p + vec2(d / 2., -500. - d * 1.5), d / 2.), i);
-    return i;
-}
-
-float sdj(in vec2 p) {
-    float j = sdRoundedBox2d(p + vec2(d / 2., -183.75), vec2(d / 2., 632.5 / 2.), vec4(d / 2., 0., d / 2., 0.));
-    j = min(sdRing2d(p + vec2(d * -0.5, 132.5), vec2(cos(pi / -2.), sin(pi / -2.)), d, d), j); // ring bottom
-    j = min(sdRoundedBox2d(p + vec2(-d * 1.5, 98.75), vec2(d / 2., d * 0.75), vec4(d / 2., 0., d / 2., 0.)), j); // box bottom
-    j = min(sdCircle2d(p + vec2(d / 2., -500. - d * 1.5), d / 2.), j);
-    return j;
-}
-
-float sdk(in vec2 p) {
-    float k = sdRoundedBox2d(p + vec2(d / 2., -350.), vec2(d / 2., 350.), vec4(d / 2.));
-    k = smin2d(sdBox2d(p + vec2(d * 1.25, -295. - d), vec2(d / 4., d / 2.)), k, d / 8.);
-    k = smin2d(sdBox2d(p + vec2(d * 1.25, -295. + d), vec2(d / 4., d / 2.)), k, d / 8.);
-    k = min(sdRoundedBox2d(p + vec2(d * 2.5, -102.5), vec2(d / 2., 102.5), vec4(0., d / 2., 0., d / 2.)), k);
-    k = min(sdRing2d(rotate2d(p + vec2(d * 1.5, -137.5 - d * 1.5), pi / -4.), vec2(cos(pi / 4.), sin(pi / 4.)), d, d), k); // quarter ring
-    k = min(sdRing2d(rotate2d(p + vec2(d * 1.5, -137.5 - d * 5.5), pi * 1.25), vec2(cos(pi / 4.), sin(pi / 4.)), d, d), k); // quarter ring
-    k = min(sdRoundedBox2d(p + vec2(d * 2.5, -385. - 115. / 2.), vec2(d / 2., 115. / 2.), vec4(d / 2., 0., d / 2., 0.)), k);
-    return k;
-}
-
-float sdl(in vec2 p) {
-    return sdRoundedBox2d(p + vec2(d / 2., -350.), vec2(d / 2., 350.), vec4(d / 2.));
-}
-
-float sdm(in vec2 p) {
-    float m = sdRoundedBox2d(p + vec2(d / 2., -432.5 / 2.), vec2(d / 2., 432.5 / 2.), vec4(0, d / 2., 0., d / 2.));
-    m = min(sdBox2d(p + vec2(d * 2.5, -432.5 - d), vec2(d, d * 0.5)), m);
-    m = smin2d(sdRoundedBox2d(p + vec2(d * 2.5, -455. / 2.), vec2(d / 2., 455. / 2.), vec4(0, d / 2., 0., d / 2.)), m, d / 8.);
-    m = min(sdRing2d(rotate2d(p + vec2(d * 1.5, -432.5), pi / 4.), vec2(cos(pi / 4.), sin(pi / 4.)), d, d), m); // quarter ring
-    m = min(sdRing2d(rotate2d(p + vec2(d * 3.5, -432.5), pi / -4.), vec2(cos(pi / 4.), sin(pi / 4.)), d, d), m); // quarter ring
-    m = min(sdRoundedBox2d(p + vec2(d * 4.5, -432.5 / 2.), vec2(d / 2., 432.5 / 2.), vec4(0, d / 2., 0., d / 2.)), m);
-    return m;
-}
-
-float sdn(in vec2 p) {
-    float n = sdRoundedBox2d(p + vec2(d / 2., -432.5 / 2.), vec2(d / 2., 432.5 / 2.), vec4(0, d / 2., 0., d / 2.));
-    n = min(sdRoundedBox2d(p + vec2(d * 2.5, -432.5 / 2.), vec2(d / 2., 432.5 / 2.), vec4(0, d / 2., 0., d / 2.)), n);
-    n = min(sdRing2d(p + vec2(d * 1.5, -_h - d * 1.5), vec2(cos(pi / 2.), sin(pi / 2.)), d, d), n); // ring top
-    return n;
-}
-
-float sdo(in vec2 p) {
-    float c = sdRing2d(p + vec2(d * 1.5, -d * 1.5), vec2(cos(pi / -2.), sin(pi / -2.)), d, d); // ring bottom
-    c = min(sdBox2d(p + vec2(d / 2., -_h / 2. - d * 1.5), vec2(d / 2., _h / 2.)), c); // rectangle left
-    c = min(sdRing2d(p + vec2(d * 1.5, -_h - d * 1.5), vec2(cos(pi / 2.), sin(pi / 2.)), d, d), c); // ring top
-    c = min(sdBox2d(p + vec2(d * 2.5, -_h / 2. - d * 1.5), vec2(d / 2., _h / 2.)), c); // rectangle right
-    return c;
-}
-
-float sdq(in vec2 p) {
-    float g = sdRing2d(p + vec2(d * 1.5, -432.5), vec2(cos(pi / 2.), sin(pi / 2.)), d, d); // ring top
-    g = min(sdRoundedBox2d(p + vec2(d * 2.5, -116.25), vec2(d / 2., 632.5 / 2.), vec4(0., d / 2., 0., d / 2.)), g); // rectangle right
-    g = smin2d(sdBox2d(p + vec2(d * 1.75, -d / 2.), vec2(d / 4., d / 2.)), g, d / 8.); // rectangle bot
-    g = min(sdRing2d(rotate2d(p + vec2(d * 1.5, d * -1.5), pi * 0.75), vec2(cos(pi / 4.), sin(pi / 4.)), d, d), g); // quarter ring
-    g = min(sdBox2d(p + vec2(d / 2., -_h / 2. - d * 1.5), vec2(d / 2., _h / 2.)), g); // rectangle left
-    return g;
-}
-
-float sdp(in vec2 p) {
-    return sdq(p * vec2(-1., 1.));
-}
-
-float sdr(in vec2 p) {
-    float m = sdRoundedBox2d(p + vec2(d / 2., -432.5 / 2.), vec2(d / 2., 432.5 / 2.), vec4(0, d / 2., 0., d / 2.));
-    m = min(sdRing2d(rotate2d(p + vec2(d * 1.5, -432.5), pi / 4.), vec2(cos(pi / 4.), sin(pi / 4.)), d, d), m); // quarter ring
-    m = min(sdCircle2d(p + vec2(d * 1.5, -500. + d / 2.), d / 2.), m);
-    return m;
-}
-
-float sds(in vec2 p) {
-    float c = sdRing2d(p + vec2(d * 1.5, -d * 1.5), vec2(cos(pi / -2.), sin(pi / -2.)), d, d); // ring bottom
-    c = min(sdBox2d(p + vec2(d / 2., -342.5 - d), vec2(d / 2., d)), c);
-    c = min(sdBox2d(p + vec2(d * 2.5, -67.5 - 185. / 2.), vec2(d / 2., 185. / 2.)), c);
-    c = min(sdRing2d(p + vec2(d * 1.5, -_h - d * 1.5), vec2(cos(pi / 2.), sin(pi / 2.)), d, d), c); // ring top
-    c = min(sdRoundedBox2d(p + vec2(d * 0.5, -67.5 - 162.5 / 2.), vec2(d / 2., 162.5 / 2.), vec4(d / 2., 0., d / 2., 0.)), c); // box bottom
-    c = min(sdRoundedBox2d(p + vec2(d * 2.5, -_h - d * 0.75), vec2(d / 2., d * 0.75), vec4(0., d / 2., 0., d / 2.)), c); // box top
-    c = min(sdRing2d(rotate2d(p + vec2(d * 1.5, -252.5 - d * 2.), pi * 0.75), vec2(cos(pi / 4.), sin(pi / 4.)), d, d), c);
-    c = min(sdRing2d(rotate2d(p + vec2(d * 1.5, -252.5), pi * -0.25), vec2(cos(pi / 4.), sin(pi / 4.)), d, d), c);
-    return c;
-}
-
-float sdt(in vec2 p) {
-    float t = sdRoundedBox2d(p + vec2(0., -350.), vec2(d / 2., 350.), vec4(d / 2.));
-    t = smin2d(sdRoundedBox2d(p + vec2(0., -500. - d / 2.), vec2(135. / 2., d / 2.), vec4(d / 2.)), t, d / 8.);
-    return t;
-}
-
-float sdu(in vec2 p) {
-    return sdn(p * -1. + vec2(d * -3., 500.));
-}
-
-float sdv(in vec2 p) {
-    return sdn(p * -1. + vec2(d * -3., 500.));
-}
-
-float sdw(in vec2 p) {
-    return sdm(p * vec2(1., -1.) + vec2(0., 500.));
-}
-
-float sdx(in vec2 p) {
-    float n = sdRoundedBox2d(p + vec2(d / 2., -80.), vec2(d / 2., 80.), vec4(0, d / 2., 0., d / 2.));
-    n = min(sdRoundedBox2d(p + vec2(d * 2.5, -80.), vec2(d / 2., 80.), vec4(0, d / 2., 0., d / 2.)), n);
-    n = min(sdRing2d(p + vec2(d * 1.5, -80. - d * 1.5), vec2(cos(pi / 2.), sin(pi / 2.)), d, d), n); // ring bottom
-    n = min(sdRing2d(p + vec2(d * 1.5, -272.5 - d * 1.5), vec2(cos(pi / -2.), sin(pi / -2.)), d, d), n); // ring top
-    n = min(sdRoundedBox2d(p + vec2(d * .5, -80. - 340.), vec2(d / 2., 80.), vec4(d / 2., 0., d / 2., 0.)), n);
-    n = min(sdRoundedBox2d(p + vec2(d * 2.5, -80. - 340.), vec2(d / 2., 80.), vec4(d / 2., 0., d / 2., 0.)), n);
-    return n;
-}
-
-float sdy(in vec2 p) {
-    float g = sdRoundedBox2d(p + vec2(d * 2.5, -150.), vec2(d / 2., 350.), vec4(d / 2.)); // rectangle right
-    g = smin2d(sdBox2d(p + vec2(d * 1.75, -d / 2.), vec2(d / 4., d / 2.)), g, d / 8.); // rectangle bot
-    g = min(sdRing2d(rotate2d(p + vec2(d * 1.5, d * -1.5), pi * 0.75), vec2(cos(pi / 4.), sin(pi / 4.)), d, d), g); // quarter ring
-    g = min(sdRoundedBox2d(p + vec2(d / 2., -432.5 / 2. - d * 1.5), vec2(d / 2., 432.5 / 2.), vec4(d / 2., 0., d / 2., 0.)), g); // rectangle left
-    return g;
-}
-
-float sdz(in vec2 p) {
-    float c = sdRoundedBox2d(p + vec2(67.5 / 2., -500. + d / 2.), vec2(67.5 / 2., d / 2.), vec4(d / 2., d / 2., 0., 0.)); // ring bottom
-    c = min(sdBox2d(p + vec2(d * 2.5, -342.5 - d), vec2(d / 2., d)), c);
-    c = min(sdBox2d(p + vec2(d * 0.5, -67.5 - 185. / 2.), vec2(d / 2., 185. / 2.)), c);
-    c = min(sdRing2d(rotate2d(p + vec2(d * 1.5, -252.5 - d * 2.), pi * -0.75), vec2(cos(pi / 4.), sin(pi / 4.)), d, d), c);
-    c = min(sdRing2d(rotate2d(p + vec2(d * 1.5, -252.5), pi * 0.25), vec2(cos(pi / 4.), sin(pi / 4.)), d, d), c);
-    c = min(sdRoundedBox2d(p + vec2(67.5  * 1.5, -d / 2.), vec2(67.5 / 2., d / 2.), vec4(0., 0., d / 2., d / 2.)), c);
-    c = min(sdRing2d(rotate2d(p + vec2(d * 1.5, -500. + d * 1.5), pi * -0.25), vec2(cos(pi / 4.), sin(pi / 4.)), d, d), c);
-    c = min(sdRing2d(rotate2d(p + vec2(d * 1.5, -d * 1.5), pi * 0.75), vec2(cos(pi / 4.), sin(pi / 4.)), d, d), c);
-    return c;
-}
-
-float sd1(in vec2 p) {
-    return sdl(p);
-}
-
-float sd2(in vec2 p) {
-    float c = sdRoundedBox2d(p + vec2(67.5 / 2., -700. + d / 2.), vec2(67.5 / 2., d / 2.), vec4(d / 2., d / 2., 0., 0.));
-    c = min(sdRing2d(rotate2d(p + vec2(d * 1.5, -700. + d * 1.5), pi * -0.25), vec2(cos(pi / 4.), sin(pi / 4.)), d, d), c);
-    c = min(sdBox2d(p + vec2(d * 2.5, -566.25), vec2(d / 2., 66.25)), c);
-    c = min(sdRing2d(rotate2d(p + vec2(d * 1.5, -500.), pi * -0.75), vec2(cos(pi / 4.), sin(pi / 4.)), d, d), c);
-    c = min(sdRing2d(rotate2d(p + vec2(d * 1.5, -500. + 67.5 + 45./2.), pi * 0.25), vec2(cos(pi / 4.), sin(pi / 4.)), d, d), c);
-    c = min(sdBox2d(p + vec2(d * 0.5, -342.5 / 2. - 67.5), vec2(d / 2., 342.5 / 2.)), c);
-    c = min(sdRoundedBox2d(p + vec2(67.5  * 1.5, -d / 2.), vec2(67.5 / 2., d / 2.), vec4(0., 0., d / 2., d / 2.)), c);
-    c = min(sdRing2d(rotate2d(p + vec2(d * 1.5, -d * 1.5), pi * 0.75), vec2(cos(pi / 4.), sin(pi / 4.)), d, d), c);
-    return c;
-}
-
-float sdE(in vec2 p) {
-    float c = sdRoundedBox2d(p + vec2(67.5  * 1.5, -700. + d / 2.), vec2(67.5 / 2., d / 2.), vec4(0., 0., d / 2., d / 2.));
-    c = min(sdRing2d(rotate2d(p + vec2(d * 1.5, -700. + d * 1.5), pi * 0.25), vec2(cos(pi / 4.), sin(pi / 4.)), d, d), c);
-    c = min(sdBox2d(p + vec2(d * 0.5, -565. / 2. - 67.5), vec2(d / 2., 565. / 2.)), c);
-    c = smin2d(sdBox2d(p + vec2(d * 1.25, -455.), vec2(d / 4., d / 2.)), c, d / 8.);
-    c = min(sdRoundedBox2d(p + vec2(67.5 + d / 2., -500. + d), vec2(d / 2.), vec4(0., 0., d / 2., d / 2.)), c);
-    c = min(sdRoundedBox2d(p + vec2(67.5  * 1.5, -d / 2.), vec2(67.5 / 2., d / 2.), vec4(0., 0., d / 2., d / 2.)), c);
-    c = min(sdRing2d(rotate2d(p + vec2(d * 1.5, -d * 1.5), pi * 0.75), vec2(cos(pi / 4.), sin(pi / 4.)), d, d), c);
-    return c;
-}
-
-float sd3(in vec2 p) {
-    return sdE((p * vec2(-1., 1.) - vec2(135., 0.)));
-}
-
-float sd4(in vec2 p) {
-    float g = sdRoundedBox2d(p + vec2(d * 2.5, -350.), vec2(d / 2., 350.), vec4(d / 2.)); // rectangle right
-    g = smin2d(sdBox2d(p + vec2(d * 1.75, -500. + d), vec2(d / 4., d / 2.)), g, d / 8.); 
-    g = min(sdRing2d(rotate2d(p + vec2(d * 1.5, -500.), pi * 0.75), vec2(cos(pi / 4.), sin(pi / 4.)), d, d), g); // quarter ring
-    g = min(sdRoundedBox2d(p + vec2(d / 2., -600.), vec2(d / 2., 100.), vec4(d / 2., 0., d / 2., 0.)), g); // rectangle left
-    return g;
-}
-
-float sd5(in vec2 p) {
-    float c = sdRing2d(p + vec2(d * 1.5, -d * 1.5), vec2(cos(pi / -2.), sin(pi / -2.)), d, d); // ring bottom
-    c = min(sdRoundedBox2d(p + vec2(d * 0.5, -67.5 * 1.5), vec2(d / 2., 67.5 / 2.), vec4(d / 2., 0., d / 2., 0.)), c); // box bottom
-    c = min(sdBox2d(p + vec2(d * 2.5, -67.5 - 342.5 / 2.), vec2(d / 2., 342.5 / 2.)), c);
-    c = min(sdRing2d(rotate2d(p + vec2(d * 1.5, -342.5 - 67.5 - d * 2.), pi * 0.75), vec2(cos(pi / 4.), sin(pi / 4.)), d, d), c);
-    c = min(sdRing2d(rotate2d(p + vec2(d * 1.5, -342.5 - 67.5), pi * -0.25), vec2(cos(pi / 4.), sin(pi / 4.)), d, d), c);
-    c = min(sdBox2d(p + vec2(d / 2., -566.25), vec2(d / 2., 66.25)), c);
-    c = min(sdRing2d(rotate2d(p + vec2(d * 1.5, -700. + d * 1.5), pi * 0.25), vec2(cos(pi / 4.), sin(pi / 4.)), d, d), c);
-    c = min(sdRoundedBox2d(p + vec2(67.5  * 1.5, -700. + d / 2.), vec2(67.5 / 2., d / 2.), vec4(0., 0., d / 2., d / 2.)), c);
-    return c;
-}
-
-float sd6(in vec2 p) {
-    float c = sdRing2d(p + vec2(d * 1.5, -d * 1.5), vec2(cos(pi / -2.), sin(pi / -2.)), d, d); // ring bottom
-    c = min(sdBox2d(p + vec2(d / 2., -565. / 2. - 67.5), vec2(d / 2., 565. / 2.)), c); // rectangle left
-    c = smin2d(sdBox2d(p + vec2(d * 1.25, -455.), vec2(d / 4., d / 2.)), c, d / 8.); // small rectangle middle
-    c = min(sdRing2d(p + vec2(d * 1.5, -632.5), vec2(cos(pi / 2.), sin(pi / 2.)), d, d), c); // ring top
-    c = min(sdBox2d(p + vec2(d * 2.5, -67.5 - 342.5 / 2.), vec2(d / 2., 342.5 / 2.)), c);
-    c = min(sdRing2d(rotate2d(p + vec2(d * 1.5, -342.5 - 67.5), pi * -0.25), vec2(cos(pi / 4.), sin(pi / 4.)), d, d), c);
-    c = min(sdRoundedBox2d(p + vec2(d * 2.5, -632.5 + 67.5 / 2.), vec2(d / 2., 67.5 / 2.), vec4(0., d / 2., 0., d / 2.)), c);
-    return c;
-}
-
-float sd7(in vec2 p) {
-    float c = sdRoundedBox2d(p + vec2(67.5 / 2., -700. + d / 2.), vec2(67.5 / 2., d / 2.), vec4(d / 2., d / 2., 0., 0.)); // ring bottom
-    c = min(sdRing2d(rotate2d(p + vec2(d * 1.5, -700. + d * 1.5), pi * -0.25), vec2(cos(pi / 4.), sin(pi / 4.)), d, d), c);
-    c = min(sdRoundedBox2d(p + vec2(d * 2.5, -632.5 / 2.), vec2(d / 2., 632.5 / 2.), vec4(0., d / 2., 0., d / 2.)), c);
-    return c;
-}
-
-float sd8(in vec2 p) {
-    float c = sdRing2d(p + vec2(d * 1.5, -d * 1.5), vec2(cos(pi / -2.), sin(pi / -2.)), d, d); // ring bottom
-    c = min(sdBox2d(p + vec2(d / 2., -565. / 2. - 67.5), vec2(d / 2., 565. / 2.)), c); // rectangle left
-    c = smin2d(sdBox2d(p + vec2(d * 1.25, -455.), vec2(d / 4., d / 2.)), c, d / 8.); // small rectange left
-    c = min(sdRing2d(p + vec2(d * 1.5, -700. + 67.5), vec2(cos(pi / 2.), sin(pi / 2.)), d, d), c); // ring top
-    float c2 = sdBox2d(p + vec2(d * 2.5, -565. / 2. - 67.5), vec2(d / 2., 565. / 2.)); // rectangle right
-    c2 = smin2d(sdBox2d(p + vec2(d * 1.75, -455.), vec2(d / 4., d / 2.)), c2, d / 8.); // small rectange left
-    c = min(c, c2); 
-    return c;
-}
-
-float sd9(in vec2 p) {
-    float g = sdRing2d(p + vec2(d * 1.5, -632.5), vec2(cos(pi / 2.), sin(pi / 2.)), d, d); // ring top
-    g = min(sdBox2d(p + vec2(d * 2.5, -565. / 2. - 67.5), vec2(d / 2., 565. / 2.)), g); // rectangle left
-    g = smin2d(sdBox2d(p + vec2(d * 1.75, -455.), vec2(d / 4., d / 2.)), g, d / 8.); // rectangle bot
-    g = min(sdRing2d(rotate2d(p + vec2(d * 1.5, -500.), pi * 0.75), vec2(cos(pi / 4.), sin(pi / 4.)), d, d), g); // quarter ring
-    g = min(sdBox2d(p + vec2(d / 2., -500. - 132.5 / 2.), vec2(d / 2., 132.5 / 2.)), g); // rectangle left
-    g = min(sdRing2d(p + vec2(d * 1.5, -d * 1.5), vec2(cos(pi / -2.), sin(pi / -2.)), d, d), g); // ring bottom
-    g = min(sdRoundedBox2d(p + vec2(d * 0.5, -67.5 * 1.5), vec2(d / 2., 67.5 / 2.), vec4(d / 2., 0., d / 2., 0.)), g); // box bottom
-    return g;
-}
-
-float sd0(in vec2 p) {
-    float c = sdRing2d(p + vec2(d * 1.5, -d * 1.5), vec2(cos(pi / -2.), sin(pi / -2.)), d, d); // ring bottom
-    c = min(sdBox2d(p + vec2(d / 2., -565. / 2. - 67.5), vec2(d / 2., 565. / 2.)), c); // rectangle left
-    c = min(sdRing2d(p + vec2(d * 1.5, -700. + 67.5), vec2(cos(pi / 2.), sin(pi / 2.)), d, d), c); // ring top
-    c = min(sdBox2d(p + vec2(d * 2.5, -565. / 2. - 67.5), vec2(d / 2., 565. / 2.)), c); // rectangle right
-    return c;
-}
-
-float sdNotDefined(in vec2 p) {
-    return sdRoundedBox2d(p + vec2(d * 1.5, -350.), vec2(d * 1.5, 350.), vec4(d / 2.));
 }
 
 // ╔══════════════════════════════════════════════════════════╗
@@ -708,47 +373,67 @@ void setDistance(inout Surface destination, float distance) {
     destination.distance = distance;
 }
 
-float evaluateLetterDistance2d(int letterCode, vec2 p_sdf, float scale) {
-    switch (letterCode) {
-        case 48: return sd0(p_sdf) / scale;
-        case 49: return sd1(p_sdf) / scale;
-        case 50: return sd2(p_sdf) / scale;
-        case 51: return sd3(p_sdf) / scale;
-        case 52: return sd4(p_sdf) / scale;
-        case 53: return sd5(p_sdf) / scale;
-        case 54: return sd6(p_sdf) / scale;
-        case 55: return sd7(p_sdf) / scale;
-        case 56: return sd8(p_sdf) / scale;
-        case 57: return sd9(p_sdf) / scale;
-        case 97: return sda(p_sdf) / scale;
-        case 98: return sdb(p_sdf) / scale;
-        case 99: return sdc(p_sdf) / scale;
-        case 100: return sdd(p_sdf) / scale;
-        case 101: return sde(p_sdf) / scale;
-        case 102: return sdf(p_sdf) / scale;
-        case 103: return sdg(p_sdf) / scale;
-        case 104: return sdh(p_sdf) / scale;
-        case 105: return sdi(p_sdf) / scale;
-        case 106: return sdj(p_sdf) / scale;
-        case 107: return sdk(p_sdf) / scale;
-        case 108: return sdl(p_sdf) / scale;
-        case 109: return sdm(p_sdf) / scale;
-        case 110: return sdn(p_sdf) / scale;
-        case 111: return sdo(p_sdf) / scale;
-        case 112: return sdp(p_sdf + vec2(135.f, 0.f)) / scale;
-        case 113: return sdq(p_sdf) / scale;
-        case 114: return sdr(p_sdf) / scale;
-        case 115: return sds(p_sdf) / scale;
-        case 116: return sdt(p_sdf) / scale;
-        case 117: return sdu(p_sdf) / scale;
-        case 118: return sdv(p_sdf) / scale;
-        case 119: return sdw(p_sdf) / scale;
-        case 120: return sdx(p_sdf) / scale;
-        case 121: return sdy(p_sdf) / scale;
-        case 122: return sdz(p_sdf) / scale;
-        default: return sdNotDefined(p_sdf) / scale;
+/* float getBakedSDF(int charIndex, vec2 p) {
+    float rangeX = uBoxMax.x - uBoxMin.x;
+    float rangeY = uBoxMax.y - uBoxMin.y;
+    vec2 pTex = vec2(p.x, 1. - p.y) * vec2(rangeY / rangeX, 1.);
+
+    vec2 clampedP = clamp(p, uBoxMax, uBoxMin);
+    
+    // Map to 0.0 -> 1.0
+    vec2 cellUv = (clampedP - uBoxMin) / (uBoxMax - uBoxMin);
+    
+    // Read from the array. vec3(u, v, layer_index)
+    float baseDist = textureLod(uSdfArray, vec3(pTex, float(charIndex)), 0.0).r;
+
+    if ((pTex.x < 0.0 || 1.0 < pTex.x) && (pTex.y < 0.0 || 1.0 < pTex.y)){
+        vec2 pRect = (pTex - vec2(0.5)) * vec2(rangeX, rangeY);
+        float circle =  length(pRect) - min(rangeX, rangeY);
+
+        vec2 b = vec2(rangeX * 0.5, rangeY * 0.5);
+        vec2 d = abs(pRect) - b;
+        float rect = length(max(d,0.0)) + min(max(d.x, d.y),0.0);
+        //return rect * 0.2;
+        return baseDist + mix(rect, rect * 5., clamp(rect * 0.0002, 0., 1.));
     }
+
+    if (pTex.x < 0.0 || 1.0 < pTex.x || pTex.y < 0.0 || 1.0 < pTex.y) {
+        vec2 pRect = (pTex - vec2(0.5)) * vec2(rangeX, rangeY);
+        float circle =  length(pRect) - min(rangeX, rangeY);
+
+        vec2 b = vec2(rangeX * 0.5, rangeY * 0.5);
+        vec2 d = abs(pRect) - b;
+        return baseDist + length(max(d,0.0)) + min(max(d.x, d.y),0.0);
+    }
+    
+    return baseDist;
+} */
+
+float getBakedSDF(int charIndex, vec2 p, float scale) {
+    float rangeX = uBoxMax.x - uBoxMin.x;
+    float rangeY = uBoxMax.y - uBoxMin.y;
+
+    // Map p into texture UV space [0,1]
+    p = p - (vec2(245.0, 400.0) / scale);
+    vec2 pTex = vec2(p.x, 1.0 - p.y) * vec2(rangeY / rangeX, 1.0);
+
+    // Clamp to valid texture region
+    vec2 pTexClamped = clamp(pTex, vec2(0.0), vec2(1.0));
+
+    // Sample at the nearest valid texel
+    float baseDist = textureLod(uSdfArray, vec3(pTexClamped, float(charIndex)), 0.0).r;
+
+    // Convert both points back to world space for a proper metric distance
+    // (accounts for non-square textures)
+    vec2 pWorld        = pTex        * vec2(rangeX, rangeY);
+    vec2 pWorldClamped = pTexClamped * vec2(rangeX, rangeY);
+
+    // Euclidean distance from query point to nearest point on the texture border
+    float exteriorDist = length(pWorld - pWorldClamped);
+
+    return baseDist + exteriorDist;
 }
+
 
 #define GENERATE_MAP_FUNCTION(FUNCTION_NAME, RETURN_TYPE)                                                                                       \
 RETURN_TYPE FUNCTION_NAME(vec3 p) {                                                                                                             \
@@ -844,13 +529,14 @@ RETURN_TYPE FUNCTION_NAME(vec3 p) {                                             
                                                                                                                                                 \
                         pos = (M * vec4(p, 1.f)).xyz;                                                                                           \
                         vec2 p_sdf = vec2(0.0, 700.0) - (pos.xy) * scale; /* from bottom-left to orign of "letter space" */                     \
+                        p_sdf = pos.xy * scale; \
                         float dist2d = MAX_FLOAT;                                                                                               \
                         if (letterCode == 46) { /* The '.' glyph is an actual 3d sphere, not an extruded 2d element */                          \
                             float radius = 22.5 / scale;                                                                                        \
-                            vec3 offset = vec3(-radius, -700.0 / scale + radius, radius);                                                        \
+                            vec3 offset = vec3(-radius, -700.0 / scale + radius, radius);                                                       \
                             sdValue = opSmoothUnion(sdSphere(pos + offset, radius), sdValue, smoothness);                                       \
                         } else {                                                                                                                \
-                            dist2d = evaluateLetterDistance2d(letterCode, p_sdf, scale);                                                        \
+                            dist2d = getBakedSDF(letterCode, pos.xy, scale) / scale;                                                       \
                             sdValue = opSmoothUnion(opExtrusion(pos, dist2d, depth), sdValue, smoothness);                                      \
                         }                                                                                                                       \
                     }                                                                                                                           \
@@ -888,7 +574,7 @@ RETURN_TYPE FUNCTION_NAME(vec3 p) {                                             
     return result;                                                                                                                              \
 }                                                                                                                                               \
 
-GENERATE_MAP_FUNCTION(map, float)
+// GENERATE_MAP_FUNCTION(map, float)
 GENERATE_MAP_FUNCTION(mapWithMaterial, Surface)
 
 Surface mapSimple(vec3 p) {
@@ -921,7 +607,7 @@ vec3 calcNormalTetrahedron(vec3 p) {
     vec3 n = vec3(0.0f);
     for (int i = ZERO; i < 4; i++) {
         vec3 e = 0.5773f * (2.0f * vec3((((i + 3) >> 1) & 1), ((i >> 1) & 1), (i & 1)) - 1.0f);
-        n += e * map(p + e * h);
+        n += e * mapWithMaterial(p + e * h).distance;
     }
     return normalize(n);
 
@@ -956,7 +642,7 @@ HitInfo trace(vec3 ro, vec3 rd) {
 
             for (int j = 0; j < 5; j++) {
                 mid = (tLower + tUpper) * 0.5f;
-                float sdfMid = map(ro + mid * rd);
+                float sdfMid = mapWithMaterial(ro + mid * rd).distance;
                 if (abs(sdfMid) < pixelRadius) {
                     break;
                 }
@@ -1004,12 +690,12 @@ HitInfo trace(vec3 ro, vec3 rd) {
             dNext = max(dNext, minStep);
         }
 
-        float rNext = map(ro + (t + dNext) * rd);
+        float rNext = mapWithMaterial(ro + (t + dNext) * rd).distance;
 
         // Overrelaxation was too big (only in the case where we don't do raymarching)
         if (!isParallel && dNext > rCurr + rNext) {
             dNext = rCurr;
-            rNext = map(ro + (t + dNext) * rd);
+            rNext = mapWithMaterial(ro + (t + dNext) * rd).distance;
         }
 
         t += dNext;
@@ -1024,7 +710,7 @@ HitInfo trace(vec3 ro, vec3 rd) {
 // ╔══════════════════════════════════════════════════════════╗
 // ║                         SHADING                          ║
 // ╚══════════════════════════════════════════════════════════╝
-float shadow(in vec3 ro, in vec3 rd, float mint, float maxt) {
+/* float shadow(in vec3 ro, in vec3 rd, float mint, float maxt) {
     float t = mint;
     for (int i = ZERO; i < 256 && t < maxt; i++) {
         float h = map(ro + rd * t);
@@ -1062,7 +748,7 @@ float calcSoftshadow(in vec3 ro, in vec3 rd, float tmin, float tmax, const float
     }
     return clamp(res, 0.0f, 1.0f);
 }
-
+ */
 float gaussian(float x, float mu, float sigma) {
     return exp(-1.f * ((x - mu) * (x - mu)) / (2.f * sigma * sigma));
 }
@@ -1139,7 +825,7 @@ struct ColorStop {
 // ╚══════════════════════════════════════════════════════════╝
 void main(void) {
     //const vec2 subPixleOffsets[] = vec2[](vec2(0.375f, 0.125f) - vec2(0.5f), vec2(0.875f, 0.375f) - vec2(0.5f), vec2(0.125f, 0.625f) - vec2(0.5f), vec2(0.625f, 0.875f) - vec2(0.5f));
-    const vec2 subPixleOffsets[] = vec2[](vec2(0.f, 0.f));
+     const vec2 subPixleOffsets[] = vec2[](vec2(0.f, 0.f));
     vec2 pixelSize = vec2(1.f) / uResolution.x;
 
     vec3 color = vec3(0.f);
@@ -1147,6 +833,17 @@ void main(void) {
     vec2 uv = vUv; // origin = top left
     uv *= vec2(uWindowWidth, uWindowHeight);
     uv += vec2(uLeftOffset, uTopOffset);
+/*
+    float ddd = getBakedSDF(5,uv - vec2(0.2)) / 1000.;
+    ddd = fract(ddd * 10.);
+    // ddd = textureLod(uSdfArray, vec3(pp, float(5)), 0.0).r;
+    float ccc = ddd > .0 ? 0. : 1.;
+
+    fragColor = vec4(ddd, ddd, ddd, 1.f); */
+
+    /* if (pp.y <= 0. || pp.x >= 1.){
+        fragColor = vec4(0., 0., 0., 1.);
+    } */
 
     vec3 pos = vec3(uv, uCameraZ);
     vec3 dir = vec3(0.f, 0.f, -1.f);
@@ -1159,7 +856,7 @@ void main(void) {
             color += shade(trace(posOffset, dir));
         } else {
             posOffset.z = 0.0f;
-            Surface surface = mapWithMaterial(posOffset);
+            Surface surface; // mapWithMaterial(posOffset);
             float sdfValue = surface.distance * 80.;
 
             ColorStop[] colors = ColorStop[](

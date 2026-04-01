@@ -124,7 +124,6 @@ html,
 .sdf-ui-base-class {
     display: block;
     background-color: rgba(0, 0, 0, 0) !important;
-    color: rgba(0, 0, 0, 0) !important;
 }
 
 @font-face {
@@ -134,6 +133,7 @@ html,
 
 .sdf-ui-text-base-class {
     font-family: metaballs;
+    color: rgba(0, 0, 0, 0) !important;
 }
 
 /* @property --depth {

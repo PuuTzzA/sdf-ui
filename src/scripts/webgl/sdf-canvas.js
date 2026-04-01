@@ -25,6 +25,27 @@ class SdfCanvas {
     static GEOMETRY_BLOCK_UNIFORM_BUFFER_BINDING_INDEX = 0;
     static SHADING_BLOCK_UNIFORM_BUFFER_BINDING_INDEX = 1;
 
+    static GLYPH_TEXTURE_RESOLUTION = 1024; // Resolution along the longer axis
+    static NUM_GLYPHS_BUFFERED = 36;
+    static GLYPHS_MAX_BOUNDING_BOX = [[-45, -200], [135, 700]]; // box which ALL glyphs fall into in the format [[left, bot], [right, top]]
+    static GLYPHS_PADDING = 200; // padding that is applied to all sides of the max bounding box
+
+    static computeGlyphTextureResolution() {
+        const rangeX = this.GLYPHS_MAX_BOUNDING_BOX[1][0] - this.GLYPHS_MAX_BOUNDING_BOX[0][0];
+        const rangeY = this.GLYPHS_MAX_BOUNDING_BOX[1][1] - this.GLYPHS_MAX_BOUNDING_BOX[0][1];
+
+        if (rangeY > rangeX) {
+            return {
+                resolutionX: this.GLYPH_TEXTURE_RESOLUTION * (rangeY / rangeX),
+                resolutionY: this.GLYPH_TEXTURE_RESOLUTION,
+            }
+        }
+        return {
+            resolutionX: this.GLYPH_TEXTURE_RESOLUTION,
+            resolutionY: this.GLYPH_TEXTURE_RESOLUTION * (rangeX / rangeY),
+        }
+    }
+
     static ElementType = Object.freeze({
         SPHERE: 0,
         BOX_SIMPLE: 1,
@@ -115,6 +136,23 @@ class SdfCanvas {
         });
     }
 
+    static getCharIndex(char) {
+        // The letters are ordered in this format: a-z;0-9;
+        const charCode = char.charCodeAt(0);
+        const startLowerCase = 97; // 'a'.charCodeAt(0);
+        const endLowerCase = 122; // 'z'.charCodeAt(0);
+        const startNumbers = 48; // '0'.charCodeAt(0);
+        const endNumbers = 57; // '9'.charCodeAt(0);
+
+        if (startLowerCase <= charCode && charCode <= endLowerCase) {
+            return charCode - startLowerCase;
+        }
+        if (startNumbers <= charCode && charCode <= endNumbers) {
+            return charCode - startNumbers + (endLowerCase - startLowerCase + 1);
+        }
+        return this.NUM_GLYPHS_BUFFERED;
+    }
+
     constructor(canvasName, renderLayers = [0]) {
         SdfCanvas.instantiatedCanvases.push(this);
 
@@ -154,6 +192,11 @@ class SdfCanvas {
             return;
         }
 
+        // Bake the Letter Sdfs
+        this.gl.getExtension('EXT_color_buffer_float');
+        this.gl.getExtension('OES_texture_float_linear');
+        await this.bakeLetterSdfs();
+
         this.resizeCanvasToDisplaySize();
 
         // Set clear color to black, fully opaque
@@ -161,10 +204,8 @@ class SdfCanvas {
         // Clear the color buffer with specified clear color
         this.gl.clear(this.gl.COLOR_BUFFER_BIT);
 
-        console.log("before loading shaders from disk")
-        const { vertexSource, fragmentSource } = await SdfCanvas.loadShadersFromDisk();
+        const { vertexSource, fragmentSource } = await SdfCanvas.loadShadersFromDisk("vertex.glsl", "fragment.glsl");
 
-        console.log("after loading shaders from disk")
         // Initialize a shader program; this is where all the lighting
         // for the vertices and so forth is established.
         const startTime = performance.now()
@@ -202,6 +243,11 @@ class SdfCanvas {
                 smoothingFactors: this.gl.getUniformLocation(shaderProgram, 'uSmoothingFactors'),
                 numLayers: this.gl.getUniformLocation(shaderProgram, 'uNumLayers'),
 
+                // Uniforms for the Glyph Texture
+                sdfArray: this.gl.getUniformLocation(shaderProgram, 'uSdfArray'),
+                boxMin: this.gl.getUniformLocation(shaderProgram, "uBoxMin"),
+                boxMax: this.gl.getUniformLocation(shaderProgram, "uBoxMax"),
+
                 geometryBlock: this.gl.getUniformBlockIndex(shaderProgram, "GeometryBlock"),
                 shadingBlock: this.gl.getUniformBlockIndex(shaderProgram, "ShadingBlock")
             },
@@ -232,6 +278,62 @@ class SdfCanvas {
         this.ready = true;
     }
 
+    async bakeLetterSdfs() {
+        const gl = this.gl;
+
+        this.sdfTexture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.sdfTexture);
+
+        // Allocate the 3d storage: texStorage3D(target, mip-levels, internalformat, width, height, depth)
+        const { resolutionX, resolutionY } = SdfCanvas.computeGlyphTextureResolution();
+        gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.R32F, resolutionX, resolutionY, SdfCanvas.NUM_GLYPHS_BUFFERED + 1);
+
+        gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.LINEAR); // Texture minification filter
+        gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.LINEAR); // Texture magnification filter
+        gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); // Wrapping function for texture coordinate s
+        gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); // Wrapping function for texture coordinate t
+
+        const fbo = gl.createFramebuffer();
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+
+        const { vertexSource, fragmentSource } = await SdfCanvas.loadShadersFromDisk("letterBakingVertex.glsl", "letterBakingFragment.glsl");
+        const bakeProg = await this.initShaderProgram(vertexSource, fragmentSource);
+
+        gl.useProgram(bakeProg);
+        const boxMinLoc = gl.getUniformLocation(bakeProg, "uBoxMin");
+        const boxMaxLoc = gl.getUniformLocation(bakeProg, "uBoxMax");
+        const charIndexLoc = gl.getUniformLocation(bakeProg, "uCharIndex");
+
+        const quadBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
+
+        const posAttr = gl.getAttribLocation(bakeProg, "aPosition");
+        gl.enableVertexAttribArray(posAttr);
+        gl.vertexAttribPointer(posAttr, 2, gl.FLOAT, false, 0, 0);
+
+        gl.viewport(0, 0, resolutionX, resolutionY);
+        gl.uniform2f(boxMinLoc, SdfCanvas.GLYPHS_MAX_BOUNDING_BOX[0][0] - SdfCanvas.GLYPHS_PADDING, SdfCanvas.GLYPHS_MAX_BOUNDING_BOX[0][1] - SdfCanvas.GLYPHS_PADDING);
+        gl.uniform2f(boxMaxLoc, SdfCanvas.GLYPHS_MAX_BOUNDING_BOX[1][0] + SdfCanvas.GLYPHS_PADDING, SdfCanvas.GLYPHS_MAX_BOUNDING_BOX[1][1] + SdfCanvas.GLYPHS_PADDING);
+
+        // Render EACH layer individually
+        for (let i = 0; i <= SdfCanvas.NUM_GLYPHS_BUFFERED; i++) {
+            // framebufferTextureLayer(target, attachment, texture, level, layer) attaches a single layer of a texture to a framebuffer
+            gl.framebufferTextureLayer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, this.sdfTexture, 0, i);
+
+            // Tell the shader which character to compute
+            gl.uniform1i(charIndexLoc, i);
+
+            // drawArrays(mode, first (starting index), count (num of vertices))
+            gl.drawArrays(gl.TRIANGLES, 0, 6);
+        }
+
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.deleteBuffer(quadBuffer);
+        gl.deleteProgram(bakeProg);
+        gl.deleteFramebuffer(fbo);
+    }
+
     draw() {
         this.gl.clearColor(1.0, 0.0, 1.0, 1.0); // Clear to black, fully opaque
         this.gl.clearDepth(1.0); // Clear everything
@@ -251,6 +353,10 @@ class SdfCanvas {
 
         // Tell WebGL to use our program when drawing
         this.gl.useProgram(this.programInfo.program);
+
+        // Bind the baked SDF array to texture unit 0
+        this.gl.activeTexture(this.gl.TEXTURE0);
+        this.gl.bindTexture(this.gl.TEXTURE_2D_ARRAY, this.sdfTexture);
 
         // Set uniform buffer values
         this.updateUniformBuffers();
@@ -352,6 +458,11 @@ class SdfCanvas {
 
     updateUniforms() {
         this.gl.useProgram(this.programInfo.program);
+
+        // Tells the uSdfArray uniform to look at gl.TEXTURE0
+        this.gl.uniform1i(this.programInfo.uniformLocations.sdfArray, 0);
+        this.gl.uniform2f(this.programInfo.uniformLocations.boxMin, SdfCanvas.GLYPHS_MAX_BOUNDING_BOX[0][0] - SdfCanvas.GLYPHS_PADDING, SdfCanvas.GLYPHS_MAX_BOUNDING_BOX[0][1] - SdfCanvas.GLYPHS_PADDING);
+        this.gl.uniform2f(this.programInfo.uniformLocations.boxMax, SdfCanvas.GLYPHS_MAX_BOUNDING_BOX[1][0] + SdfCanvas.GLYPHS_PADDING, SdfCanvas.GLYPHS_MAX_BOUNDING_BOX[1][1] + SdfCanvas.GLYPHS_PADDING);
 
         this.gl.uniform2f(this.programInfo.uniformLocations.resolution, window.innerWidth, window.innerHeight);
 
@@ -476,7 +587,7 @@ class SdfCanvas {
                 case SdfCanvas.ElementType.TEXT:
                     element.updateSize();
                     const numLetters = element.getNumberOfLetters();
-                    const letterScale = 450 / halfHeight; // 450 because 450 = 900 / 2 and halfHeight has the implicit 0.5 * ...
+                    const letterScale = 1300 / halfWidth; // 450 because 450 = 900 / 2 and halfHeight has the implicit 0.5 * ...
                     this.geometryBuffer[elementIdx + 13] = SdfCanvas.intToFloatBits(numLetters); // amount of letters
                     this.geometryBuffer[elementIdx + 14] = letterScale; // letter scale 
                     this.geometryBuffer[elementIdx + 15] = halfDepth; // depth 
@@ -524,15 +635,15 @@ class SdfCanvas {
 
                         for (let currentLetterIdx = 0; currentLetterIdx < currentWord[0].length; currentLetterIdx++) {
                             let currentSubstringWidth = element.measure(currentText.substring(0, currentLetterIdx)) * oneOverX;
-                            const currentLetterCode = currentText.charCodeAt(currentLetterIdx);
-                            if (currentLetterCode == 't'.charCodeAt(0)) {
+                            const currentLetter = currentText.charAt(currentLetterIdx);
+                            if (currentLetter == "t") {
                                 currentSubstringWidth += 45 / 2 / letterScale// * oneOverX;
                             }
 
                             this.geometryBuffer[elementIdx + 20 + letterIdx * 4 + 0] = -wordCenterLocal[0] - (wordLeftEdgeLocalX + currentSubstringWidth); // offsetX
                             this.geometryBuffer[elementIdx + 20 + letterIdx * 4 + 1] = -wordCenterLocal[1] - wordBottomEdgeLocalY; // offsetY
                             this.geometryBuffer[elementIdx + 20 + letterIdx * 4 + 2] = -wordCenterLocal[2]; // offsetZ
-                            this.geometryBuffer[elementIdx + 20 + letterIdx * 4 + 3] = SdfCanvas.intToFloatBits(currentLetterCode); // letterCode
+                            this.geometryBuffer[elementIdx + 20 + letterIdx * 4 + 3] = SdfCanvas.intToFloatBits(SdfCanvas.getCharIndex(currentLetter)); // letterCode
                             letterIdx++;
                             if (letterIdx >= numLetters) {
                                 break outerLoop;
@@ -648,9 +759,9 @@ class SdfCanvas {
         return this.renderLayers.some(item => arr.includes(item));
     }
 
-    static async loadShadersFromDisk() {
-        const responseVertex = await fetch("./src/shaders/vertex.glsl");
-        const responseFragment = await fetch("./src/shaders/fragment.glsl");
+    static async loadShadersFromDisk(vertexName, fragmentName) {
+        const responseVertex = await fetch("./src/shaders/" + vertexName);
+        const responseFragment = await fetch("./src/shaders/" + fragmentName);
 
         return {
             vertexSource: await responseVertex.text(),
