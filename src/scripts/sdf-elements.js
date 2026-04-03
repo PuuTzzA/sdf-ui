@@ -109,7 +109,7 @@ class SdfText extends ASdfElement {
     updateSize() {
         const currentSize = this.calculateSize();
         if (currentSize != this.size) {
-            this.size = SdfCanvas.updateTrackedElementSize(this, this.size, currentSize);
+            this.size = SdfCanvas.updateTrackedElementSize(this.size, currentSize);
         }
     }
 

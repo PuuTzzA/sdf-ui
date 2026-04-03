@@ -18,14 +18,16 @@ class SdfLayer {
 }
 
 class SdfCanvas {
+    static MAX_NUM_COMMANDS = 1024; // maximum number of commands per canvas (in amount of int)
     static MAX_SIZE_ELEMENT_BUFFER = 512; // number of vec4 in the buffer
 
     static MAX_LAYERS = 16;
 
-    static GEOMETRY_BLOCK_UNIFORM_BUFFER_BINDING_INDEX = 0;
-    static SHADING_BLOCK_UNIFORM_BUFFER_BINDING_INDEX = 1;
+    static COMMAND_BLOCK_UNIFORM_BUFFER_BINDING_INDEX = 0;
+    static GEOMETRY_BLOCK_UNIFORM_BUFFER_BINDING_INDEX = 1;
+    static SHADING_BLOCK_UNIFORM_BUFFER_BINDING_INDEX = 2;
 
-    static GLYPH_TEXTURE_RESOLUTION = 1024; // Resolution along the longer axis
+    static GLYPH_TEXTURE_RESOLUTION = 1028; // Resolution along the longer axis
     static NUM_GLYPHS_BUFFERED = 36;
     static GLYPHS_MAX_BOUNDING_BOX = [[-45, -200], [135, 700]]; // box which ALL glyphs fall into in the format [[left, bot], [right, top]]
     static GLYPHS_PADDING = 200; // padding that is applied to all sides of the max bounding box
@@ -45,6 +47,25 @@ class SdfCanvas {
             resolutionY: this.GLYPH_TEXTURE_RESOLUTION * (rangeX / rangeY),
         }
     }
+
+    static Commands = Object.freeze({
+        // Elements
+        SPHERE: 0,
+        BOX_SIMPLE: 1,
+        BOX: 2,
+        ROUND_BOX: 3,
+        TEXT: 4,
+
+        // Layer Operations
+        SET_LAYER_SMOOTHNESS: 100,
+        UNION: 101,
+        SUBTRACTION: 102,
+        INTERSECTION: 103,
+        XOR: 104,
+        SMOOTH_UNION: 105,
+        SMOOTH_SUBTRACTION: 106,
+        SMOOTH_INTERSECTION: 107,
+    })
 
     static ElementType = Object.freeze({
         SPHERE: 0,
@@ -88,13 +109,8 @@ class SdfCanvas {
     static addTrackedElement(element) {
         const size = this.getElementSize(element);
 
-        if (this.trackedElementsSize + size > SdfCanvas.MAX_SIZE_ELEMENT_BUFFER) {
-            console.error(f`Cannot track more elemtns than the maximum amount (${SdfCanvas.MAX_SIZE_ELEMENT_BUFFER}).`);
-        }
-
         this.trackedElements.push(element);
         this.trackedElements.sort((a, b) => (a.dataset.layerIndex - b.dataset.layerIndex));
-
         this.trackedElementsSize += size;
 
         this.instantiatedCanvases.forEach((c) => {
@@ -117,12 +133,8 @@ class SdfCanvas {
         })
     }
 
-    static updateTrackedElementSize(element, oldSize, newSize) {
+    static updateTrackedElementSize(oldSize, newSize) {
         // This method is only important for elements with variable size (e.g. TEXT)
-        if (this.trackedElementsSize - oldSize + newSize > SdfCanvas.MAX_SIZE_ELEMENT_BUFFER) {
-            console.error(f`ERROR: cannot increse the size of ${element} from ${oldSize} to ${newSize}. Current total size: ${this.trackedElementsSize}, max size: ${SdfCanvas.MAX_SIZE_ELEMENT_BUFFER}.`);
-            return oldSize;
-        }
         this.trackedElementsSize -= oldSize;
         this.trackedElementsSize += newSize;
         return newSize;
@@ -137,6 +149,11 @@ class SdfCanvas {
     }
 
     static getCharIndex(char) {
+        // The dot is handled differently
+        if (char == ".") {
+            return this.NUM_GLYPHS_BUFFERED + 1;
+        }
+
         // The letters are ordered in this format: a-z;0-9;
         const charCode = char.charCodeAt(0);
         const startLowerCase = 97; // 'a'.charCodeAt(0);
@@ -160,7 +177,7 @@ class SdfCanvas {
         this.renderLayers = renderLayers;
         this.ready = false;
         this.downscaleFactorX = 1;
-        this.downscaleFactorY = 10;
+        this.downscaleFactorY = 1;
 
         this.cameraZ = 10;
         this.twoDMode = false;
@@ -238,6 +255,7 @@ class SdfCanvas {
                 cameraZ: this.gl.getUniformLocation(shaderProgram, "uCameraZ"),
                 twoDMode: this.gl.getUniformLocation(shaderProgram, "uTwoDMode"),
 
+                numCommands: this.gl.getUniformLocation(shaderProgram, "uNumCommands"),
                 layerOperations: this.gl.getUniformLocation(shaderProgram, 'uLayerOperations'),
                 elementsInLayer: this.gl.getUniformLocation(shaderProgram, 'uElementsInLayer'),
                 smoothingFactors: this.gl.getUniformLocation(shaderProgram, 'uSmoothingFactors'),
@@ -248,6 +266,7 @@ class SdfCanvas {
                 boxMin: this.gl.getUniformLocation(shaderProgram, "uBoxMin"),
                 boxMax: this.gl.getUniformLocation(shaderProgram, "uBoxMax"),
 
+                commandBlock: this.gl.getUniformBlockIndex(shaderProgram, "CommandBlock"),
                 geometryBlock: this.gl.getUniformBlockIndex(shaderProgram, "GeometryBlock"),
                 shadingBlock: this.gl.getUniformBlockIndex(shaderProgram, "ShadingBlock")
             },
@@ -480,9 +499,11 @@ class SdfCanvas {
         this.updateUniforms();
 
         const oneOverX = 1 / window.innerWidth;
-        let elementIdx = 0;
-        const range = document.createRange(); // to get a bounding box of text elements
+        const unpaddedHeight = SdfCanvas.GLYPHS_MAX_BOUNDING_BOX[1][1] - SdfCanvas.GLYPHS_MAX_BOUNDING_BOX[0][1];
+        const unpaddedWidth = SdfCanvas.GLYPHS_MAX_BOUNDING_BOX[1][0] - SdfCanvas.GLYPHS_MAX_BOUNDING_BOX[0][0];
+        const paddedWidth = unpaddedWidth + (SdfCanvas.GLYPHS_PADDING * 2);
 
+        let elementIdx = 0;
         for (let i = 0; i < SdfCanvas.trackedElements.length; i++) {
             const element = SdfCanvas.trackedElements[i];
 
@@ -585,14 +606,16 @@ class SdfCanvas {
                     this.geometryBuffer[elementIdx + 16] = parseFloat(computedStyle.getPropertyValue("--r")) * oneOverX * 0.5; // border radius
                     break;
                 case SdfCanvas.ElementType.TEXT:
+                    // The text expects an array of letters where the x,y,z position is at the same place as the origin of the letters in "glyph-space"
+                    // The scale is how big the texture is in world space (including padding), send inverse scale so that we can multiply by it to get to glyph-space 
                     element.updateSize();
                     const numLetters = element.getNumberOfLetters();
-                    const letterScale = 1300 / halfWidth; // 450 because 450 = 900 / 2 and halfHeight has the implicit 0.5 * ...
+                    const glpyhSpaceScale = (2 * halfHeight) / unpaddedHeight; // how much one unit of "glyph-space" is in world-space 
                     this.geometryBuffer[elementIdx + 13] = SdfCanvas.intToFloatBits(numLetters); // amount of letters
-                    this.geometryBuffer[elementIdx + 14] = letterScale; // letter scale 
+                    this.geometryBuffer[elementIdx + 14] = 1 / (paddedWidth * glpyhSpaceScale); // inverse letter scale 
                     this.geometryBuffer[elementIdx + 15] = halfDepth; // depth 
 
-                    this.geometryBuffer[elementIdx + 16] = Math.max(parseFloat(computedStyle.getPropertyValue("--letterSmoothness")) * oneOverX, 0.0001); // smoothness between letters (this memory location always exists, since TEXT-elements with 0 letters are skipped)
+                    this.geometryBuffer[elementIdx + 16] = Math.max(parseFloat(computedStyle.getPropertyValue("--letterSmoothness")) * oneOverX, 0.0001); // smoothness between letters
                     // this.geometryBuffer[elementIdx + 17] = 0; // unused (maybe later for font, e.g.) 
                     // this.geometryBuffer[elementIdx + 18] = 0; // unused 
                     // this.geometryBuffer[elementIdx + 19] = 0; // unused 
@@ -631,17 +654,16 @@ class SdfCanvas {
 
                         // In local space, the word is unrotated and its own center is at (0,0).
                         const wordLeftEdgeLocalX = -element.measure(currentText) * 0.5 * oneOverX; // currentHalfWidth
-                        const wordBottomEdgeLocalY = -halfHeight;
 
                         for (let currentLetterIdx = 0; currentLetterIdx < currentWord[0].length; currentLetterIdx++) {
                             let currentSubstringWidth = element.measure(currentText.substring(0, currentLetterIdx)) * oneOverX;
                             const currentLetter = currentText.charAt(currentLetterIdx);
                             if (currentLetter == "t") {
-                                currentSubstringWidth += 45 / 2 / letterScale// * oneOverX;
+                                currentSubstringWidth += 22.5 * glpyhSpaceScale;// * oneOverX;
                             }
 
                             this.geometryBuffer[elementIdx + 20 + letterIdx * 4 + 0] = -wordCenterLocal[0] - (wordLeftEdgeLocalX + currentSubstringWidth); // offsetX
-                            this.geometryBuffer[elementIdx + 20 + letterIdx * 4 + 1] = -wordCenterLocal[1] - wordBottomEdgeLocalY; // offsetY
+                            this.geometryBuffer[elementIdx + 20 + letterIdx * 4 + 1] = -wordCenterLocal[1] - halfHeight + SdfCanvas.GLYPHS_PADDING * glpyhSpaceScale; // offsetY
                             this.geometryBuffer[elementIdx + 20 + letterIdx * 4 + 2] = -wordCenterLocal[2]; // offsetZ
                             this.geometryBuffer[elementIdx + 20 + letterIdx * 4 + 3] = SdfCanvas.intToFloatBits(SdfCanvas.getCharIndex(currentLetter)); // letterCode
                             letterIdx++;

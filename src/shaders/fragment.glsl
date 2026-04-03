@@ -1,6 +1,7 @@
 #version 300 es
 precision highp float;
 
+#define MAX_NUM_COMMANDS 1024
 #define MAX_SIZE_ELEMENT_BUFFER 512
 #define MAX_LAYERS 16
 #define EPSILON 1e-4
@@ -11,7 +12,7 @@ precision highp float;
 // ║                       UNIFORMS                           ║
 // ╚══════════════════════════════════════════════════════════╝
 layout (std140) uniform CommandBlock {
-    ivec4 commandData[MAX_SIZE_ELEMENT_BUFFER];
+    ivec4 commandData[MAX_SIZE_ELEMENT_BUFFER / 4];
 };
 layout (std140) uniform GeometryBlock {
     vec4 geometryData[MAX_SIZE_ELEMENT_BUFFER];
@@ -38,7 +39,7 @@ uniform int uNumLayers;
 
 // Uniforms for the Glyph Texture
 uniform highp sampler2DArray uSdfArray;
-uniform vec2 uBoxMin; 
+uniform vec2 uBoxMin;
 uniform vec2 uBoxMax;
 
 // ╔══════════════════════════════════════════════════════════╗
@@ -248,7 +249,7 @@ Surface opIntersection(Surface a, Surface b) {
 }
 
 float opXor(float a, float b) {
-    return max(min(a, b), - max(a, b));
+    return max(min(a, b), -max(a, b));
 }
 
 Surface opXor(Surface a, Surface b) {
@@ -361,7 +362,7 @@ void populateData(inout Surface data, int elementIdx) {
     data.colorAmbient = unpackColor(shadingData[elementIdx].z);
     data.kd = shadingData[elementIdx].w; // diffuse material property 
     data.ks = shadingData[elementIdx + 1].x; // specular material property 
-    data.p  = shadingData[elementIdx + 1].y; // specular exponent, fall of of specular light
+    data.p = shadingData[elementIdx + 1].y; // specular exponent, fall of of specular light
     data.ka = shadingData[elementIdx + 1].z; // ambient material property
 }
 
@@ -373,67 +374,164 @@ void setDistance(inout Surface destination, float distance) {
     destination.distance = distance;
 }
 
-/* float getBakedSDF(int charIndex, vec2 p) {
-    float rangeX = uBoxMax.x - uBoxMin.x;
-    float rangeY = uBoxMax.y - uBoxMin.y;
-    vec2 pTex = vec2(p.x, 1. - p.y) * vec2(rangeY / rangeX, 1.);
-
-    vec2 clampedP = clamp(p, uBoxMax, uBoxMin);
-    
-    // Map to 0.0 -> 1.0
-    vec2 cellUv = (clampedP - uBoxMin) / (uBoxMax - uBoxMin);
-    
-    // Read from the array. vec3(u, v, layer_index)
-    float baseDist = textureLod(uSdfArray, vec3(pTex, float(charIndex)), 0.0).r;
-
-    if ((pTex.x < 0.0 || 1.0 < pTex.x) && (pTex.y < 0.0 || 1.0 < pTex.y)){
-        vec2 pRect = (pTex - vec2(0.5)) * vec2(rangeX, rangeY);
-        float circle =  length(pRect) - min(rangeX, rangeY);
-
-        vec2 b = vec2(rangeX * 0.5, rangeY * 0.5);
-        vec2 d = abs(pRect) - b;
-        float rect = length(max(d,0.0)) + min(max(d.x, d.y),0.0);
-        //return rect * 0.2;
-        return baseDist + mix(rect, rect * 5., clamp(rect * 0.0002, 0., 1.));
-    }
-
-    if (pTex.x < 0.0 || 1.0 < pTex.x || pTex.y < 0.0 || 1.0 < pTex.y) {
-        vec2 pRect = (pTex - vec2(0.5)) * vec2(rangeX, rangeY);
-        float circle =  length(pRect) - min(rangeX, rangeY);
-
-        vec2 b = vec2(rangeX * 0.5, rangeY * 0.5);
-        vec2 d = abs(pRect) - b;
-        return baseDist + length(max(d,0.0)) + min(max(d.x, d.y),0.0);
-    }
-    
-    return baseDist;
-} */
-
 float getBakedSDF(int charIndex, vec2 p, float scale) {
     float rangeX = uBoxMax.x - uBoxMin.x;
     float rangeY = uBoxMax.y - uBoxMin.y;
 
-    // Map p into texture UV space [0,1]
-    p = p - (vec2(245.0, 400.0) / scale);
-    vec2 pTex = vec2(p.x, 1.0 - p.y) * vec2(rangeY / rangeX, 1.0);
+    float bakeToWorldRatio = rangeX * scale; // scale is the reciprocal of the size of the texture in world space
+    vec2 pBake = vec2(p.x, -p.y) * bakeToWorldRatio; // invert y because in the texture the origin is bot-left and in the world top-left
 
-    // Clamp to valid texture region
-    vec2 pTexClamped = clamp(pTex, vec2(0.0), vec2(1.0));
+    vec2 pTex = (pBake - uBoxMin) / vec2(rangeX, rangeY); // apply the offset so that the texture's origin lines up and convert to [0..1] range
+    vec2 pTexClamped = clamp(pTex, vec2(0.0f), vec2(1.0f));
+    float baseDist = textureLod(uSdfArray, vec3(pTexClamped, float(charIndex)), 0.0f).r;
 
-    // Sample at the nearest valid texel
-    float baseDist = textureLod(uSdfArray, vec3(pTexClamped, float(charIndex)), 0.0).r;
+    // Extrapolation (for points outside of the texture)
+    vec2 pBakeMetric = pTex * vec2(rangeX, rangeY);
+    vec2 pBakeMetricClamped = pTexClamped * vec2(rangeX, rangeY);
+    float exteriorDist = length(pBakeMetric - pBakeMetricClamped);
 
-    // Convert both points back to world space for a proper metric distance
-    // (accounts for non-square textures)
-    vec2 pWorld        = pTex        * vec2(rangeX, rangeY);
-    vec2 pWorldClamped = pTexClamped * vec2(rangeX, rangeY);
-
-    // Euclidean distance from query point to nearest point on the texture border
-    float exteriorDist = length(pWorld - pWorldClamped);
-
-    return baseDist + exteriorDist;
+    return (baseDist + exteriorDist) / bakeToWorldRatio; // convert the distance form glyph-space to world space
 }
 
+Surface mapWithMaterial2(vec3 p) {
+    Surface stack[2];
+
+    int elementIdx = 0;
+    int stackIdx = 0;
+   
+    for (int i = ZERO; i < uNumCommands; i++) {
+        int command = commandData[i / 4][i % 4];
+
+        Surface current;                                                                                                                
+        populateData(current, elementIdx);                                                                                                  
+
+        mat4 M;
+        vec3 pos;
+        float sdValue;
+        float smoothness;/* persistent smoothness parameter for layerOperations */
+
+        /* Sdf element */
+        if (command < 100) { 
+            M = mat4(                                                                                                                      
+                vec4(geometryData[elementIdx].xyz, 0.f),                                                                                        
+                vec4(geometryData[elementIdx].w, geometryData[elementIdx + 1].x, geometryData[elementIdx + 1].y, 0.f),                          
+                vec4(geometryData[elementIdx + 1].z, geometryData[elementIdx + 1].w, geometryData[elementIdx + 2].x, 0.f),                      
+                vec4(geometryData[elementIdx + 2].yzw, 1.f)                                                                                     
+            );                                                                                                                                  
+            pos = (M * vec4(p, 1.0f)).xyz;
+        } 
+
+        switch (command) {
+            case 0: /* Sphere */                                                                                                           
+                sdValue = sdSphere(pos, geometryData[elementIdx + 3].y);          
+                setDistance(current, sdValue);                                                          
+                stack[stackIdx++] = current;
+                elementIdx += 4;                                                                                                            
+                break;                                                                                                                      
+            case 1: /* Simple Box */                                                                                                        
+                sdValue = sdBox(pos, vec3(geometryData[elementIdx + 3].yzw));                                                               
+                setDistance(current, sdValue);                                                          
+                stack[stackIdx++] = current;
+                elementIdx += 4;                                                                                                            
+                break;                                                                                                                      
+            case 2: /* Box (with optional rounded corners) */                                                                               
+                float w = geometryData[elementIdx + 3].y;                                                                                   
+                float h = geometryData[elementIdx + 3].z;                                                                                   
+                float d = geometryData[elementIdx + 3].w;                                                                                   
+                                                                                                                                            
+                int initialRotation = floatBitsToInt(geometryData[elementIdx + 5].y);                                                       
+                                                                                                                                            
+                /* Adiddional Rotation (rounded edge selection) */                                                                          
+                if (initialRotation == 1) {                                                                                                 
+                    mat3 Rot = mat3(0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, -1.0f, 0.0f, 0.0f);                                                          
+                    pos = Rot * pos;                                                                                                        
+                    float temp = w;                                                                                                         
+                    w = d;                                                                                                                  
+                    d = temp;                                                                                                               
+                } else if (initialRotation == 2) {                                                                                          
+                    mat3 Rot = mat3(1.0f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f, 0.0f, 1.0f, 0.0f);                                                          
+                    pos = Rot * pos;                                                                                                        
+                    float temp = h;                                                                                                         
+                    h = d;                                                                                                                  
+                    d = temp;                                                                                                               
+                }                                                                                                                           
+                                                                                                                                            
+                float val = sdRoundBox2d(pos.xy, vec2(w, h), geometryData[elementIdx + 4], floatBitsToInt(geometryData[elementIdx + 5].x)); 
+                sdValue = opExtrusion(pos, val, d);                                                                                         
+                                                                                                                                            
+                sdValue = opRound(sdValue, geometryData[elementIdx + 5].z);                                                                 
+                setDistance(current, sdValue);                                                          
+                stack[stackIdx++] = current;
+                                                                                                                                            
+                elementIdx += 6;                                                                                                            
+                break;                                                                                                                      
+            case 3: /* Round Box */                                                                                                         
+                sdValue = sdRoundBox(pos, geometryData[elementIdx + 3].yzw, geometryData[elementIdx + 4].x);                                
+                setDistance(current, sdValue);                                                          
+                stack[stackIdx++] = current;
+                elementIdx += 5;                                                                                                            
+                break;                                                                                                                      
+            case 4: /* Text */                                                                                                              
+                /* The letters are stored in a TextureArray accordin to their index */
+                /* The starting point inside the texture is stored in uTextureOffset */
+                int numLetters = floatBitsToInt(geometryData[elementIdx + 3].y);                                                            
+                float scale = geometryData[elementIdx + 3].z;                                                                               
+                float depth = geometryData[elementIdx + 3].w;                                                                               
+                float smoothness = geometryData[elementIdx + 4].x;                                                                          
+                                                                                                                                            
+                sdValue = MAX_FLOAT;                                                                                                        
+                for (int letterIdx = ZERO; letterIdx < numLetters; letterIdx++) {                                                              
+                    M[3][0] = geometryData[elementIdx + 5 + letterIdx].x; /* matrix[column][row] */                                         
+                    M[3][1] = geometryData[elementIdx + 5 + letterIdx].y;                                                                   
+                    M[3][2] = geometryData[elementIdx + 5 + letterIdx].z;                                                                   
+                    int letterCode = floatBitsToInt(geometryData[elementIdx + 5 + letterIdx].w);                                            
+                                                                                                                                            
+                    pos = (M * vec4(p, 1.f)).xyz;                                                                                           
+                    vec2 p_sdf = vec2(0.0f, 700.0f) - (pos.xy) * scale; /* from bottom-left to orign of "letter space" */                     
+                    p_sdf = pos.xy * scale; 
+                    float dist2d = MAX_FLOAT;                                                                                               
+                    if (letterCode == 37) { /* The '.' glyph is an actual 3d sphere, not an extruded 2d element */                          
+                        float radius = 22.5f / scale;                                                                                        
+                        vec3 offset = vec3(-radius, -700.0f / scale + radius, radius);                                                       
+                        sdValue = opSmoothUnion(sdSphere(pos + offset, radius), sdValue, smoothness);                                       
+                    } else {                                                                                                                
+                        dist2d = getBakedSDF(letterCode, pos.xy, scale) / scale;                                                       
+                        sdValue = opSmoothUnion(opExtrusion(pos, dist2d, depth), sdValue, smoothness);                                      
+                    }                                                                                                                       
+                }                                                                                                                           
+                setDistance(current, sdValue);                                                          
+                stack[stackIdx++] = current;
+                elementIdx += 5 + numLetters;                                                                                               
+
+            case 100: /* Load smoothness parameter */
+                smoothness = geometryData[elementIdx].x;
+                elementIdx += 1;
+            case 101: /* Union */                                             
+                stack[0] = opUnion(stack[0], stack[1]);
+                break;
+            case 102: /* Subtraction */                                       
+                stack[0] = opSubtraction(stack[0], stack[1]);
+                break;
+            case 103: /* Intersection */                                      
+                stack[0] = opIntersection(stack[0], stack[1]);
+                break;
+            case 104: /* Xor */                                               
+                stack[0] = opXor(stack[0], stack[1]);
+                break;
+            case 105: /* Smooth union */                                      
+                stack[0] = opSmoothUnion(stack[0], stack[1], smoothness);
+                break;
+            case 106: /* Smooth subtraction */                                
+                stack[0] = opSmoothSubtraction(stack[0], stack[1], smoothness);
+                break;
+            case 107: /* Smooth intersection */                               
+                stack[0] = opSmoothIntersection(stack[0], stack[1], smoothness);
+                break;
+        }
+
+    }
+    return stack[0];
+}
 
 #define GENERATE_MAP_FUNCTION(FUNCTION_NAME, RETURN_TYPE)                                                                                       \
 RETURN_TYPE FUNCTION_NAME(vec3 p) {                                                                                                             \
@@ -454,10 +552,10 @@ RETURN_TYPE FUNCTION_NAME(vec3 p) {                                             
             float sdValue;                                                                                                                      \
                                                                                                                                                 \
             mat4 M = mat4(                                                                                                                      \
-                vec4(geometryData[elementIdx].xyz, 0.f),                                                                                        \
-                vec4(geometryData[elementIdx].w, geometryData[elementIdx + 1].x, geometryData[elementIdx + 1].y, 0.f),                          \
-                vec4(geometryData[elementIdx + 1].z, geometryData[elementIdx + 1].w, geometryData[elementIdx + 2].x, 0.f),                      \
-                vec4(geometryData[elementIdx + 2].yzw, 1.f)                                                                                     \
+            vec4(geometryData[elementIdx].xyz, 0.f),                                                                                        \
+            vec4(geometryData[elementIdx].w, geometryData[elementIdx + 1].x, geometryData[elementIdx + 1].y, 0.f),                          \
+            vec4(geometryData[elementIdx + 1].z, geometryData[elementIdx + 1].w, geometryData[elementIdx + 2].x, 0.f),                      \
+            vec4(geometryData[elementIdx + 2].yzw, 1.f)                                                                                     \
             );                                                                                                                                  \
                                                                                                                                                 \
             vec3 pos = (M * vec4(p, 1.f)).xyz;                                                                                                  \
@@ -528,15 +626,12 @@ RETURN_TYPE FUNCTION_NAME(vec3 p) {                                             
                         int letterCode = floatBitsToInt(geometryData[elementIdx + 5 + letterIdx].w);                                            \
                                                                                                                                                 \
                         pos = (M * vec4(p, 1.f)).xyz;                                                                                           \
-                        vec2 p_sdf = vec2(0.0, 700.0) - (pos.xy) * scale; /* from bottom-left to orign of "letter space" */                     \
-                        p_sdf = pos.xy * scale; \
                         float dist2d = MAX_FLOAT;                                                                                               \
-                        if (letterCode == 46) { /* The '.' glyph is an actual 3d sphere, not an extruded 2d element */                          \
-                            float radius = 22.5 / scale;                                                                                        \
-                            vec3 offset = vec3(-radius, -700.0 / scale + radius, radius);                                                       \
-                            sdValue = opSmoothUnion(sdSphere(pos + offset, radius), sdValue, smoothness);                                       \
+                        if (letterCode == 37) { /* The '.' glyph is an actual 3d sphere, not an extruded 2d element */                          \
+                            float radius = scale * 0.5  ;                                                                                        \
+                            sdValue = opSmoothUnion(sdSphere(pos - vec3(radius), radius), sdValue, smoothness);                                       \
                         } else {                                                                                                                \
-                            dist2d = getBakedSDF(letterCode, pos.xy, scale) / scale;                                                       \
+                            dist2d = getBakedSDF(letterCode, pos.xy, scale);                                                       \
                             sdValue = opSmoothUnion(opExtrusion(pos, dist2d, depth), sdValue, smoothness);                                      \
                         }                                                                                                                       \
                     }                                                                                                                           \
@@ -575,7 +670,7 @@ RETURN_TYPE FUNCTION_NAME(vec3 p) {                                             
 }                                                                                                                                               \
 
 // GENERATE_MAP_FUNCTION(map, float)
-GENERATE_MAP_FUNCTION(mapWithMaterial, Surface)
+GENERATE_MAP_FUNCTION(mapWithMaterial, Surface) 
 
 Surface mapSimple(vec3 p) {
     Surface combinedSurface;
@@ -590,7 +685,7 @@ Surface mapSimple(vec3 p) {
 
     float rawDist1 = sdBox(p - vec3(0.5f, 0.2f, 0.0f), vec3(0.3f, 0.1f, 0.2f));
     float rawDist2 = sdSphere(p - vec3(0.5f), 0.15f);
-    float rawDist3 = sdBox(p - vec3(0.5f, 0.25f, -0.2f), vec3(0.4f, 0.2f, 0.1f));
+    float rawDist3 = sdBox(p - vec3(0.5f, 0.25f, - 0.2f), vec3(0.4f, 0.2f, 0.1f));
     combinedSurface.distance = rawDist1;
 
     Surface s2;
@@ -603,108 +698,114 @@ Surface mapSimple(vec3 p) {
 
 vec3 calcNormalTetrahedron(vec3 p) {
     // https://iquilezles.org/articles/normalsSDF/
-    const float h = 0.0001f;      // replace by an appropriate value
-    vec3 n = vec3(0.0f);
-    for (int i = ZERO; i < 4; i++) {
-        vec3 e = 0.5773f * (2.0f * vec3((((i + 3) >> 1) & 1), ((i >> 1) & 1), (i & 1)) - 1.0f);
-        n += e * mapWithMaterial(p + e * h).distance;
-    }
-    return normalize(n);
+const float h = 0.0001f;      // replace by an appropriate value
+vec3 n = vec3(0.0f);
+for (int i = ZERO;
+i < 4;
+i ++) {
+vec3 e = 0.5773f * (2.0f * vec3((((i + 3) >> 1) & 1), ((i >> 1) & 1), (i & 1)) - 1.0f);
+n += e * mapWithMaterial(p + e * h).distance;
+}
+return normalize(n);
 
 }
 
 HitInfo trace(vec3 ro, vec3 rd) {
     // adapted from Accelerating Sphere Tracing 
     // https://diglib.eg.org/server/api/core/bitstreams/7537a378-9a0a-4ef4-b57d-877322b1441e/content    
-    float omega = 1.2f;
-    float t = 0.0f;
-    float pixelRadius = EPSILON;
-    float tMax = 100.0f;
+float omega = 1.2f;
+float t = 0.0f;
+float pixelRadius = EPSILON;
+float tMax = 100.0f;
 
-    float rLast = 0.0f;
-    float rCurr = 0.1f; // map(ro).distance; to reduce compilation time, because map() gets inlined
-    float dPrev = 0.0f;
+float rLast = 0.0f;
+float rCurr = 0.1f; // map(ro).distance; to reduce compilation time, because map() gets inlined
+float dPrev = 0.0f;
 
-    float lowerBound = 0.001f; // lower bound for the stepsize when raymarching
-    float upperBound = 0.01f; // upper bound for the stepsize when raymarching
-    float lowerDistance = EPSILON; // distance at which stepsize = lowerBound
-    float upperDistance = 0.01f; // distance at which stepsize = upperBound
+float lowerBound = 0.001f; // lower bound for the stepsize when raymarching
+float upperBound = 0.01f; // upper bound for the stepsize when raymarching
+float lowerDistance = EPSILON; // distance at which stepsize = lowerBound
+float upperDistance = 0.01f; // distance at which stepsize = upperBound
 
-    int directionalDerivativeZero = 0;
+int directionalDerivativeZero = 0;
 
-    for (int i = ZERO; i < 200; i++) {
+for (int i = ZERO;
+i < 200;
+i ++) {
         // Intersection found if raymarching
-        bool raymarchingIntersection = rCurr < 0.0f;
-        if (raymarchingIntersection) {
-            float tLower = t - dPrev;
-            float tUpper = t;
-            float mid = 0.0f;
+bool raymarchingIntersection = rCurr < 0.0f;
+if (raymarchingIntersection) {
+float tLower = t - dPrev;
+float tUpper = t;
+float mid = 0.0f;
 
-            for (int j = 0; j < 5; j++) {
-                mid = (tLower + tUpper) * 0.5f;
-                float sdfMid = mapWithMaterial(ro + mid * rd).distance;
-                if (abs(sdfMid) < pixelRadius) {
-                    break;
-                }
-                if (sdfMid < 0.0f) {
-                    tUpper = mid;
-                } else {
-                    tLower = mid;
-                }
-            }
+for (int j = 0;
+j < 5;
+j ++) {
+mid = (tLower + tUpper) * 0.5f;
+float sdfMid = mapWithMaterial(ro + mid * rd).distance;
+if (abs(sdfMid) < pixelRadius) {
+break;
+}
+if (sdfMid < 0.0f) {
+tUpper = mid;
+} else {
+tLower = mid;
+}
+}
             // vec3 p = ro + t * rd;
             // return HitInfo(i, p, calcNormalTetrahedron(p), map(p));
-        }
+}
 
         // Hit condition
-        if (raymarchingIntersection || rCurr < pixelRadius) {
-            vec3 p = ro + t * rd;
-            return HitInfo(i, p, calcNormalTetrahedron(p), mapWithMaterial(p));
-        }
+if (raymarchingIntersection || rCurr < pixelRadius) {
+vec3 p = ro + t * rd;
+return HitInfo(i, p, calcNormalTetrahedron(p), mapWithMaterial(p));
+}
 
-        if (t >= tMax) {
-            vec3 p = ro + t * rd;
-            break;
-        }
+if (t >= tMax) {
+vec3 p = ro + t * rd;
+break;
+}
 
-        float dNext = rCurr;
-        float denom = dPrev + rLast - rCurr;
+float dNext = rCurr;
+float denom = dPrev + rLast - rCurr;
 
-        if (i > 0 && denom > EPSILON) {
-            dNext = rCurr + omega * rCurr * (dPrev - rLast + rCurr) / denom;
-        }
+if (i > 0 && denom > EPSILON) {
+dNext = rCurr + omega * rCurr * (dPrev - rLast + rCurr) / denom;
+}
 
         // Detect parallel rays 
-        if (rCurr < upperDistance && abs(rCurr - rLast) < EPSILON) {
-            directionalDerivativeZero++;
-        } else {
-            directionalDerivativeZero = 0;
-        }
+if (rCurr < upperDistance && abs(rCurr - rLast) < EPSILON) {
+directionalDerivativeZero ++;
+} else {
+directionalDerivativeZero = 0;
+}
 
-        bool isParallel = directionalDerivativeZero >= 5;
+bool isParallel = directionalDerivativeZero >= 5;
 
-        if (isParallel) {
-            float tFactor = clamp((rCurr - lowerDistance) / (upperDistance - lowerDistance), 0.0f, 1.0f);
-            float minStep = mix(lowerBound, upperBound, tFactor);
+if (isParallel) {
+float tFactor = clamp((rCurr - lowerDistance) / (upperDistance - lowerDistance), 0.0f, 1.0f);
+float minStep = mix(lowerBound, upperBound, tFactor);
             // Allow over-relaxation to take a larger step if possible, but enforce minimum step
-            dNext = max(dNext, minStep);
-        }
+dNext = max(dNext, minStep);
+}
 
-        float rNext = mapWithMaterial(ro + (t + dNext) * rd).distance;
+float rNext = mapWithMaterial(ro + (t + dNext) * rd).distance;
 
         // Overrelaxation was too big (only in the case where we don't do raymarching)
-        if (!isParallel && dNext > rCurr + rNext) {
-            dNext = rCurr;
-            rNext = mapWithMaterial(ro + (t + dNext) * rd).distance;
-        }
+if (! isParallel && dNext > rCurr + rNext) {
+dNext = rCurr;
+rNext = mapWithMaterial(ro + (t + dNext) * rd).distance;
+}
 
-        t += dNext;
-        dPrev = dNext;
-        rLast = rCurr;
-        rCurr = rNext;
-    }
+t += dNext;
+dPrev = dNext;
+rLast = rCurr;
+rCurr = rNext;
+}
 
-    return HitInfo(-1, vec3(0.0f), vec3(0.0f), Surface(vec3(0.0f), vec3(0.0f), vec3(0.0f), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f));
+return HitInfo(- 1, vec3(0.0f), vec3(0.0f), Surface(vec3(0.0f), vec3(0.0f), vec3(0.0f), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f));
 }
 
 // ╔══════════════════════════════════════════════════════════╗
@@ -750,7 +851,7 @@ float calcSoftshadow(in vec3 ro, in vec3 rd, float tmin, float tmax, const float
 }
  */
 float gaussian(float x, float mu, float sigma) {
-    return exp(-1.f * ((x - mu) * (x - mu)) / (2.f * sigma * sigma));
+return exp(- 1.f * ((x - mu) * (x - mu)) / (2.f * sigma * sigma));
 }
 
 vec3 shade(HitInfo hit) {
@@ -769,55 +870,57 @@ vec3 shade(HitInfo hit) {
     }
     return vec3(1, 0., 0.); */
 
-    if (hit.id == -1) {
-        return vec3(0);
-    }
+if (hit.id == - 1) {
+return vec3(0);
+}
 
-    const vec3 lightPos = vec3(0.5f, 0.5f, 10.f);
+const vec3 lightPos = vec3(0.5f, 0.5f, 10.f);
 
-    vec3 vecToLight = normalize(lightPos - hit.pos);
-    vec3 vecFromLight = normalize(hit.pos - lightPos);
+vec3 vecToLight = normalize(lightPos - hit.pos);
+vec3 vecFromLight = normalize(hit.pos - lightPos);
 
-    Surface surface = hit.surface;
+Surface surface = hit.surface;
 
-    float mixFacotr = gaussian(surface.mix, 0.5f, 0.07f);
+float mixFacotr = gaussian(surface.mix, 0.5f, 0.07f);
 
-    float ld = 1.f; // diffuse light intensity (light source dependent)
-    float la = 1.f; // ambient light intensity (constant for scene)
-    float ls = 1.f; // specular light intensity (light source dependent)
+float ld = 1.f; // diffuse light intensity (light source dependent)
+float la = 1.f; // ambient light intensity (constant for scene)
+float ls = 1.f; // specular light intensity (light source dependent)
 
-    float iDiffuse = surface.kd * ld * max(0.f, dot(vecToLight, hit.normal));
-    float iAmbient = surface.ka * la;
-    float iSpecular = surface.ks * ls * pow(max(0.f, dot(reflect(vecFromLight, hit.normal), vec3(0.f, 0.f, 1.f))), surface.p);
+float iDiffuse = surface.kd * ld * max(0.f, dot(vecToLight, hit.normal));
+float iAmbient = surface.ka * la;
+float iSpecular = surface.ks * ls * pow(max(0.f, dot(reflect(vecFromLight, hit.normal), vec3(0.f, 0.f, 1.f))), surface.p);
 
     //float shadow = shadow(hit.pos, -sundir, 0.001f, 5.f);
-    float shadow; // = softshadow(hit.pos, vecToLight, 0.001f, 5.f, 0.1f);
+float shadow; // = softshadow(hit.pos, vecToLight, 0.001f, 5.f, 0.1f);
     //float shadow = calcSoftshadow(hit.pos, -sundir, 0.01f, 5.0f, 16.0f);
     // shadow = max(shadow, 0.1f);
-    shadow = 1.0f;
+shadow = 1.0f;
 
     //return vec3(shadow);
     //return hit.id != -1 ? vec3(1.f) : vec3(0.f);
-    return shadow * (iDiffuse * surface.colorDiffuse + iSpecular * surface.colorSpecular) + iAmbient * surface.colorAmbient;
+return shadow * (iDiffuse * surface.colorDiffuse + iSpecular * surface.colorSpecular) + iAmbient * surface.colorAmbient;
 }
 
 struct ColorStop {
-    vec3 color;
-    float position;
+vec3 color;
+float position;
 };
 
 #define COLOR_RAMP(colors, factor, finalColor) { \
-    int index = 0; \
-    for(int i = 0; i < colors.length() - 1; i++){ \
-       ColorStop currentColor = colors[i]; \
-       bool isInBetween = currentColor.position <= factor; \
-       index = isInBetween ? i : index; \
-    } \
-    ColorStop currentColor = colors[index]; \
-    ColorStop nextColor = colors[index + 1]; \
-    float range = nextColor.position - currentColor.position; \
-    float lerpFactor = (factor - currentColor.position) / range; \
-    finalColor = mix(currentColor.color, nextColor.color, lerpFactor); \
+int index = 0; \
+for (int i = 0; \
+i < colors.length() - 1;\
+i ++) { \
+ColorStop currentColor = colors[i]; \
+bool isInBetween = currentColor.position <= factor; \
+index = isInBetween ? i : index; \
+} \
+ColorStop currentColor = colors[index]; \
+ColorStop nextColor = colors[index + 1]; \
+float range = nextColor.position - currentColor.position; \
+float lerpFactor = (factor - currentColor.position) / range; \
+finalColor = mix(currentColor.color, nextColor.color, lerpFactor); \
 } \
 
 // ╔══════════════════════════════════════════════════════════╗
@@ -825,57 +928,54 @@ struct ColorStop {
 // ╚══════════════════════════════════════════════════════════╝
 void main(void) {
     //const vec2 subPixleOffsets[] = vec2[](vec2(0.375f, 0.125f) - vec2(0.5f), vec2(0.875f, 0.375f) - vec2(0.5f), vec2(0.125f, 0.625f) - vec2(0.5f), vec2(0.625f, 0.875f) - vec2(0.5f));
-     const vec2 subPixleOffsets[] = vec2[](vec2(0.f, 0.f));
-    vec2 pixelSize = vec2(1.f) / uResolution.x;
+const vec2 subPixleOffsets[] = vec2[](vec2(0.f, 0.f));
+vec2 pixelSize = vec2(1.f) / uResolution.x;
 
-    vec3 color = vec3(0.f);
+vec3 color = vec3(0.f);
 
-    vec2 uv = vUv; // origin = top left
-    uv *= vec2(uWindowWidth, uWindowHeight);
-    uv += vec2(uLeftOffset, uTopOffset);
-/*
-    float ddd = getBakedSDF(5,uv - vec2(0.2)) / 1000.;
+vec2 uv = vUv; // origin = top left
+uv *= vec2(uWindowWidth, uWindowHeight);
+uv += vec2(uLeftOffset, uTopOffset);
+
+    /* float ddd = getBakedSDF(15,uv - vec2(0.5, 0.5), 0.5) / 1000.;
     ddd = fract(ddd * 10.);
     // ddd = textureLod(uSdfArray, vec3(pp, float(5)), 0.0).r;
     float ccc = ddd > .0 ? 0. : 1.;
 
-    fragColor = vec4(ddd, ddd, ddd, 1.f); */
+    fragColor = vec4(ddd, ddd, ddd, 1.f);
+    return; */
 
     /* if (pp.y <= 0. || pp.x >= 1.){
         fragColor = vec4(0., 0., 0., 1.);
     } */
 
-    vec3 pos = vec3(uv, uCameraZ);
-    vec3 dir = vec3(0.f, 0.f, -1.f);
-    vec3 posOffset;
+vec3 pos = vec3(uv, uCameraZ);
+vec3 dir = vec3(0.f, 0.f, - 1.f);
+vec3 posOffset;
 
-    for (int i = 0; i < subPixleOffsets.length(); i++) {
-        posOffset = pos + vec3(subPixleOffsets[i] * pixelSize, 0.0f);
+for (int i = 0;
+i < subPixleOffsets.length();
+i ++) {
+posOffset = pos + vec3(subPixleOffsets[i] * pixelSize, 0.0f);
 
-        if (!uTwoDMode) {
-            color += shade(trace(posOffset, dir));
-        } else {
-            posOffset.z = 0.0f;
-            Surface surface; // mapWithMaterial(posOffset);
-            float sdfValue = surface.distance * 80.;
+if (! uTwoDMode) {
+color += shade(trace(posOffset, dir));
+} else {
+posOffset.z = 0.0f;
+Surface surface; // mapWithMaterial(posOffset);
+float sdfValue = surface.distance * 80.f;
 
-            ColorStop[] colors = ColorStop[](
+ColorStop[] colors = ColorStop[](
 			    //ColorStop(surface.colorDiffuse, 0.000000),
-			    ColorStop(vec3(0.000000, 0.000000, 0.015996), 0.000000),
-			    ColorStop(vec3(0.008023, 0.002428, 0.162029), 0.300000),
-			    ColorStop(vec3(0.590619, 0.964686, 0.428690), 0.400000),
-			    ColorStop(vec3(0.991102, 0.031896, 0.814847), 0.600000),
-			    ColorStop(vec3(1.000000, 0.000000, 0.001821), 0.800000),
-			    ColorStop(vec3(0.008023, 0.002428, 0.162029), 0.900000),
-			    ColorStop(vec3(0.000000, 0.000000, 0.015996), 1.000000));
-            vec3 finalColor;
-            COLOR_RAMP(colors, sdfValue, finalColor);
+ColorStop(vec3(0.000000f, 0.000000f, 0.015996f), 0.000000f), ColorStop(vec3(0.008023f, 0.002428f, 0.162029f), 0.300000f), ColorStop(vec3(0.590619f, 0.964686f, 0.428690f), 0.400000f), ColorStop(vec3(0.991102f, 0.031896f, 0.814847f), 0.600000f), ColorStop(vec3(1.000000f, 0.000000f, 0.001821f), 0.800000f), ColorStop(vec3(0.008023f, 0.002428f, 0.162029f), 0.900000f), ColorStop(vec3(0.000000f, 0.000000f, 0.015996f), 1.000000f));
+vec3 finalColor;
+COLOR_RAMP(colors, sdfValue, finalColor);
 
-            color += vec3(finalColor);
-        }
-    }
+color += vec3(finalColor);
+}
+}
 
-    color /= float(subPixleOffsets.length());
+color /= float(subPixleOffsets.length());
 
-    fragColor = vec4(color, 1.f);
+fragColor = vec4(color, 1.f);
 }

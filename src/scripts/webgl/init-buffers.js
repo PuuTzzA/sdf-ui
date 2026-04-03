@@ -45,25 +45,47 @@ function initUvBuffer(gl, programInfo) {
     return textureCoordBuffer;
 }
 
+function initCommandBufferObject(gl, programInfo) {
+    const commandBuffer = gl.createBuffer();
+
+    gl.uniformBlockBinding(
+        programInfo.program,
+        programInfo.uniformLocations.commandBlock,
+        SdfCanvas.COMMAND_BLOCK_UNIFORM_BUFFER_BINDING_INDEX,
+    );
+
+    gl.bindBufferBase(
+        gl.UNIFORM_BUFFER,
+        SdfCanvas.COMMAND_BLOCK_UNIFORM_BUFFER_BINDING_INDEX,
+        commandBuffer,
+    );
+
+    gl.bufferData(
+        gl.UNIFORM_BUFFER,
+        SdfCanvas.MAX_NUM_COMMANDS * Int32Array.BYTES_PER_ELEMENT,
+        gl.DYNAMIC_DRAW,
+    )
+}
+
 function initGeometryBufferObject(gl, programInfo) {
     const geometryBuffer = gl.createBuffer();
 
     gl.uniformBlockBinding(
         programInfo.program,
         programInfo.uniformLocations.geometryBlock,
-        SdfCanvas.GEOMETRY_BLOCK_UNIFORM_BUFFER_BINDING_INDEX
+        SdfCanvas.GEOMETRY_BLOCK_UNIFORM_BUFFER_BINDING_INDEX,
     );
 
     gl.bindBufferBase(
         gl.UNIFORM_BUFFER,
         SdfCanvas.GEOMETRY_BLOCK_UNIFORM_BUFFER_BINDING_INDEX,
-        geometryBuffer
+        geometryBuffer,
     );
 
     gl.bufferData(
         gl.UNIFORM_BUFFER,
         SdfCanvas.MAX_SIZE_ELEMENT_BUFFER * 4 * Float32Array.BYTES_PER_ELEMENT,
-        gl.DYNAMIC_DRAW
+        gl.DYNAMIC_DRAW,
     );
 
     return geometryBuffer;
@@ -75,19 +97,19 @@ function initShadingBufferObject(gl, programInfo) {
     gl.uniformBlockBinding(
         programInfo.program,
         programInfo.uniformLocations.shadingBlock,
-        SdfCanvas.SHADING_BLOCK_UNIFORM_BUFFER_BINDING_INDEX
+        SdfCanvas.SHADING_BLOCK_UNIFORM_BUFFER_BINDING_INDEX,
     );
 
     gl.bindBufferBase(
         gl.UNIFORM_BUFFER,
         SdfCanvas.SHADING_BLOCK_UNIFORM_BUFFER_BINDING_INDEX,
-        shadingBuffer
+        shadingBuffer,
     );
 
     gl.bufferData(
         gl.UNIFORM_BUFFER,
         SdfCanvas.MAX_SIZE_ELEMENT_BUFFER * 4 * Float32Array.BYTES_PER_ELEMENT,
-        gl.DYNAMIC_DRAW
+        gl.DYNAMIC_DRAW,
     );
 
     return shadingBuffer;
@@ -99,6 +121,7 @@ function initBuffers(gl, programInfo) {
 
     const positionBuffer = initPositionBuffer(gl, programInfo);
     const uvBuffer = initUvBuffer(gl, programInfo);
+    const commandBuffer = initCommandBufferObject(gl, programInfo);
     const geometryBuffer = initGeometryBufferObject(gl, programInfo);
     const shadingBuffer = initShadingBufferObject(gl, programInfo);
 
@@ -108,8 +131,9 @@ function initBuffers(gl, programInfo) {
         vao: vao,
         position: positionBuffer,
         uv: uvBuffer,
+        commandBuffer: commandBuffer,
         geometryBuffer: geometryBuffer,
-        shadingBuffer: shadingBuffer
+        shadingBuffer: shadingBuffer,
     };
 }
 
