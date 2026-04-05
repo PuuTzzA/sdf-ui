@@ -49,7 +49,7 @@ class ASdfElement extends HTMLElement {
 
 class SdfSphere extends ASdfElement {
     getElementType() {
-        return SdfCanvas.ElementType.SPHERE;
+        return SdfCanvas.Commands.SPHERE;
     }
 }
 
@@ -57,7 +57,7 @@ customElements.define("sdf-sphere", SdfSphere);
 
 class SdfBoxSimple extends ASdfElement {
     getElementType() {
-        return SdfCanvas.ElementType.BOX_SIMPLE;
+        return SdfCanvas.Commands.BOX_SIMPLE;
     }
 }
 
@@ -65,7 +65,7 @@ customElements.define("sdf-box-simple", SdfBoxSimple);
 
 class SdfBox extends ASdfElement {
     getElementType() {
-        return SdfCanvas.ElementType.BOX;
+        return SdfCanvas.Commands.BOX;
     }
 }
 
@@ -73,7 +73,7 @@ customElements.define("sdf-box", SdfBox);
 
 class SdfRoundBox extends ASdfElement {
     getElementType() {
-        return SdfCanvas.ElementType.ROUND_BOX;
+        return SdfCanvas.Commands.ROUND_BOX;
     }
 }
 
@@ -86,15 +86,17 @@ class SdfText extends ASdfElement {
         this.classList.add("sdf-ui-text-base-class");
         this.textMeter = new TextMeter(this);
 
-        this.size = this.calculateSize();
+        this.numLetters = 0;
+        this.size = 0;
+        this.update();
     }
 
     getElementType() {
-        return SdfCanvas.ElementType.TEXT;
+        return SdfCanvas.Commands.TEXT;
     }
 
     getNumberOfLetters() {
-        return this.textContent.replace(/\s+/g, '').length;
+        return this.numLetters;
     }
 
     getSize() {
@@ -102,15 +104,10 @@ class SdfText extends ASdfElement {
         return this.size
     }
 
-    calculateSize() {
-        return 5 + this.getNumberOfLetters(); // each letter only needs x and y offset and letter code
-    }
-
-    updateSize() {
-        const currentSize = this.calculateSize();
-        if (currentSize != this.size) {
-            this.size = SdfCanvas.updateTrackedElementSize(this.size, currentSize);
-        }
+    update() { // to avoid size changing during function calls or something
+        this.numLetters = this.textContent.replace(/\s+/g, '').length;
+        this.size = 4 + this.numLetters;
+        this.textMeter.updateStyles();
     }
 
     /***

@@ -6,7 +6,7 @@ precision highp float;
 #define MAX_LAYERS 16
 #define EPSILON 1e-4
 #define MAX_FLOAT 3.402823466e+38f
-#define ZERO (min(uNumLayers,0)) // non-constant zero to avoid inlining of functions
+#define ZERO (min(uNumCommands,0)) // non-constant zero to avoid inlining of functions
 
 // ╔══════════════════════════════════════════════════════════╗
 // ║                       UNIFORMS                           ║
@@ -31,11 +31,6 @@ uniform float uWindowHeight;
 
 uniform float uCameraZ;
 uniform bool uTwoDMode;
-
-uniform int uLayerOperations[MAX_LAYERS];
-uniform int uElementsInLayer[MAX_LAYERS];
-uniform float uSmoothingFactors[MAX_LAYERS];
-uniform int uNumLayers;
 
 // Uniforms for the Glyph Texture
 uniform highp sampler2DArray uSdfArray;
@@ -326,6 +321,107 @@ Surface opSmoothIntersection(Surface a, Surface b, float smoothness) {
     blend.x);//
 }
 
+void opUnionInout(inout Surface a, Surface b) {
+    float t = a.distance < b.distance ? 0.f : 1.f;
+
+    a.colorDiffuse = mix(a.colorDiffuse, b.colorDiffuse, t);
+    a.colorSpecular = mix(a.colorSpecular, b.colorSpecular, t);
+    a.colorAmbient = mix(a.colorAmbient, b.colorAmbient, t);
+    a.kd = mix(a.kd, b.kd, t);
+    a.ks = mix(a.ks, b.ks, t);
+    a.p = mix(a.p, b.p, t);
+    a.ka = mix(a.ka, b.ka, t);
+    a.mix = t;
+    a.distance = min(a.distance, b.distance);
+}
+
+void opSubtractionInout(inout Surface a, Surface b) {
+    float t = a.distance > -b.distance ? 0.f : 1.f;
+
+    a.colorDiffuse = mix(a.colorDiffuse, b.colorDiffuse, t);
+    a.colorSpecular = mix(a.colorSpecular, b.colorSpecular, t);
+    a.colorAmbient = mix(a.colorAmbient, b.colorAmbient, t);
+    a.kd = mix(a.kd, b.kd, t);
+    a.ks = mix(a.ks, b.ks, t);
+    a.p = mix(a.p, b.p, t);
+    a.ka = mix(a.ka, b.ka, t);
+    a.mix = t;
+    a.distance = max(a.distance, -b.distance);
+}
+
+void opIntersectionInout(inout Surface a, Surface b) {
+    float t = a.distance > b.distance ? 0.f : 1.f;
+
+    a.colorDiffuse = mix(a.colorDiffuse, b.colorDiffuse, t);
+    a.colorSpecular = mix(a.colorSpecular, b.colorSpecular, t);
+    a.colorAmbient = mix(a.colorAmbient, b.colorAmbient, t);
+    a.kd = mix(a.kd, b.kd, t);
+    a.ks = mix(a.ks, b.ks, t);
+    a.p = mix(a.p, b.p, t);
+    a.ka = mix(a.ka, b.ka, t);
+    a.mix = t;
+    a.distance = max(a.distance, b.distance);
+}
+
+void opXorInout(inout Surface a, Surface b) {
+    float dist = max(min(a.distance, b.distance), -max(a.distance, b.distance));
+    float t = dist == a.distance ? 0.f : 1.f;
+
+    a.colorDiffuse = mix(a.colorDiffuse, b.colorDiffuse, t);
+    a.colorSpecular = mix(a.colorSpecular, b.colorSpecular, t);
+    a.colorAmbient = mix(a.colorAmbient, b.colorAmbient, t);
+    a.kd = mix(a.kd, b.kd, t);
+    a.ks = mix(a.ks, b.ks, t);
+    a.p = mix(a.p, b.p, t);
+    a.ka = mix(a.ka, b.ka, t);
+    a.mix = t;
+    a.distance = dist;
+}
+
+void opSmoothUnionInout(inout Surface a, Surface b, float smoothness) {
+    vec2 blend = smin(a.distance, b.distance, smoothness);
+
+    a.colorDiffuse = mix(a.colorDiffuse, b.colorDiffuse, blend.y);
+    a.colorSpecular = mix(a.colorSpecular, b.colorSpecular, blend.y);
+    a.colorAmbient = mix(a.colorAmbient, b.colorAmbient, blend.y);
+    a.kd = mix(a.kd, b.kd, blend.y);
+    a.ks = mix(a.ks, b.ks, blend.y);
+    a.p = mix(a.p, b.p, blend.y);
+    a.ka = mix(a.ka, b.ka, blend.y);
+    a.mix = blend.y;
+    a.distance = blend.x;
+}
+
+void opSmoothSubtractionInout(inout Surface a, Surface b, float smoothness) {
+    vec2 blend = smin(-a.distance, b.distance, smoothness);
+    blend.x *= -1.f;
+
+    a.colorDiffuse = mix(a.colorDiffuse, b.colorDiffuse, blend.y);
+    a.colorSpecular = mix(a.colorSpecular, b.colorSpecular, blend.y);
+    a.colorAmbient = mix(a.colorAmbient, b.colorAmbient, blend.y);
+    a.kd = mix(a.kd, b.kd, blend.y);
+    a.ks = mix(a.ks, b.ks, blend.y);
+    a.p = mix(a.p, b.p, blend.y);
+    a.ka = mix(a.ka, b.ka, blend.y);
+    a.mix = blend.y;
+    a.distance = blend.x;
+}
+
+void opSmoothIntersectionInout(inout Surface a, Surface b, float smoothness) {
+    vec2 blend = smin(-a.distance, -b.distance, smoothness);
+    blend.x *= -1.f;
+
+    a.colorDiffuse = mix(a.colorDiffuse, b.colorDiffuse, blend.y);
+    a.colorSpecular = mix(a.colorSpecular, b.colorSpecular, blend.y);
+    a.colorAmbient = mix(a.colorAmbient, b.colorAmbient, blend.y);
+    a.kd = mix(a.kd, b.kd, blend.y);
+    a.ks = mix(a.ks, b.ks, blend.y);
+    a.p = mix(a.p, b.p, blend.y);
+    a.ka = mix(a.ka, b.ka, blend.y);
+    a.mix = blend.y;
+    a.distance = blend.x;
+}
+
 // ╔══════════════════════════════════════════════════════════╗
 // ║                      RAYMARCHING                         ║
 // ╚══════════════════════════════════════════════════════════╝
@@ -393,25 +489,36 @@ float getBakedSDF(int charIndex, vec2 p, float scale) {
     return (baseDist + exteriorDist) / bakeToWorldRatio; // convert the distance form glyph-space to world space
 }
 
-Surface mapWithMaterial2(vec3 p) {
-    Surface stack[2];
+#define SETUP_M             populateData(current, elementIdx);                                                                                             \
+M = mat4(                                                                                                                      \
+vec4(geometryData[elementIdx].xyz, 0.f),                                                                                        \
+vec4(geometryData[elementIdx].w, geometryData[elementIdx + 1].x, geometryData[elementIdx + 1].y, 0.f),                          \
+vec4(geometryData[elementIdx + 1].z, geometryData[elementIdx + 1].w, geometryData[elementIdx + 2].x, 0.f),                      \
+vec4(geometryData[elementIdx + 2].yzw, 1.f)                                                                                     \
+);                                                                                                                                  \
+pos = (M * vec4(p, 1.0f)).xyz;\
 
-    int elementIdx = 0;
-    int stackIdx = 0;
-   
-    for (int i = ZERO; i < uNumCommands; i++) {
-        int command = commandData[i / 4][i % 4];
 
-        Surface current;                                                                                                                
-        populateData(current, elementIdx);                                                                                                  
+Surface mapWithMaterial(vec3 p) {
+    Surface accumulatedResult; /* fixed size stack */
+    initializeData(accumulatedResult);
 
+    // int elementIdx = 0;
+
+    int layerOperation = 101; /* persistent layer operation */
+    float smoothness = 0.001f; /* persistent smoothness parameter for layerOperations */
+
+    for (int i = 0; i < uNumCommands; i++) {
+        int command = commandData[i].x;
+        int elementIdx = commandData[i].y;
         mat4 M;
         vec3 pos;
         float sdValue;
-        float smoothness;/* persistent smoothness parameter for layerOperations */
+        Surface current; 
 
         /* Sdf element */
-        if (command < 100) { 
+        /* if (command < 100) { 
+            populateData(current, elementIdx);                                                                                                  
             M = mat4(                                                                                                                      
                 vec4(geometryData[elementIdx].xyz, 0.f),                                                                                        
                 vec4(geometryData[elementIdx].w, geometryData[elementIdx + 1].x, geometryData[elementIdx + 1].y, 0.f),                          
@@ -419,393 +526,218 @@ Surface mapWithMaterial2(vec3 p) {
                 vec4(geometryData[elementIdx + 2].yzw, 1.f)                                                                                     
             );                                                                                                                                  
             pos = (M * vec4(p, 1.0f)).xyz;
+        }  */
+
+        /* Sphere */
+        if (command == 0) {
+            SETUP_M sdValue = sdSphere(pos, geometryData[elementIdx + 3].x);
+            setDistance(current, sdValue);
         } 
+        /* Box Simple */
+        else if (command == 1) { 
+            SETUP_M sdValue = sdBox(pos, vec3(geometryData[elementIdx + 3].xyz));
+            setDistance(current, sdValue);
+        } 
+        /* Box (with rounded corners) */
+        else if (command == 2) {
+            SETUP_M float w = geometryData[elementIdx + 3].x;
+            float h = geometryData[elementIdx + 3].y;
+            float d = geometryData[elementIdx + 3].z;
 
-        switch (command) {
-            case 0: /* Sphere */                                                                                                           
-                sdValue = sdSphere(pos, geometryData[elementIdx + 3].y);          
-                setDistance(current, sdValue);                                                          
-                stack[stackIdx++] = current;
-                elementIdx += 4;                                                                                                            
-                break;                                                                                                                      
-            case 1: /* Simple Box */                                                                                                        
-                sdValue = sdBox(pos, vec3(geometryData[elementIdx + 3].yzw));                                                               
-                setDistance(current, sdValue);                                                          
-                stack[stackIdx++] = current;
-                elementIdx += 4;                                                                                                            
-                break;                                                                                                                      
-            case 2: /* Box (with optional rounded corners) */                                                                               
-                float w = geometryData[elementIdx + 3].y;                                                                                   
-                float h = geometryData[elementIdx + 3].z;                                                                                   
-                float d = geometryData[elementIdx + 3].w;                                                                                   
-                                                                                                                                            
-                int initialRotation = floatBitsToInt(geometryData[elementIdx + 5].y);                                                       
-                                                                                                                                            
-                /* Adiddional Rotation (rounded edge selection) */                                                                          
-                if (initialRotation == 1) {                                                                                                 
-                    mat3 Rot = mat3(0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, -1.0f, 0.0f, 0.0f);                                                          
-                    pos = Rot * pos;                                                                                                        
-                    float temp = w;                                                                                                         
-                    w = d;                                                                                                                  
-                    d = temp;                                                                                                               
-                } else if (initialRotation == 2) {                                                                                          
-                    mat3 Rot = mat3(1.0f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f, 0.0f, 1.0f, 0.0f);                                                          
-                    pos = Rot * pos;                                                                                                        
-                    float temp = h;                                                                                                         
-                    h = d;                                                                                                                  
-                    d = temp;                                                                                                               
-                }                                                                                                                           
-                                                                                                                                            
-                float val = sdRoundBox2d(pos.xy, vec2(w, h), geometryData[elementIdx + 4], floatBitsToInt(geometryData[elementIdx + 5].x)); 
-                sdValue = opExtrusion(pos, val, d);                                                                                         
-                                                                                                                                            
-                sdValue = opRound(sdValue, geometryData[elementIdx + 5].z);                                                                 
-                setDistance(current, sdValue);                                                          
-                stack[stackIdx++] = current;
-                                                                                                                                            
-                elementIdx += 6;                                                                                                            
-                break;                                                                                                                      
-            case 3: /* Round Box */                                                                                                         
-                sdValue = sdRoundBox(pos, geometryData[elementIdx + 3].yzw, geometryData[elementIdx + 4].x);                                
-                setDistance(current, sdValue);                                                          
-                stack[stackIdx++] = current;
-                elementIdx += 5;                                                                                                            
-                break;                                                                                                                      
-            case 4: /* Text */                                                                                                              
-                /* The letters are stored in a TextureArray accordin to their index */
-                /* The starting point inside the texture is stored in uTextureOffset */
-                int numLetters = floatBitsToInt(geometryData[elementIdx + 3].y);                                                            
-                float scale = geometryData[elementIdx + 3].z;                                                                               
-                float depth = geometryData[elementIdx + 3].w;                                                                               
-                float smoothness = geometryData[elementIdx + 4].x;                                                                          
-                                                                                                                                            
-                sdValue = MAX_FLOAT;                                                                                                        
-                for (int letterIdx = ZERO; letterIdx < numLetters; letterIdx++) {                                                              
-                    M[3][0] = geometryData[elementIdx + 5 + letterIdx].x; /* matrix[column][row] */                                         
-                    M[3][1] = geometryData[elementIdx + 5 + letterIdx].y;                                                                   
-                    M[3][2] = geometryData[elementIdx + 5 + letterIdx].z;                                                                   
-                    int letterCode = floatBitsToInt(geometryData[elementIdx + 5 + letterIdx].w);                                            
-                                                                                                                                            
-                    pos = (M * vec4(p, 1.f)).xyz;                                                                                           
-                    vec2 p_sdf = vec2(0.0f, 700.0f) - (pos.xy) * scale; /* from bottom-left to orign of "letter space" */                     
-                    p_sdf = pos.xy * scale; 
-                    float dist2d = MAX_FLOAT;                                                                                               
-                    if (letterCode == 37) { /* The '.' glyph is an actual 3d sphere, not an extruded 2d element */                          
-                        float radius = 22.5f / scale;                                                                                        
-                        vec3 offset = vec3(-radius, -700.0f / scale + radius, radius);                                                       
-                        sdValue = opSmoothUnion(sdSphere(pos + offset, radius), sdValue, smoothness);                                       
-                    } else {                                                                                                                
-                        dist2d = getBakedSDF(letterCode, pos.xy, scale) / scale;                                                       
-                        sdValue = opSmoothUnion(opExtrusion(pos, dist2d, depth), sdValue, smoothness);                                      
-                    }                                                                                                                       
-                }                                                                                                                           
-                setDistance(current, sdValue);                                                          
-                stack[stackIdx++] = current;
-                elementIdx += 5 + numLetters;                                                                                               
+            int initialRotation = floatBitsToInt(geometryData[elementIdx + 5].y);                                                       
 
-            case 100: /* Load smoothness parameter */
-                smoothness = geometryData[elementIdx].x;
-                elementIdx += 1;
-            case 101: /* Union */                                             
-                stack[0] = opUnion(stack[0], stack[1]);
-                break;
-            case 102: /* Subtraction */                                       
-                stack[0] = opSubtraction(stack[0], stack[1]);
-                break;
-            case 103: /* Intersection */                                      
-                stack[0] = opIntersection(stack[0], stack[1]);
-                break;
-            case 104: /* Xor */                                               
-                stack[0] = opXor(stack[0], stack[1]);
-                break;
-            case 105: /* Smooth union */                                      
-                stack[0] = opSmoothUnion(stack[0], stack[1], smoothness);
-                break;
-            case 106: /* Smooth subtraction */                                
-                stack[0] = opSmoothSubtraction(stack[0], stack[1], smoothness);
-                break;
-            case 107: /* Smooth intersection */                               
-                stack[0] = opSmoothIntersection(stack[0], stack[1], smoothness);
-                break;
+            /* Adiddional Rotation (rounded edge selection) */                                                                          
+            if (initialRotation == 1) {
+                mat3 Rot = mat3(0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, -1.0f, 0.0f, 0.0f);
+                pos = Rot * pos;
+                float temp = w;
+                w = d;
+                d = temp;
+            } else if (initialRotation == 2) {
+                mat3 Rot = mat3(1.0f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f, 0.0f, 1.0f, 0.0f);
+                pos = Rot * pos;
+                float temp = h;
+                h = d;
+                d = temp;
+            }
+
+            float val = sdRoundBox2d(pos.xy, vec2(w, h), geometryData[elementIdx + 4], floatBitsToInt(geometryData[elementIdx + 5].x));
+            sdValue = opExtrusion(pos, val, d);                                                                                         
+
+            /* sdValue = opRound(sdValue, geometryData[elementIdx + 5].z); */                                                                 
+            setDistance(current, sdValue);
+        } 
+        /* Round Box (all rounded edges) */
+        else if (command == 3) {
+            SETUP_M sdValue = sdRoundBox(pos, geometryData[elementIdx + 3].xyz, geometryData[elementIdx + 3].w);
+            setDistance(current, sdValue);
+        } 
+        /* Text */
+        else if (command == 4) {
+            SETUP_M
+            /* The letters are stored in a TextureArray according to their index */
+            int numLetters = floatBitsToInt(geometryData[elementIdx + 3].x);
+            float scale = geometryData[elementIdx + 3].y; /* inverse scale */                                                                               
+            float depth = geometryData[elementIdx + 3].z;
+            float letterSmoothness = geometryData[elementIdx + 3].w;
+
+            sdValue = MAX_FLOAT;
+            for (int letterIdx = ZERO; letterIdx < numLetters; letterIdx++) {
+                M[3][0] = geometryData[elementIdx + 4 + letterIdx].x; /* matrix[column][row] */                                         
+                M[3][1] = geometryData[elementIdx + 4 + letterIdx].y;
+                M[3][2] = geometryData[elementIdx + 4 + letterIdx].z;
+                int letterCode = floatBitsToInt(geometryData[elementIdx + 4 + letterIdx].w);
+
+                pos = (M * vec4(p, 1.f)).xyz;
+                float dist2d = MAX_FLOAT;
+                if (letterCode == 37) { /* The '.' glyph is an actual 3d sphere, not an extruded 2d element */                          
+                    float radius = 22.5f / scale;
+                    vec3 offset = vec3(-radius, -700.0f / scale + radius, radius);
+                    sdValue = opSmoothUnion(sdSphere(pos + offset, radius), sdValue, letterSmoothness);
+                } else {
+                    dist2d = getBakedSDF(letterCode, pos.xy, scale);
+                    sdValue = opSmoothUnion(opExtrusion(pos, dist2d, depth), sdValue, letterSmoothness);
+                }
+            }
+            setDistance(current, sdValue);
+        } 
+        /* Set Layer Data */
+        else if (command == 100) {
+            layerOperation = floatBitsToInt(geometryData[elementIdx].x);
+            smoothness = geometryData[elementIdx].y;
+            continue;
         }
 
+        switch (layerOperation) {
+            case 101: /* Union */                                             
+                accumulatedResult = opUnion(current, accumulatedResult);
+                break;
+            case 102: /* Subtraction */                                       
+                accumulatedResult = opSubtraction(current, accumulatedResult);
+                break;
+            case 103: /* Intersection */                                      
+                accumulatedResult = opIntersection(current, accumulatedResult);
+                break;
+            case 104: /* Xor */                                               
+                accumulatedResult = opXor(current, accumulatedResult);
+                break;
+            case 105: /* Smooth union */                
+                accumulatedResult = opSmoothUnion(current, accumulatedResult, smoothness);
+                break;
+            case 106: /* Smooth subtraction */                                
+                accumulatedResult = opSmoothSubtraction(current, accumulatedResult, smoothness);
+                break;
+            case 107: /* Smooth intersection */                               
+                accumulatedResult = opSmoothIntersection(current, accumulatedResult, smoothness);
+                break;
+        }
     }
-    return stack[0];
-}
-
-#define GENERATE_MAP_FUNCTION(FUNCTION_NAME, RETURN_TYPE)                                                                                       \
-RETURN_TYPE FUNCTION_NAME(vec3 p) {                                                                                                             \
-    RETURN_TYPE result;                                                                                                                         \
-    initializeData(result);                                                                                                                     \
-                                                                                                                                                \
-    int elementIdx = 0;                                                                                                                         \
-                                                                                                                                                \
-    for (int layer = ZERO; layer < uNumLayers; layer++) {                                                                                       \
-        int layerOperation = uLayerOperations[layer];                                                                                           \
-        int numElements = uElementsInLayer[layer];                                                                                              \
-        float smoothness = uSmoothingFactors[layer];                                                                                            \
-                                                                                                                                                \
-        for (int i = ZERO; i < numElements; i++) {                                                                                              \
-            RETURN_TYPE current;                                                                                                                \
-            populateData(current, elementIdx);                                                                                                  \
-                                                                                                                                                \
-            float sdValue;                                                                                                                      \
-                                                                                                                                                \
-            mat4 M = mat4(                                                                                                                      \
-            vec4(geometryData[elementIdx].xyz, 0.f),                                                                                        \
-            vec4(geometryData[elementIdx].w, geometryData[elementIdx + 1].x, geometryData[elementIdx + 1].y, 0.f),                          \
-            vec4(geometryData[elementIdx + 1].z, geometryData[elementIdx + 1].w, geometryData[elementIdx + 2].x, 0.f),                      \
-            vec4(geometryData[elementIdx + 2].yzw, 1.f)                                                                                     \
-            );                                                                                                                                  \
-                                                                                                                                                \
-            vec3 pos = (M * vec4(p, 1.f)).xyz;                                                                                                  \
-                                                                                                                                                \
-            switch (floatBitsToInt(geometryData[elementIdx + 3].x)) {                                                                           \
-                case 0: /* Sphere */                                                                                                            \
-                    sdValue = sdSphere(pos, geometryData[elementIdx + 3].y);                                                                    \
-                    elementIdx += 4;                                                                                                            \
-                    break;                                                                                                                      \
-                case 1: /* Simple Box */                                                                                                        \
-                    sdValue = sdBox(pos, vec3(geometryData[elementIdx + 3].yzw));                                                               \
-                    elementIdx += 4;                                                                                                            \
-                    break;                                                                                                                      \
-                case 2: /* Box (with optional rounded corners) */                                                                               \
-                    float w = geometryData[elementIdx + 3].y;                                                                                   \
-                    float h = geometryData[elementIdx + 3].z;                                                                                   \
-                    float d = geometryData[elementIdx + 3].w;                                                                                   \
-                                                                                                                                                \
-                    int initialRotation = floatBitsToInt(geometryData[elementIdx + 5].y);                                                       \
-                                                                                                                                                \
-                    /* Adiddional Rotation (rounded edge selection) */                                                                          \
-                    if (initialRotation == 1) {                                                                                                 \
-                        mat3 Rot = mat3(0.f, 0.f, 1.f, 0.f, 1.f, 0.f, -1.f, 0.f, 0.f);                                                          \
-                        pos = Rot * pos;                                                                                                        \
-                        float temp = w;                                                                                                         \
-                        w = d;                                                                                                                  \
-                        d = temp;                                                                                                               \
-                    } else if (initialRotation == 2) {                                                                                          \
-                        mat3 Rot = mat3(1.f, 0.f, 0.f, 0.f, 0.f, -1.f, 0.f, 1.f, 0.f);                                                          \
-                        pos = Rot * pos;                                                                                                        \
-                        float temp = h;                                                                                                         \
-                        h = d;                                                                                                                  \
-                        d = temp;                                                                                                               \
-                    }                                                                                                                           \
-                                                                                                                                                \
-                    float val = sdRoundBox2d(pos.xy, vec2(w, h), geometryData[elementIdx + 4], floatBitsToInt(geometryData[elementIdx + 5].x)); \
-                    sdValue = opExtrusion(pos, val, d);                                                                                         \
-                                                                                                                                                \
-                    sdValue = opRound(sdValue, geometryData[elementIdx + 5].z);                                                                 \
-                                                                                                                                                \
-                    elementIdx += 6;                                                                                                            \
-                    break;                                                                                                                      \
-                case 3: /* Round Box */                                                                                                         \
-                    sdValue = sdRoundBox(pos, geometryData[elementIdx + 3].yzw, geometryData[elementIdx + 4].x);                                \
-                    elementIdx += 5;                                                                                                            \
-                    break;                                                                                                                      \
-                case 4: /* Text */                                                                                                              \
-                    /* The letters have the following sizes:                     */                                                             \
-                    /*                   │     ┬                                 */                                                             \
-                    /* ┌──┐  ┬           ├──┐  │            ┌──┐  ┬              */                                                             \
-                    /* │  │  │ 500 units │  │  │ 700 units  │  │  │              */                                                             \
-                    /* │  │  │           │  │  │            │  │  │ 700 units    */                                                             \
-                    /* └──┘  ┴           └──┘  ┴            └──┤  │              */                                                             \
-                    /* ├──┤                                    │  ┴              */                                                             \
-                    /* 135 units                                                 */                                                             \
-                    /*                                                           */                                                             \
-                    /* The stroke width is 45 units for all strokes              */                                                             \
-                    int numLetters = floatBitsToInt(geometryData[elementIdx + 3].y);                                                            \
-                    float scale = geometryData[elementIdx + 3].z;                                                                               \
-                    float depth = geometryData[elementIdx + 3].w;                                                                               \
-                    float smoothness = geometryData[elementIdx + 4].x;                                                                          \
-                                                                                                                                                \
-                    sdValue = MAX_FLOAT;                                                                                                        \
-                    for (int letterIdx = 0; letterIdx < numLetters; letterIdx++) {                                                              \
-                        M[3][0] = geometryData[elementIdx + 5 + letterIdx].x; /* matrix[column][row] */                                         \
-                        M[3][1] = geometryData[elementIdx + 5 + letterIdx].y;                                                                   \
-                        M[3][2] = geometryData[elementIdx + 5 + letterIdx].z;                                                                   \
-                        int letterCode = floatBitsToInt(geometryData[elementIdx + 5 + letterIdx].w);                                            \
-                                                                                                                                                \
-                        pos = (M * vec4(p, 1.f)).xyz;                                                                                           \
-                        float dist2d = MAX_FLOAT;                                                                                               \
-                        if (letterCode == 37) { /* The '.' glyph is an actual 3d sphere, not an extruded 2d element */                          \
-                            float radius = scale * 0.5  ;                                                                                        \
-                            sdValue = opSmoothUnion(sdSphere(pos - vec3(radius), radius), sdValue, smoothness);                                       \
-                        } else {                                                                                                                \
-                            dist2d = getBakedSDF(letterCode, pos.xy, scale);                                                       \
-                            sdValue = opSmoothUnion(opExtrusion(pos, dist2d, depth), sdValue, smoothness);                                      \
-                        }                                                                                                                       \
-                    }                                                                                                                           \
-                    elementIdx += 5 + numLetters;                                                                                               \
-            }                                                                                                                                   \
-                                                                                                                                                \
-            setDistance(current, sdValue);                                                                                                      \
-                                                                                                                                                \
-            switch (layerOperation) {                                                                                                           \
-                case 0: /* Union */                                                                                                             \
-                    result = opUnion(result, current);                                                                                          \
-                    break;                                                                                                                      \
-                case 1: /* Subtraction */                                                                                                       \
-                    result = opSubtraction(result, current);                                                                                    \
-                    break;                                                                                                                      \
-                case 2: /* Intersection */                                                                                                      \
-                    result = opIntersection(result, current);                                                                                   \
-                    break;                                                                                                                      \
-                case 3: /* Xor */                                                                                                               \
-                    result = opXor(result, current);                                                                                            \
-                    break;                                                                                                                      \
-                case 4: /* Smooth union */                                                                                                      \
-                    result = opSmoothUnion(result, current, smoothness);                                                                        \
-                    break;                                                                                                                      \
-                case 5: /* Smooth subtraction */                                                                                                \
-                    result = opSmoothSubtraction(result, current, smoothness);                                                                  \
-                    break;                                                                                                                      \
-                case 6: /* Smooth intersection */                                                                                               \
-                    result = opSmoothIntersection(result, current, smoothness);                                                                 \
-                    break;                                                                                                                      \
-            }                                                                                                                                   \
-        }                                                                                                                                       \
-    }                                                                                                                                           \
-                                                                                                                                                \
-    return result;                                                                                                                              \
-}                                                                                                                                               \
-
-// GENERATE_MAP_FUNCTION(map, float)
-GENERATE_MAP_FUNCTION(mapWithMaterial, Surface) 
-
-Surface mapSimple(vec3 p) {
-    Surface combinedSurface;
-    combinedSurface.colorDiffuse = vec3(1.f);
-    combinedSurface.colorSpecular = vec3(0.f);
-    combinedSurface.colorAmbient = vec3(0.f);
-    combinedSurface.kd = 1.f; // diffuse material property
-    combinedSurface.ks = 1.f; // specular material property
-    combinedSurface.p = 1.f; // specular exponent, fall of of specular light
-    combinedSurface.ka = 1.1f; // ambient material property
-    combinedSurface.distance = MAX_FLOAT;
-
-    float rawDist1 = sdBox(p - vec3(0.5f, 0.2f, 0.0f), vec3(0.3f, 0.1f, 0.2f));
-    float rawDist2 = sdSphere(p - vec3(0.5f), 0.15f);
-    float rawDist3 = sdBox(p - vec3(0.5f, 0.25f, - 0.2f), vec3(0.4f, 0.2f, 0.1f));
-    combinedSurface.distance = rawDist1;
-
-    Surface s2;
-    s2.distance = rawDist2;
-    Surface s = opSmoothUnion(combinedSurface, s2, 0.1f);
-
-    s2.distance = rawDist3;
-    return opSmoothUnion(s, s2, 0.01f);
+    return accumulatedResult;
 }
 
 vec3 calcNormalTetrahedron(vec3 p) {
     // https://iquilezles.org/articles/normalsSDF/
-const float h = 0.0001f;      // replace by an appropriate value
-vec3 n = vec3(0.0f);
-for (int i = ZERO;
-i < 4;
-i ++) {
-vec3 e = 0.5773f * (2.0f * vec3((((i + 3) >> 1) & 1), ((i >> 1) & 1), (i & 1)) - 1.0f);
-n += e * mapWithMaterial(p + e * h).distance;
-}
-return normalize(n);
-
+    const float h = 0.0001f;      // replace by an appropriate value
+    vec3 n = vec3(0.0f);
+    for (int i = ZERO; i < 4; i++) {
+        vec3 e = 0.5773f * (2.0f * vec3((((i + 3) >> 1) & 1), ((i >> 1) & 1), (i & 1)) - 1.0f);
+        n += e * mapWithMaterial(p + e * h).distance;
+    }
+    return normalize(n);
 }
 
 HitInfo trace(vec3 ro, vec3 rd) {
     // adapted from Accelerating Sphere Tracing 
     // https://diglib.eg.org/server/api/core/bitstreams/7537a378-9a0a-4ef4-b57d-877322b1441e/content    
-float omega = 1.2f;
-float t = 0.0f;
-float pixelRadius = EPSILON;
-float tMax = 100.0f;
+    float omega = 1.2f;
+    float t = 0.0f;
+    float pixelRadius = EPSILON;
+    float tMax = 100.0f;
 
-float rLast = 0.0f;
-float rCurr = 0.1f; // map(ro).distance; to reduce compilation time, because map() gets inlined
-float dPrev = 0.0f;
+    float rLast = 0.0f;
+    float rCurr = 0.1f; // map(ro).distance; to reduce compilation time, because map() gets inlined
+    float dPrev = 0.0f;
 
-float lowerBound = 0.001f; // lower bound for the stepsize when raymarching
-float upperBound = 0.01f; // upper bound for the stepsize when raymarching
-float lowerDistance = EPSILON; // distance at which stepsize = lowerBound
-float upperDistance = 0.01f; // distance at which stepsize = upperBound
+    float lowerBound = 0.001f; // lower bound for the stepsize when raymarching
+    float upperBound = 0.01f; // upper bound for the stepsize when raymarching
+    float lowerDistance = EPSILON; // distance at which stepsize = lowerBound
+    float upperDistance = 0.01f; // distance at which stepsize = upperBound
 
-int directionalDerivativeZero = 0;
+    int directionalDerivativeZero = 0;
 
-for (int i = ZERO;
-i < 200;
-i ++) {
+    for (int i = ZERO; i < 200; i++) {
         // Intersection found if raymarching
-bool raymarchingIntersection = rCurr < 0.0f;
-if (raymarchingIntersection) {
-float tLower = t - dPrev;
-float tUpper = t;
-float mid = 0.0f;
+        bool raymarchingIntersection = rCurr < 0.0f;
+        if (raymarchingIntersection) {
+            float tLower = t - dPrev;
+            float tUpper = t;
+            float mid = 0.0f;
 
-for (int j = 0;
-j < 5;
-j ++) {
-mid = (tLower + tUpper) * 0.5f;
-float sdfMid = mapWithMaterial(ro + mid * rd).distance;
-if (abs(sdfMid) < pixelRadius) {
-break;
-}
-if (sdfMid < 0.0f) {
-tUpper = mid;
-} else {
-tLower = mid;
-}
-}
+            for (int j = 0; j < 5; j++) {
+                mid = (tLower + tUpper) * 0.5f;
+                float sdfMid = mapWithMaterial(ro + mid * rd).distance;
+                if (abs(sdfMid) < pixelRadius) {
+                    break;
+                }
+                if (sdfMid < 0.0f) {
+                    tUpper = mid;
+                } else {
+                    tLower = mid;
+                }
+            }
             // vec3 p = ro + t * rd;
             // return HitInfo(i, p, calcNormalTetrahedron(p), map(p));
-}
+        }
 
         // Hit condition
-if (raymarchingIntersection || rCurr < pixelRadius) {
-vec3 p = ro + t * rd;
-return HitInfo(i, p, calcNormalTetrahedron(p), mapWithMaterial(p));
-}
+        if (raymarchingIntersection || rCurr < pixelRadius) {
+            vec3 p = ro + t * rd;
+            return HitInfo(i, p, calcNormalTetrahedron(p), mapWithMaterial(p));
+        }
 
-if (t >= tMax) {
-vec3 p = ro + t * rd;
-break;
-}
+        if (t >= tMax) {
+            vec3 p = ro + t * rd;
+            break;
+        }
 
-float dNext = rCurr;
-float denom = dPrev + rLast - rCurr;
+        float dNext = rCurr;
+        float denom = dPrev + rLast - rCurr;
 
-if (i > 0 && denom > EPSILON) {
-dNext = rCurr + omega * rCurr * (dPrev - rLast + rCurr) / denom;
-}
+        if (i > 0 && denom > EPSILON) {
+            dNext = rCurr + omega * rCurr * (dPrev - rLast + rCurr) / denom;
+        }
 
         // Detect parallel rays 
-if (rCurr < upperDistance && abs(rCurr - rLast) < EPSILON) {
-directionalDerivativeZero ++;
-} else {
-directionalDerivativeZero = 0;
-}
+        if (rCurr < upperDistance && abs(rCurr - rLast) < EPSILON) {
+            directionalDerivativeZero++;
+        } else {
+            directionalDerivativeZero = 0;
+        }
 
-bool isParallel = directionalDerivativeZero >= 5;
+        bool isParallel = directionalDerivativeZero >= 5;
 
-if (isParallel) {
-float tFactor = clamp((rCurr - lowerDistance) / (upperDistance - lowerDistance), 0.0f, 1.0f);
-float minStep = mix(lowerBound, upperBound, tFactor);
+        if (isParallel) {
+            float tFactor = clamp((rCurr - lowerDistance) / (upperDistance - lowerDistance), 0.0f, 1.0f);
+            float minStep = mix(lowerBound, upperBound, tFactor);
             // Allow over-relaxation to take a larger step if possible, but enforce minimum step
-dNext = max(dNext, minStep);
-}
+            dNext = max(dNext, minStep);
+        }
 
-float rNext = mapWithMaterial(ro + (t + dNext) * rd).distance;
+        float rNext = mapWithMaterial(ro + (t + dNext) * rd).distance;
 
         // Overrelaxation was too big (only in the case where we don't do raymarching)
-if (! isParallel && dNext > rCurr + rNext) {
-dNext = rCurr;
-rNext = mapWithMaterial(ro + (t + dNext) * rd).distance;
-}
+        if (!isParallel && dNext > rCurr + rNext) {
+            dNext = rCurr;
+            rNext = mapWithMaterial(ro + (t + dNext) * rd).distance;
+        }
 
-t += dNext;
-dPrev = dNext;
-rLast = rCurr;
-rCurr = rNext;
-}
+        t += dNext;
+        dPrev = dNext;
+        rLast = rCurr;
+        rCurr = rNext;
+    }
 
-return HitInfo(- 1, vec3(0.0f), vec3(0.0f), Surface(vec3(0.0f), vec3(0.0f), vec3(0.0f), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f));
+    return HitInfo(-1, vec3(0.0f), vec3(0.0f), Surface(vec3(0.0f), vec3(0.0f), vec3(0.0f), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f));
 }
 
 // ╔══════════════════════════════════════════════════════════╗
@@ -851,7 +783,7 @@ float calcSoftshadow(in vec3 ro, in vec3 rd, float tmin, float tmax, const float
 }
  */
 float gaussian(float x, float mu, float sigma) {
-return exp(- 1.f * ((x - mu) * (x - mu)) / (2.f * sigma * sigma));
+    return exp(-1.f * ((x - mu) * (x - mu)) / (2.f * sigma * sigma));
 }
 
 vec3 shade(HitInfo hit) {
@@ -870,41 +802,41 @@ vec3 shade(HitInfo hit) {
     }
     return vec3(1, 0., 0.); */
 
-if (hit.id == - 1) {
-return vec3(0);
-}
+    if (hit.id == -1) {
+        return vec3(0);
+    }
 
-const vec3 lightPos = vec3(0.5f, 0.5f, 10.f);
+    const vec3 lightPos = vec3(0.5f, 0.5f, 10.f);
 
-vec3 vecToLight = normalize(lightPos - hit.pos);
-vec3 vecFromLight = normalize(hit.pos - lightPos);
+    vec3 vecToLight = normalize(lightPos - hit.pos);
+    vec3 vecFromLight = normalize(hit.pos - lightPos);
 
-Surface surface = hit.surface;
+    Surface surface = hit.surface;
 
-float mixFacotr = gaussian(surface.mix, 0.5f, 0.07f);
+    float mixFacotr = gaussian(surface.mix, 0.5f, 0.07f);
 
-float ld = 1.f; // diffuse light intensity (light source dependent)
-float la = 1.f; // ambient light intensity (constant for scene)
-float ls = 1.f; // specular light intensity (light source dependent)
+    float ld = 1.f; // diffuse light intensity (light source dependent)
+    float la = 1.f; // ambient light intensity (constant for scene)
+    float ls = 1.f; // specular light intensity (light source dependent)
 
-float iDiffuse = surface.kd * ld * max(0.f, dot(vecToLight, hit.normal));
-float iAmbient = surface.ka * la;
-float iSpecular = surface.ks * ls * pow(max(0.f, dot(reflect(vecFromLight, hit.normal), vec3(0.f, 0.f, 1.f))), surface.p);
+    float iDiffuse = surface.kd * ld * max(0.f, dot(vecToLight, hit.normal));
+    float iAmbient = surface.ka * la;
+    float iSpecular = surface.ks * ls * pow(max(0.f, dot(reflect(vecFromLight, hit.normal), vec3(0.f, 0.f, 1.f))), surface.p);
 
     //float shadow = shadow(hit.pos, -sundir, 0.001f, 5.f);
-float shadow; // = softshadow(hit.pos, vecToLight, 0.001f, 5.f, 0.1f);
+    float shadow; // = softshadow(hit.pos, vecToLight, 0.001f, 5.f, 0.1f);
     //float shadow = calcSoftshadow(hit.pos, -sundir, 0.01f, 5.0f, 16.0f);
     // shadow = max(shadow, 0.1f);
-shadow = 1.0f;
+    shadow = 1.0f;
 
     //return vec3(shadow);
     //return hit.id != -1 ? vec3(1.f) : vec3(0.f);
-return shadow * (iDiffuse * surface.colorDiffuse + iSpecular * surface.colorSpecular) + iAmbient * surface.colorAmbient;
+    return shadow * (iDiffuse * surface.colorDiffuse + iSpecular * surface.colorSpecular) + iAmbient * surface.colorAmbient;
 }
 
 struct ColorStop {
-vec3 color;
-float position;
+    vec3 color;
+    float position;
 };
 
 #define COLOR_RAMP(colors, factor, finalColor) { \
@@ -924,9 +856,11 @@ finalColor = mix(currentColor.color, nextColor.color, lerpFactor); \
 } \
 
 // ╔══════════════════════════════════════════════════════════╗
-// ║                           MAIN                           ║
+// ║                          MAIN                            ║
 // ╚══════════════════════════════════════════════════════════╝
 void main(void) {
+fragColor = vec4(vec3(float(commandData[0][2]) / 255.f), 1.f);
+    //return;
     //const vec2 subPixleOffsets[] = vec2[](vec2(0.375f, 0.125f) - vec2(0.5f), vec2(0.875f, 0.375f) - vec2(0.5f), vec2(0.125f, 0.625f) - vec2(0.5f), vec2(0.625f, 0.875f) - vec2(0.5f));
 const vec2 subPixleOffsets[] = vec2[](vec2(0.f, 0.f));
 vec2 pixelSize = vec2(1.f) / uResolution.x;

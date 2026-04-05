@@ -1,5 +1,80 @@
 import { SdfCanvas } from "./sdf-canvas.js";
 
+// Program Loading
+async function loadShadersFromDisk(vertexName, fragmentName, directory = "./src/shaders/") {
+    const responseVertex = await fetch(directory + vertexName);
+    const responseFragment = await fetch(directory + fragmentName);
+
+    return {
+        vertexSource: await responseVertex.text(),
+        fragmentSource: await responseFragment.text(),
+    };
+}
+
+function initShaderProgram(gl, vsSource, fsSource) {
+    return new Promise((resolve, reject) => {
+        const vertexShader = loadShader(gl, gl.VERTEX_SHADER, vsSource);
+        const fragmentShader = loadShader(gl, gl.FRAGMENT_SHADER, fsSource);
+
+        // Create the shader program
+        const shaderProgram = gl.createProgram(); // program of vertex + fragment shader
+        gl.attachShader(shaderProgram, vertexShader);
+        gl.attachShader(shaderProgram, fragmentShader);
+        gl.linkProgram(shaderProgram);
+
+        // Try to get the parallel compilation extension
+        const ext = gl.getExtension("KHR_parallel_shader_compile");
+
+        const checkCompletion = () => {
+            if (ext) {
+                // If extension exists, check if compilation is done in the background
+                if (gl.getProgramParameter(shaderProgram, ext.COMPLETION_STATUS_KHR)) {
+                    // Check program link status; if OK, use it.
+                    finalizeProgram(gl, shaderProgram, vertexShader, fragmentShader, resolve, reject);
+                } else {
+                    // Not done yet, check again next frame!
+                    requestAnimationFrame(checkCompletion);
+                }
+            } else {
+                // Program linking is synchronous.
+                // We yielded for at least one frame so the UI could paint. Now we force the check.
+                finalizeProgram(gl, shaderProgram, vertexShader, fragmentShader, resolve, reject);
+            }
+        };
+
+        // Start the polling loop on the next frame
+        requestAnimationFrame(checkCompletion);
+    });
+}
+
+function finalizeProgram(gl, shaderProgram, vertexShader, fragmentShader, resolve, reject) {
+    if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+        console.error("Shader program failed to link: ", gl.getProgramInfoLog(shaderProgram));
+        console.error("Vertex log: ", gl.getShaderInfoLog(vertexShader));
+        console.error("Fragment log: ", gl.getShaderInfoLog(fragmentShader));
+        alert("Unable to initialize the shader program.");
+        reject(new Error("Shader initialization failed"));
+        return;
+    }
+    resolve(shaderProgram);
+}
+
+function loadShader(gl, type, source) {
+    const shader = gl.createShader(type); // either vertex or fragment
+
+    // Send the source to the shader object
+    gl.shaderSource(shader, source);
+
+    // Compile the shader program (This now happens in the background!)
+    gl.compileShader(shader);
+
+    // REMOVED: gl.getShaderParameter(shader, gl.COMPILE_STATUS)
+    // Querying the status here would force the browser to freeze.
+    return shader;
+}
+
+
+// Buffer initialization
 function initPositionBuffer(gl, programInfo) {
     const positionBuffer = gl.createBuffer();
 
@@ -65,6 +140,8 @@ function initCommandBufferObject(gl, programInfo) {
         SdfCanvas.MAX_NUM_COMMANDS * Int32Array.BYTES_PER_ELEMENT,
         gl.DYNAMIC_DRAW,
     )
+
+    return commandBuffer;
 }
 
 function initGeometryBufferObject(gl, programInfo) {
@@ -137,4 +214,4 @@ function initBuffers(gl, programInfo) {
     };
 }
 
-export { initBuffers };
+export { loadShadersFromDisk, initShaderProgram, initBuffers };
