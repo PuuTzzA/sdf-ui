@@ -23,7 +23,6 @@ class TextMeter {
         const fontSize = this.#getCssStyle(el, "font-size") || "16px";
         const fontFamily = this.#getCssStyle(el, "font-family") || "Times New Roman";
 
-        console.log("fontsize", fontSize)
         return `${fontWeight} ${fontSize} ${fontFamily}`;
     }
 

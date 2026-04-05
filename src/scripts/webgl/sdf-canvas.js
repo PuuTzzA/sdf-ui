@@ -269,7 +269,7 @@ class SdfCanvas {
         this.renderLayers = renderLayers;
         this.ready = false;
         this.downscaleFactorX = 1;
-        this.downscaleFactorY = 10;
+        this.downscaleFactorY = 1;
 
         this.cameraZ = 10;
         this.twoDMode = false;
