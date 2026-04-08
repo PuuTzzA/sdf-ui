@@ -118,7 +118,7 @@ class SdfCanvas {
         SPHERE: 0,
         BOX_SIMPLE: 1,
         BOX: 2,
-        ROUND_BOX: 3,
+        BOX_ROUND: 3,
         TEXT: 4,
 
         // Layer Operations
@@ -149,7 +149,7 @@ class SdfCanvas {
                 return 4;
             case SdfCanvas.Commands.BOX:
                 return 6;
-            case SdfCanvas.Commands.ROUND_BOX:
+            case SdfCanvas.Commands.BOX_ROUND:
                 return 4;
             case SdfCanvas.Commands.TEXT: // variable length
                 return element.getSize();
@@ -589,7 +589,7 @@ class SdfCanvas {
                         this.geometryBuffer[geometryBufferIdx + 21] = SdfCanvas.intToFloatBits(parseInt(computedStyle.getPropertyValue("--rotation-offset"))); // initial rotation
                         this.geometryBuffer[geometryBufferIdx + 22] = 0;
                         break;
-                    case SdfCanvas.Commands.ROUND_BOX:
+                    case SdfCanvas.Commands.BOX_ROUND:
                         this.geometryBuffer[geometryBufferIdx + 12] = halfWidth; // width 
                         this.geometryBuffer[geometryBufferIdx + 13] = halfHeight; // height 
                         this.geometryBuffer[geometryBufferIdx + 14] = halfDepth; // depth

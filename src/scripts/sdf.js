@@ -59,7 +59,7 @@ function gameLoop(now) {
             console.log("Until everything setup: " + (loadTime / 60000).toFixed(4) +   " minutes, (" + loadTime.toFixed(4) + "ms)")
             firstTime = false;
         }
-        sdfCanvas.draw();
+            sdfCanvas.draw();
     }
 
     /* if (sdfCanvas2.ready) {

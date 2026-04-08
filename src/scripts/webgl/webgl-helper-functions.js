@@ -73,7 +73,6 @@ function loadShader(gl, type, source) {
     return shader;
 }
 
-
 // Buffer initialization
 function initPositionBuffer(gl, programInfo) {
     const positionBuffer = gl.createBuffer();
@@ -214,4 +213,20 @@ function initBuffers(gl, programInfo) {
     };
 }
 
-export { loadShadersFromDisk, initShaderProgram, initBuffers };
+// Webgl manipulation
+function injectGLSL(mainString, searchString, replaceString) {
+    // from Gemini
+    // 1. Escape the search string for regex
+    const escapedSearch = searchString.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    // 2. Create the regex pattern
+    // #insert\s+ -> Matches "#insert" followed by one or more spaces
+    // \b         -> Word boundary ensures "MAIN" doesn't match "MAIN_LOOP"
+    // 'g' flag   -> Replaces ALL occurrences in the string
+    const regex = new RegExp(`#insert\\s+${escapedSearch}\\b`, 'g');
+
+    // 3. Replace and return
+    return mainString.replace(regex, replaceString);
+}
+
+export { loadShadersFromDisk, initShaderProgram, initBuffers, injectGLSL };

@@ -243,7 +243,7 @@ float sdw(in vec2 p) {
 float sdx(in vec2 p) {
     float n = sdRoundedBox2d(p + vec2(22.5f, -80.0f), vec2(22.5f, 80.0f), r0_225_0_225);
     n = min(sdRoundedBox2d(p + vec2(112.5f, -80.0f), vec2(22.5f, 80.0f), r0_225_0_225), n);
-    n = min(sdRing2d(p + vec2(67.5f, -147.5f), n_pi_2), n);
+    n = min(sdRing2d(p + vec2(67.5f, -160.0f), n_pi_2), n);
     n = min(sdRing2d(p + vec2(67.5f, -340.0f), n_mpi_2), n);
     n = min(sdRoundedBox2d(p + vec2(22.5f, -420.0f), vec2(22.5f, 80.0f), r225_0_225_0), n);
     n = min(sdRoundedBox2d(p + vec2(112.5f, -420.0f), vec2(22.5f, 80.0f), r225_0_225_0), n);

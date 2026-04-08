@@ -251,12 +251,12 @@ html,
  */
     /*     word-spacing: 10rem;
  */
-    color: rgba(255, 255, 255, 0.2) !important;
-
+/*     color: rgba(255, 255, 255, 0.2) !important;
+ */
     --letterSmoothness: 0.1rem;
 
-/*         transform: translateZ(1rem) rotateY(40deg) rotateX(30deg);
- */
+        transform: translateZ(-1rem) rotateY(40deg) rotateX(30deg);
+
     /*     transform: rotate(100deg);
  */
     word-break: break-all;
@@ -267,6 +267,10 @@ html,
     --depth: 2rem;
     --z: 1rem;
 }
+
+/* .sdf-text:hover{
+    font-size: 10rem;
+} */
 
 .ddd {
     left: 30rem;

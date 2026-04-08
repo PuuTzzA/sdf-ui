@@ -73,7 +73,7 @@ customElements.define("sdf-box", SdfBox);
 
 class SdfRoundBox extends ASdfElement {
     getElementType() {
-        return SdfCanvas.Commands.ROUND_BOX;
+        return SdfCanvas.Commands.BOX_ROUND;
     }
 }
 
