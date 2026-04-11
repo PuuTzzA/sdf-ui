@@ -1,6 +1,8 @@
 #version 300 es
 precision highp float;
 
+#insert DEFINES
+
 #define MAX_NUM_COMMANDS 1024
 #define MAX_SIZE_ELEMENT_BUFFER 512
 #define MAX_LAYERS 16
@@ -373,6 +375,18 @@ float getBakedSDF(int charIndex, vec3 pos, float scale, float depth) {
     );                                                                                                                      \
     pos = (M * vec4(p, 1.0f)).xyz;\
 
+
+/* vec3 opTwist( in vec3 p )
+{
+    const float k = .01; // or some other amount
+    float c = cos(k*p.y);
+    float s = sin(k*p.y);
+    mat2  m = mat2(c,-s,s,c);
+    vec3  q = vec3(m*p.xz,p.y);
+    return q;
+} */
+
+
 Surface map(vec3 p) {
     Surface accumulatedResult; /* fixed size stack */
     initializeData(accumulatedResult);
@@ -634,6 +648,44 @@ float gaussian(float x, float mu, float sigma) {
     return exp(-1.0f * ((x - mu) * (x - mu)) / (2.0f * sigma * sigma));
 }
 
+struct ColorStop {
+    vec3 color;
+    float position;
+};
+
+#define COLOR_RAMP(colors, factor, finalColor) {                        \
+    int index = 0;                                                      \
+    for (int i = 0; i < colors.length() - 1; i ++) {                    \
+        ColorStop currentColor = colors[i];                             \
+        bool isInBetween = currentColor.position <= factor;             \
+        index = isInBetween ? i : index;                                \
+    }                                                                   \
+    ColorStop currentColor = colors[index];                             \
+    ColorStop nextColor = colors[index + 1];                            \
+    float range = nextColor.position - currentColor.position;           \
+    float lerpFactor = (factor - currentColor.position) / range;        \
+    finalColor = mix(currentColor.color, nextColor.color, lerpFactor);  \
+}                                                                       \
+
+#ifdef CUSTOM_SHADE_FUNCTION
+
+#insert SHADE_FUNCTION
+
+#else // custom shade function
+
+#ifdef TWO_D_MODE
+vec3 shade(Surface surface) {
+    float sdfValue = surface.distance * 80.0f;
+
+    ColorStop[] colors = ColorStop[](
+    //ColorStop(surface.colorDiffuse, 0.000000),
+    ColorStop(vec3(0.000000f, 0.000000f, 0.015996f), 0.000000f), ColorStop(vec3(0.008023f, 0.002428f, 0.162029f), 0.300000f), ColorStop(vec3(0.590619f, 0.964686f, 0.428690f), 0.400000f), ColorStop(vec3(0.991102f, 0.031896f, 0.814847f), 0.600000f), ColorStop(vec3(1.000000f, 0.000000f, 0.001821f), 0.800000f), ColorStop(vec3(0.008023f, 0.002428f, 0.162029f), 0.900000f), ColorStop(vec3(0.000000f, 0.000000f, 0.015996f), 1.000000f));
+    
+    vec3 finalColor;
+    COLOR_RAMP(colors, sdfValue, finalColor);
+    return vec3(finalColor);
+}
+#else // 2d mode
 vec3 shade(HitInfo hit) {
     /* if (hit.id == -1) {
         return vec3(1., 0., 1.);
@@ -682,85 +734,50 @@ vec3 shade(HitInfo hit) {
     //return hit.id != -1 ? vec3(1.f) : vec3(0.f);
     return shadow * (iDiffuse * surface.colorDiffuse + iSpecular * surface.colorSpecular) + iAmbient * surface.colorAmbient;
 }
-
-struct ColorStop {
-    vec3 color;
-    float position;
-};
-
-#define COLOR_RAMP(colors, factor, finalColor) {                        \
-    int index = 0;                                                      \
-    for (int i = 0; i < colors.length() - 1; i ++) {                    \
-        ColorStop currentColor = colors[i];                             \
-        bool isInBetween = currentColor.position <= factor;             \
-        index = isInBetween ? i : index;                                \
-    }                                                                   \
-    ColorStop currentColor = colors[index];                             \
-    ColorStop nextColor = colors[index + 1];                            \
-    float range = nextColor.position - currentColor.position;           \
-    float lerpFactor = (factor - currentColor.position) / range;        \
-    finalColor = mix(currentColor.color, nextColor.color, lerpFactor);  \
-}                                                                       \
+#endif // 2d mode
+#endif // custom shade function
 
 // ╔══════════════════════════════════════════════════════════╗
 // ║                          MAIN                            ║
 // ╚══════════════════════════════════════════════════════════╝
 void main(void) {
-    //const vec2 subPixleOffsets[] = vec2[](vec2(0.375f, 0.125f) - vec2(0.5f), vec2(0.875f, 0.375f) - vec2(0.5f), vec2(0.125f, 0.625f) - vec2(0.5f), vec2(0.625f, 0.875f) - vec2(0.5f));
-    const vec2 subPixleOffsets[] = vec2[](vec2(0.0f, 0.0f));
-    vec2 pixelSize = vec2(1.0f) / uResolution.x;
-
-    vec3 color = vec3(0.0f);
-
     vec2 uv = vUv; // origin = top left
     uv *= vec2(uWindowWidth, uWindowHeight);
     uv += vec2(uLeftOffset, uTopOffset);
 
-    /* float ddd = getBakedSDF(15,uv - vec2(0.5, 0.5), 0.5) / 1000.;
-    ddd = fract(ddd * 10.);
-    // ddd = textureLod(uSdfArray, vec3(pp, float(5)), 0.0).r;
-    float ccc = ddd > .0 ? 0. : 1.;
-
-    fragColor = vec4(ddd, ddd, ddd, 1.f);
-    return; */
-
-    /* if (pp.y <= 0. || pp.x >= 1.){
-        fragColor = vec4(0., 0., 0., 1.);
-    } */
-
-    /* HitInfo currentSurface = trace(vec3(uv, uCameraZ), vec3(0.0f, 0.0f, -1.0f));
-    fragColor = vec4(shade(currentSurface), 1.);
-    return; */
-
-
     vec3 pos = vec3(uv, uCameraZ);
     vec3 dir = vec3(0.0f, 0.0f, -1.0f);
-    vec3 posOffset;
 
-    //for (int i = 0; i < subPixleOffsets.length(); i++) {
-        //posOffset = pos + vec3(subPixleOffsets[0] * pixelSize, 0.0f);
+    vec3 color = vec3(0.0f);
 
+#ifdef AA // Anti aliasing
+    const vec2 subPixleOffsets[] = vec2[](vec2(0.375f, 0.125f) - vec2(0.5f), vec2(0.875f, 0.375f) - vec2(0.5f), vec2(0.125f, 0.625f) - vec2(0.5f), vec2(0.625f, 0.875f) - vec2(0.5f));
+    vec2 pixelSize = vec2(1.0f) / uResolution.x;
+
+    for (int i = 0; i < subPixleOffsets.length(); i++) {
+        vec3 posOffset = pos + vec3(subPixleOffsets[0] * pixelSize, 0.0f);
+
+        #ifdef TWO_D_MODE
+        Surface currentSurface = map(posOffset);
+        #else // 2d mode
+        posOffset.z = 0.0f;
+        HitInfo currentSurface = trace(posOffset, dir);
+        #endif // 2d mode
+
+        color += shade(currentSurface);
+    }
+    color /= float(subPixleOffsets.length());
+#else // Anti-aliasing
+
+    #ifdef TWO_D_MODE
+    pos.z = 0.0f;
+    Surface currentSurface = map(pos);
+    #else // 2d mode
     HitInfo currentSurface = trace(pos, dir);
+    #endif // 2d mode
+
     color = shade(currentSurface);
-
-/*         if (!uTwoDMode) {
-            color += shade(currentSurface);
-        } else {
-            posOffset.z = 0.0f;
-            Surface surface; // mapWithMaterial(posOffset);
-            float sdfValue = surface.distance * 80.0f;
-
-            ColorStop[] colors = ColorStop[](
-			    //ColorStop(surface.colorDiffuse, 0.000000),
-            ColorStop(vec3(0.000000f, 0.000000f, 0.015996f), 0.000000f), ColorStop(vec3(0.008023f, 0.002428f, 0.162029f), 0.300000f), ColorStop(vec3(0.590619f, 0.964686f, 0.428690f), 0.400000f), ColorStop(vec3(0.991102f, 0.031896f, 0.814847f), 0.600000f), ColorStop(vec3(1.000000f, 0.000000f, 0.001821f), 0.800000f), ColorStop(vec3(0.008023f, 0.002428f, 0.162029f), 0.900000f), ColorStop(vec3(0.000000f, 0.000000f, 0.015996f), 1.000000f));
-            vec3 finalColor;
-            COLOR_RAMP(colors, sdfValue, finalColor);
-
-            color += vec3(finalColor);
-        } */
-    //}
-
-    // color /= float(subPixleOffsets.length());
+#endif // Anti-aliasing
 
     fragColor = vec4(color, 1.0f);
 }

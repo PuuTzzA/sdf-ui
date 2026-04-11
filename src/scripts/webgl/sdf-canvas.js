@@ -1,4 +1,4 @@
-import { loadShadersFromDisk, initShaderProgram, initBuffers } from "./webgl-helper-functions.js";
+import { loadShadersFromDisk, initShaderProgram, initBuffers, injectGLSL } from "./webgl-helper-functions.js";
 import { Matrix } from "../helper/matrix.js";
 
 class SdfLayer {
@@ -272,7 +272,27 @@ class SdfCanvas {
         this.downscaleFactorY = 1;
 
         this.cameraZ = 10;
+        this.useAA = false;
         this.twoDMode = false;
+        this.useCustomShadeFunction = false;
+        this.customShadeFunction = ` 
+        vec3 shade(Surface surface) {
+            float sdfValue = surface.distance * 80.0f;
+            
+            if (sdfValue < 0.0f){
+                return surface.colorDiffuse;
+            }
+            
+            ColorStop[] colors = ColorStop[](
+            //ColorStop(surface.colorDiffuse, 0.000000),
+            //ColorStop(vec3(0.000000f, 0.000000f, 0.015996f), 0.000000f), ColorStop(vec3(0.008023f, 0.002428f, 0.162029f), 0.300000f), ColorStop(vec3(0.590619f, 0.964686f, 0.428690f), 0.400000f), ColorStop(vec3(0.991102f, 0.031896f, 0.814847f), 0.600000f), ColorStop(vec3(1.000000f, 0.000000f, 0.001821f), 0.800000f), ColorStop(vec3(0.008023f, 0.002428f, 0.162029f), 0.900000f), ColorStop(vec3(0.000000f, 0.000000f, 0.015996f), 1.000000f));
+            ColorStop(surface.colorDiffuse, 0.000000f), ColorStop(vec3(0.008023f, 0.002428f, 0.162029f), 0.300000f), ColorStop(vec3(0.590619f, 0.964686f, 0.428690f), 0.400000f), ColorStop(vec3(0.991102f, 0.031896f, 0.814847f), 0.600000f), ColorStop(vec3(1.000000f, 0.000000f, 0.001821f), 0.800000f), ColorStop(vec3(0.008023f, 0.002428f, 0.162029f), 0.900000f), ColorStop(vec3(0.000000f, 0.000000f, 0.015996f), 1.000000f));
+            
+            vec3 finalColor;
+            COLOR_RAMP(colors, sdfValue, finalColor);
+            return vec3(finalColor);
+        }
+        `
 
         this.canvas;
         this.gl;
@@ -284,7 +304,7 @@ class SdfCanvas {
         this.shadingBuffer = new Float32Array(SdfCanvas.MAX_SIZE_ELEMENT_BUFFER * 4);
 
         this.overwriteLayers = new Map();
-        this.overwriteLayers.set(1, new SdfLayer(SdfCanvas.Commands.SMOOTH_UNION, 50));
+        // this.overwriteLayers.set(1, new SdfLayer(SdfCanvas.Commands.SMOOTH_UNION, 50));
     }
 
     async initWebgl() {
@@ -317,11 +337,26 @@ class SdfCanvas {
         // Clear the color buffer with specified clear color
         this.gl.clear(this.gl.COLOR_BUFFER_BIT);
 
-        const { vertexSource, fragmentSource } = await loadShadersFromDisk("vertex.glsl", "fragment.glsl");
+        let { vertexSource, fragmentSource } = await loadShadersFromDisk("vertex.glsl", "fragment.glsl");
 
         // Initialize a shader program; this is where all the lighting
         // for the vertices and so forth is established.
         const startTime = performance.now()
+
+        // Change the vertex according to the canvas settings
+        let defines = "";
+        if (this.twoDMode) {
+            defines += "#define TWO_D_MODE\n";
+        }
+        if (this.useAA) {
+            defines += "#define AA\n";
+        }
+        if (this.useCustomShadeFunction){
+            defines += "#define CUSTOM_SHADE_FUNCTION"
+            fragmentSource = injectGLSL(fragmentSource, "SHADE_FUNCTION", this.customShadeFunction);
+        }
+
+        fragmentSource = injectGLSL(fragmentSource, "DEFINES", defines)
 
         const shaderProgram = await initShaderProgram(this.gl, vertexSource, fragmentSource);
 
