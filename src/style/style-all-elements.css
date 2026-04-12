@@ -7,7 +7,7 @@
     --ambient-color: rgb(100, 110, 110);
 }
 
-#all-types-container *{
+#all-types-container * {
     --ambient-color: rgb(30, 30, 30);
     --diffuse-color: aqua;
     --specular-color: red;
@@ -29,14 +29,18 @@
     --r: 10rem;
 }
 
-#test-sdf-box-simple{
+#test-sdf-box-simple {
     width: 10rem;
     height: 5rem;
     --ks: 0.1;
 }
 
-#test-sdf-box, 
-#test-sdf-box-2{
+.extrude {
+    --extrude: 1rem;
+}
+
+#test-sdf-box,
+#test-sdf-box-2 {
     width: 10rem;
     height: 5rem;
 
@@ -45,12 +49,12 @@
     --ks: 0.1;
 }
 
-#test-sdf-box-2{
+#test-sdf-box-2 {
     --rotation-offset: 2;
     --depth: 5rem;
 }
 
-#test-sdf-box-round{
+#test-sdf-box-round {
     width: 10rem;
     height: 10rem;
     --r: 5rem;

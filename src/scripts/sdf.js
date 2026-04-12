@@ -55,11 +55,11 @@ function gameLoop(now) {
     if (sdfCanvas.ready) {
         if (firstTime) {
             compilingScreen.remove();
-            const loadTime = performance.now() - loadStartTime; 
-            console.log("Until everything setup: " + (loadTime / 60000).toFixed(4) +   " minutes, (" + loadTime.toFixed(4) + "ms)")
+            const loadTime = performance.now() - loadStartTime;
+            console.log("Until everything setup: " + (loadTime / 60000).toFixed(4) + " minutes, (" + loadTime.toFixed(4) + "ms)")
             firstTime = false;
         }
-            sdfCanvas.draw();
+        sdfCanvas.draw();
     }
 
     /* if (sdfCanvas2.ready) {

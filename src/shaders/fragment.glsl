@@ -365,26 +365,41 @@ float getBakedSDF(int charIndex, vec3 pos, float scale, float depth) {
     return opExtrusion(pos, (baseDist + exteriorDist) / bakeToWorldRatio, depth); // convert the distance form glyph-space to world space
 }
 
-#define SETUP_M                                                                                                             \
-    populateData(current, elementIdx);                                                                                      \
-    M = mat4(                                                                                                               \
-        vec4(geometryData[elementIdx].xyz, 0.f),                                                                            \
-        vec4(geometryData[elementIdx].w, geometryData[elementIdx + 1].x, geometryData[elementIdx + 1].y, 0.f),              \
-        vec4(geometryData[elementIdx + 1].z, geometryData[elementIdx + 1].w, geometryData[elementIdx + 2].x, 0.f),          \
-        vec4(geometryData[elementIdx + 2].yzw, 1.f)                                                                         \
-    );                                                                                                                      \
-    pos = (M * vec4(p, 1.0f)).xyz;\
-
-
-/* vec3 opTwist( in vec3 p )
+vec3 opTwist( in vec3 p )
 {
-    const float k = .01; // or some other amount
-    float c = cos(k*p.y);
-    float s = sin(k*p.y);
+    float amount = 30.0 * p.y;
+    float c = cos(amount);
+    float s = sin(amount);
     mat2  m = mat2(c,-s,s,c);
-    vec3  q = vec3(m*p.xz,p.y);
+    // Copy original point
+    vec3 q = p; 
+    
+    // Rotate ONLY the X and Z coordinates
+    q.xz = m * p.xz; 
+
     return q;
-} */
+}
+
+vec3 opTwistArbitrary(vec3 p, vec3 axis, float k) 
+{
+    // Ensure the axis is a normalized direction vector (length of 1)
+    axis = normalize(axis);
+    
+    // 1. Find how far along the axis the current point is using the dot product
+    float distAlongAxis = dot(p, axis);
+    
+    // 2. Calculate the rotation angle based on that distance
+    float angle = k * distAlongAxis;
+    
+    float c = cos(angle);
+    float s = sin(angle);
+    
+    // 3. Rotate the point around the arbitrary axis using Rodrigues' formula
+    vec3 twistedPos = p * c + cross(axis, p) * s + axis * distAlongAxis * (1.0 - c);
+    
+    return twistedPos;
+}
+
 
 
 Surface map(vec3 p) {
@@ -393,34 +408,64 @@ Surface map(vec3 p) {
 
     int layerOperation = 101; /* persistent layer operation */
     float smoothness = 0.001f; /* persistent smoothness parameter for layerOperations */
+    int layerDistortion = 200; /* persistent layer distortion */
+
+    vec3 pos; 
+    Surface current; 
+
+    float twistAmount = 5.;
 
     for (int i = 0; i < uNumCommands; i++) { 
         int command = commandData[i].x; 
         int elementIdx = commandData[i].y; 
-        mat4 M; 
-        vec3 pos; 
-        Surface current; 
 
-        /* Having this here reduces compile time (~2sec), but also decreases performance by a bit */
-        if (command < 100) {
-            SETUP_M
+        /* commands that don't add to accumulatedSurface */ /* If-else chain due to shorter compile time and ability to use continue */
+        if (command >= 200){
+            /* Set Layer Data */
+            if (command == 200) { 
+                layerOperation = floatBitsToInt(geometryData[elementIdx].x);
+                smoothness = geometryData[elementIdx].y;
+                layerDistortion = floatBitsToInt(geometryData[elementIdx].z);
+            }
+            /* Load Element Matrix and Material */
+            if (command == 201) {
+                populateData(current, elementIdx);
+                mat4 M = mat4(
+                    vec4(geometryData[elementIdx].xyz, 0.f),
+                    vec4(geometryData[elementIdx].w, geometryData[elementIdx + 1].x, geometryData[elementIdx + 1].y, 0.f),
+                    vec4(geometryData[elementIdx + 1].z, geometryData[elementIdx + 1].w, geometryData[elementIdx + 2].x, 0.f),
+                    vec4(geometryData[elementIdx + 2].yzw, 1.f)
+                );
+                pos = (M * vec4(p, 1.0f)).xyz;
+            } 
+            /* Twist */
+            else if (command == 202) {
+                // 1. Define the origin/pivot point you want to twist around
+                vec3 pivot = vec3(0.0);; // geometryData[elementIdx + 2].yzw + vec3(0.5, 0.5, 0.0);
+                // 2. Move the space so the pivot is at 0,0,0
+                pos -= pivot;
+                // 3. Apply the twist
+                pos = opTwistArbitrary(pos, vec3(0., 1., 0.), twistAmount);
+                // 4. Move the space back to exactly where it was
+                pos += pivot;
+            }
+            continue;
         }
-
-        /* Sphere */ /* If-else chain due to shorter compile time and ability to use continue */
-        if (command == 0) { 
-            current.distance = sdSphere(pos, geometryData[elementIdx + 3].x);
+        /* Sphere */ 
+        else if (command == 0) { 
+            current.distance = sdSphere(pos, geometryData[elementIdx].x);
         } 
         /* Box Simple */
         else if (command == 1) { 
-            current.distance = sdBox(pos, vec3(geometryData[elementIdx + 3].xyz));
+            current.distance = sdBox(pos, vec3(geometryData[elementIdx].xyz)) - geometryData[elementIdx].w;
         } 
         /* Box (with rounded corners) */
         else if (command == 2) {
-            float w = geometryData[elementIdx + 3].x;
-            float h = geometryData[elementIdx + 3].y;
-            float d = geometryData[elementIdx + 3].z;
+            float w = geometryData[elementIdx].x;
+            float h = geometryData[elementIdx].y;
+            float d = geometryData[elementIdx].z;
             
-            int initialRotation = floatBitsToInt(geometryData[elementIdx + 5].y);
+            int initialRotation = floatBitsToInt(geometryData[elementIdx + 2].y);
             /* Adiddional Rotation (rounded edge selection) */
             if (initialRotation == 1) {
                 mat3 Rot = mat3(0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, -1.0f, 0.0f, 0.0f);
@@ -435,60 +480,45 @@ Surface map(vec3 p) {
                 h = d;
                 d = temp;
             }
-            float val = sdRoundBox2d(pos.xy, vec2(w, h), geometryData[elementIdx + 4], floatBitsToInt(geometryData[elementIdx + 5].x));
-            current.distance = opExtrusion(pos, val, d);
+            float val = sdRoundBox2d(pos.xy, vec2(w, h), geometryData[elementIdx + 1], floatBitsToInt(geometryData[elementIdx + 2].x));
+            current.distance = opExtrusion(pos, val, d) - geometryData[elementIdx + 2].z;
         }
-        /* Box Round (all rounded edges) */
-        else if (command == 3) { 
-            current.distance = sdRoundBox(pos, geometryData[elementIdx + 3].xyz, geometryData[elementIdx + 3].w);
-        } 
         /* Text */
         else if (command == 4) { 
             /* The letters are stored in a TextureArray according to their index */
-            int numLetters = floatBitsToInt(geometryData[elementIdx + 3].x);
-            float scale = geometryData[elementIdx + 3].y; /* inverse scale */
-            float depth = geometryData[elementIdx + 3].z;
-            float letterSmoothness = geometryData[elementIdx + 3].w;
-
-            float sdValue = MAX_FLOAT;
-            for (int letterIdx = ZERO; letterIdx < numLetters; letterIdx++) {
-                M[3][0] = geometryData[elementIdx + 4 + letterIdx].x; /* matrix[column][row] */
-                M[3][1] = geometryData[elementIdx + 4 + letterIdx].y;
-                M[3][2] = geometryData[elementIdx + 4 + letterIdx].z;
-                int letterCode = floatBitsToInt(geometryData[elementIdx + 4 + letterIdx].w);
-
-                pos = (M * vec4(p, 1.f)).xyz;
-                sdValue = opSmoothUnion(getBakedSDF(letterCode, pos, scale, depth), sdValue, letterSmoothness);
-            }
-            current.distance = sdValue;
-        }
-        /* Set Layer Data */
-        else if (command == 100) { 
-            layerOperation = floatBitsToInt(geometryData[elementIdx].x);
-            smoothness = geometryData[elementIdx].y;
-            continue; 
-        } 
+            int numLetters = floatBitsToInt(geometryData[elementIdx].x);
+            float scale = geometryData[elementIdx].y; /* inverse scale */
+            float depth = geometryData[elementIdx].z;
+            float letterSmoothness = geometryData[elementIdx].w;
         
+            float sdValue = getBakedSDF(floatBitsToInt(geometryData[elementIdx + 1].w), pos, scale, depth); /* first letter */
+            for (int letterIdx = 1; letterIdx < numLetters; letterIdx++) {
+                vec3 letterPos = pos + geometryData[elementIdx + 1 + letterIdx].xyz;
+                int letterCode = floatBitsToInt(geometryData[elementIdx + 1 + letterIdx].w);
+                sdValue = opSmoothUnion(getBakedSDF(letterCode, letterPos, scale, depth), sdValue, letterSmoothness);
+            }
+            current.distance = sdValue - geometryData[elementIdx + 1].x;
+        }
         switch (layerOperation) {
-            case 101: /* Union */
+            case 100: /* Union */
                 accumulatedResult = opUnion(current, accumulatedResult);
                 break;
-            case 102: /* Subtraction */
+            case 101: /* Subtraction */
                 accumulatedResult = opSubtraction(current, accumulatedResult);
                 break;
-            case 103: /* Intersection */
+            case 102: /* Intersection */
                 accumulatedResult = opIntersection(current, accumulatedResult);
                 break;
-            case 104: /* Xor */
+            case 103: /* Xor */
                 accumulatedResult = opXor(current, accumulatedResult);
                 break;
-            case 105: /* Smooth union */
+            case 104: /* Smooth union */
                 accumulatedResult = opSmoothUnion(current, accumulatedResult, smoothness);
                 break;
-            case 106: /* Smooth subtraction */
+            case 105: /* Smooth subtraction */
                 accumulatedResult = opSmoothSubtraction(current, accumulatedResult, smoothness);
                 break;
-            case 107: /* Smooth intersection */
+            case 106: /* Smooth intersection */
                 accumulatedResult = opSmoothIntersection(current, accumulatedResult, smoothness);
                 break;
         }

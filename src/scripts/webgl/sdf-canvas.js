@@ -1,21 +1,7 @@
 import { loadShadersFromDisk, initShaderProgram, initBuffers, injectGLSL } from "./webgl-helper-functions.js";
 import { Matrix } from "../helper/matrix.js";
-
-class SdfLayer {
-    constructor(layerOperation = SdfCanvas.LayerOperation.UNION, smoothingFactor = 0) {
-        this.layerOperation = layerOperation;
-        this.smoothingFactor = smoothingFactor;
-        this.elementsInLayer = 0;
-    }
-
-    setLayerOperation(layerOperation) {
-        this.layerOperation = layerOperation;
-    }
-
-    setSmoothingFactor(smoothingFactor) {
-        this.smoothingFactor = smoothingFactor;
-    }
-}
+import { SdfCommands } from "./sdf-commands.js";
+import { SdfLayer } from "./sdf-layer.js";
 
 class SdfCanvas {
     // ╔══════════════════════════════════════════════════════════╗
@@ -113,45 +99,24 @@ class SdfCanvas {
     // ╔══════════════════════════════════════════════════════════╗
     // ║             Static Properties and Methods                ║
     // ╚══════════════════════════════════════════════════════════╝
-    static Commands = Object.freeze({
-        // Elements
-        SPHERE: 0,
-        BOX_SIMPLE: 1,
-        BOX: 2,
-        BOX_ROUND: 3,
-        TEXT: 4,
-
-        // Layer Operations
-        SET_LAYER_DATA: 100,
-        UNION: 101,
-        SUBTRACTION: 102,
-        INTERSECTION: 103,
-        XOR: 104,
-        SMOOTH_UNION: 105,
-        SMOOTH_SUBTRACTION: 106,
-        SMOOTH_INTERSECTION: 107,
-    })
-
     static instantiatedCanvases = [];
 
     static trackedElements = [];
     static layers = [
-        new SdfLayer(SdfCanvas.Commands.UNION, 0),
-        new SdfLayer(SdfCanvas.Commands.SMOOTH_UNION, 30),
-        new SdfLayer(SdfCanvas.Commands.SMOOTH_UNION, 30)
+        new SdfLayer(SdfCommands.UNION, 0),
+        new SdfLayer(SdfCommands.SMOOTH_UNION, 30),
+        new SdfLayer(SdfCommands.SMOOTH_UNION, 30, SdfCommands.LAYER_TWIST)
     ]
 
     static getElementSize(element) { // in amounts of vec4s
         switch (element.getElementType()) {
-            case SdfCanvas.Commands.SPHERE:
-                return 4;
-            case SdfCanvas.Commands.BOX_SIMPLE:
-                return 4;
-            case SdfCanvas.Commands.BOX:
-                return 6;
-            case SdfCanvas.Commands.BOX_ROUND:
-                return 4;
-            case SdfCanvas.Commands.TEXT: // variable length
+            case SdfCommands.SPHERE:
+                return 1;
+            case SdfCommands.BOX_SIMPLE:
+                return 1;
+            case SdfCommands.BOX:
+                return 3;
+            case SdfCommands.TEXT: // variable length
                 return element.getSize();
         }
     }
@@ -268,8 +233,8 @@ class SdfCanvas {
         this.canvasName = canvasName;
         this.renderLayers = renderLayers;
         this.ready = false;
-        this.downscaleFactorX = 1;
-        this.downscaleFactorY = 1;
+        this.downscaleFactorX = 2;
+        this.downscaleFactorY = 2;
 
         this.cameraZ = 10;
         this.useAA = false;
@@ -304,7 +269,7 @@ class SdfCanvas {
         this.shadingBuffer = new Float32Array(SdfCanvas.MAX_SIZE_ELEMENT_BUFFER * 4);
 
         this.overwriteLayers = new Map();
-        // this.overwriteLayers.set(1, new SdfLayer(SdfCanvas.Commands.SMOOTH_UNION, 50));
+        // this.overwriteLayers.set(1, new SdfLayer(SdfCommands.SMOOTH_UNION, 50));
     }
 
     async initWebgl() {
@@ -351,7 +316,7 @@ class SdfCanvas {
         if (this.useAA) {
             defines += "#define AA\n";
         }
-        if (this.useCustomShadeFunction){
+        if (this.useCustomShadeFunction) {
             defines += "#define CUSTOM_SHADE_FUNCTION"
             fragmentSource = injectGLSL(fragmentSource, "SHADE_FUNCTION", this.customShadeFunction);
         }
@@ -498,12 +463,23 @@ class SdfCanvas {
         let commandBufferIdx = 0;
         let geometryBufferIdx = 0;
         let elementIdx = 0;
-        let renderedElementsCount = 0;
+
+        const sizeInBuffers = (numGeomentryToAdd) => {
+            return commandBufferIdx + 1 < SdfCanvas.MAX_NUM_COMMANDS || (geometryBufferIdx / 4 + numGeomentryToAdd) < SdfCanvas.MAX_SIZE_ELEMENT_BUFFER;
+        }
+
+        const addToCommandBuffer = (command) => {
+            this.commandBuffer[commandBufferIdx] = command;
+            this.commandBuffer[commandBufferIdx + 1] = geometryBufferIdx / 4;
+            commandBufferIdx += 4;
+        }
+
         allElementsLoop:
         for (let layerIdx = 0; layerIdx < SdfCanvas.layers.length; layerIdx++) {
             const layer = SdfCanvas.layers[layerIdx];
             let layerOperation = layer.layerOperation;
             let smoothingFactor = layer.smoothingFactor;
+            let layerDistortion = layer.layerDistortion;
 
             if (layer.elementsInLayer == 0) {
                 continue;
@@ -513,17 +489,19 @@ class SdfCanvas {
                 const overwriteLayer = this.overwriteLayers.get(layerIdx);
                 layerOperation = overwriteLayer.layerOperation;
                 smoothingFactor = overwriteLayer.smoothingFactor;
+                layerDistortion = overwriteLayer.layerDistortion;
             }
 
             if (!sizeInBuffers(1)) {
                 break allElementsLoop;
             };
 
-            this.commandBuffer[commandBufferIdx] = SdfCanvas.Commands.SET_LAYER_DATA;
+            this.commandBuffer[commandBufferIdx] = SdfCommands.SET_LAYER_DATA;
             this.commandBuffer[commandBufferIdx + 1] = geometryBufferIdx / 4;
             commandBufferIdx += 4;
             this.geometryBuffer[geometryBufferIdx] = SdfCanvas.intToFloatBits(layerOperation);
             this.geometryBuffer[geometryBufferIdx + 1] = smoothingFactor * oneOverX;
+            this.geometryBuffer[geometryBufferIdx + 2] = SdfCanvas.intToFloatBits(layerDistortion);
             geometryBufferIdx += 4;
 
             for (let i = 0; i < layer.elementsInLayer; i++) {
@@ -535,33 +513,26 @@ class SdfCanvas {
                 }
 
                 const elementType = element.getElementType();
-                const isText = elementType == SdfCanvas.Commands.TEXT;
+                const savedGeometryBufferIdx = geometryBufferIdx;
 
-                if (isText) {
+                if (elementType == SdfCommands.TEXT) {
                     element.update();
                     if (element.getNumberOfLetters() <= 0) { // skip empty strings
                         continue;
                     }
                 }
 
-                if (!sizeInBuffers(SdfCanvas.getElementSize(element))) {
+                if (!sizeInBuffers(3)) {
                     break allElementsLoop;
                 };
+                addToCommandBuffer(SdfCommands.LOAD_ELEMENT_MATRIX_AND_MATERIAL);
 
-                this.commandBuffer[commandBufferIdx] = elementType;
-                this.commandBuffer[commandBufferIdx + 1] = geometryBufferIdx / 4;
-                commandBufferIdx += 4;
-
-                renderedElementsCount++;
-
-                const rects = isText ? element.getWordRects() : null;
                 const rect = element.getBoundingClientRect();
-
                 const computedStyle = getComputedStyle(element);
                 let mat = Matrix.parseMatrix(computedStyle.transform);
 
-                const halfWidth = isText ? element.measure(rects[0][0]) * oneOverX * 0.5 : element.offsetWidth * oneOverX * 0.5;
-                const halfHeight = isText ? element.measureHeight(rects[0][0]) * oneOverX * 0.5 : element.offsetHeight * oneOverX * 0.5; //parseInt(computedStyle.getPropertyValue("font-size")) * oneOverX * 0.5 
+                const halfWidth = element.offsetWidth * oneOverX * 0.5;
+                const halfHeight = element.offsetHeight * oneOverX * 0.5; //parseInt(computedStyle.getPropertyValue("font-size")) * oneOverX * 0.5 
                 const halfDepth = this.twoDMode ? 100 : parseFloat(computedStyle.getPropertyValue("--depth")) * oneOverX * 0.5;
 
                 const offsetX = (rect.left + rect.width * 0.5) * oneOverX;
@@ -600,48 +571,72 @@ class SdfCanvas {
                 this.geometryBuffer[geometryBufferIdx + 10] = mat[13]; // ty
                 this.geometryBuffer[geometryBufferIdx + 11] = mat[14]; // tz
 
+                // Shading Information
+                this.shadingBuffer[geometryBufferIdx + 0] = SdfCanvas.intToFloatBits(SdfCanvas.cssColorToUint32(computedStyle.getPropertyValue("--diffuse-color"))); // diffuse color
+                this.shadingBuffer[geometryBufferIdx + 1] = SdfCanvas.intToFloatBits(SdfCanvas.cssColorToUint32(computedStyle.getPropertyValue("--specular-color"))); // specular color
+                this.shadingBuffer[geometryBufferIdx + 2] = SdfCanvas.intToFloatBits(SdfCanvas.cssColorToUint32(computedStyle.getPropertyValue("--ambient-color"))); // ambient color
+                this.shadingBuffer[geometryBufferIdx + 3] = parseFloat(computedStyle.getPropertyValue("--kd")); // diffuse material property
+
+                this.shadingBuffer[geometryBufferIdx + 4] = parseFloat(computedStyle.getPropertyValue("--ks")); // specular material property
+                this.shadingBuffer[geometryBufferIdx + 5] = parseFloat(computedStyle.getPropertyValue("--p")); // specular exponent
+                this.shadingBuffer[geometryBufferIdx + 6] = parseFloat(computedStyle.getPropertyValue("--ka")); // ambient material property
+                this.shadingBuffer[geometryBufferIdx + 7] = 1.; // unused for now
+
+                geometryBufferIdx += 3 * 4;
+
+                // here is the spot for all domain distortions
+                /* if (element.getElementType() == SdfCommands.BOX) {
+                    this.commandBuffer[commandBufferIdx] = SdfCommands.LAYER_TWIST;
+                    this.commandBuffer[commandBufferIdx + 1] = geometryBufferIdx / 4;
+                    commandBufferIdx += 4;
+                } */
+
+                if (!sizeInBuffers(SdfCanvas.getElementSize(element))) {
+                    break allElementsLoop;
+                };
+                addToCommandBuffer(elementType);
+
                 // Element specific data
                 switch (elementType) {
-                    case SdfCanvas.Commands.SPHERE:
-                        this.geometryBuffer[geometryBufferIdx + 12] = parseFloat(computedStyle.getPropertyValue("--r")) * oneOverX * 0.5; // radius 
+                    case SdfCommands.SPHERE:
+                        this.geometryBuffer[geometryBufferIdx + 0] = parseFloat(computedStyle.getPropertyValue("--r")) * oneOverX * 0.5; // radius 
                         break;
-                    case SdfCanvas.Commands.BOX_SIMPLE:
-                        this.geometryBuffer[geometryBufferIdx + 12] = halfWidth; // width 
-                        this.geometryBuffer[geometryBufferIdx + 13] = halfHeight; // height 
-                        this.geometryBuffer[geometryBufferIdx + 14] = halfDepth; // depth
+                    case SdfCommands.BOX_SIMPLE:
+                        this.geometryBuffer[geometryBufferIdx + 0] = halfWidth; // width 
+                        this.geometryBuffer[geometryBufferIdx + 1] = halfHeight; // height 
+                        this.geometryBuffer[geometryBufferIdx + 2] = halfDepth; // depth
+                        this.geometryBuffer[geometryBufferIdx + 3] = parseFloat(computedStyle.getPropertyValue("--extrude")) * oneOverX; // rounding
                         break;
-                    case SdfCanvas.Commands.BOX:
-                        this.geometryBuffer[geometryBufferIdx + 12] = halfWidth; // width 
-                        this.geometryBuffer[geometryBufferIdx + 13] = halfHeight; // height 
-                        this.geometryBuffer[geometryBufferIdx + 14] = halfDepth; // depth
+                    case SdfCommands.BOX:
+                        this.geometryBuffer[geometryBufferIdx + 0] = halfWidth; // width 
+                        this.geometryBuffer[geometryBufferIdx + 1] = halfHeight; // height 
+                        this.geometryBuffer[geometryBufferIdx + 2] = halfDepth; // depth
+                        this.geometryBuffer[geometryBufferIdx + 3] = 0; // still unused
 
-                        this.geometryBuffer[geometryBufferIdx + 16] = parseFloat(computedStyle.borderBottomRightRadius) * oneOverX;
-                        this.geometryBuffer[geometryBufferIdx + 17] = parseFloat(computedStyle.borderTopRightRadius) * oneOverX;
-                        this.geometryBuffer[geometryBufferIdx + 18] = parseFloat(computedStyle.borderBottomLeftRadius) * oneOverX;
-                        this.geometryBuffer[geometryBufferIdx + 19] = parseFloat(computedStyle.borderTopLeftRadius) * oneOverX;
+                        this.geometryBuffer[geometryBufferIdx + 4] = parseFloat(computedStyle.borderBottomRightRadius) * oneOverX;
+                        this.geometryBuffer[geometryBufferIdx + 5] = parseFloat(computedStyle.borderTopRightRadius) * oneOverX;
+                        this.geometryBuffer[geometryBufferIdx + 6] = parseFloat(computedStyle.borderBottomLeftRadius) * oneOverX;
+                        this.geometryBuffer[geometryBufferIdx + 7] = parseFloat(computedStyle.borderTopLeftRadius) * oneOverX;
 
-                        this.geometryBuffer[geometryBufferIdx + 20] = SdfCanvas.intToFloatBits(parseInt(computedStyle.getPropertyValue("--border-radius-type"))); // border radius
-                        this.geometryBuffer[geometryBufferIdx + 21] = SdfCanvas.intToFloatBits(parseInt(computedStyle.getPropertyValue("--rotation-offset"))); // initial rotation
-                        this.geometryBuffer[geometryBufferIdx + 22] = 0;
+                        this.geometryBuffer[geometryBufferIdx + 8] = SdfCanvas.intToFloatBits(parseInt(computedStyle.getPropertyValue("--border-radius-type"))); // border radius
+                        this.geometryBuffer[geometryBufferIdx + 9] = SdfCanvas.intToFloatBits(parseInt(computedStyle.getPropertyValue("--rotation-offset"))); // initial rotation
+                        this.geometryBuffer[geometryBufferIdx + 10] = parseFloat(computedStyle.getPropertyValue("--extrude")) * oneOverX; // rounding
                         break;
-                    case SdfCanvas.Commands.BOX_ROUND:
-                        this.geometryBuffer[geometryBufferIdx + 12] = halfWidth; // width 
-                        this.geometryBuffer[geometryBufferIdx + 13] = halfHeight; // height 
-                        this.geometryBuffer[geometryBufferIdx + 14] = halfDepth; // depth
-                        this.geometryBuffer[geometryBufferIdx + 15] = parseFloat(computedStyle.getPropertyValue("--r")) * oneOverX * 0.5; // border radius
-                        break;
-                    case SdfCanvas.Commands.TEXT:
+                    case SdfCommands.TEXT:
                         // The text expects an array of letters where the x,y,z position is at the same place as the origin of the letters in "glyph-space"
                         // The scale is how big the texture is in world space (including padding), send inverse scale so that we can multiply by it to get to glyph-space 
+                        const rects = element.getWordRects();
                         const numLetters = element.getNumberOfLetters();
-                        const glpyhSpaceScale = (2 * halfHeight) / glyphsUnpaddedHeight; // how much one unit of "glyph-space" is in world-space 
-                        this.geometryBuffer[geometryBufferIdx + 12] = SdfCanvas.intToFloatBits(numLetters); // amount of letters
-                        this.geometryBuffer[geometryBufferIdx + 13] = 1 / (glyphsPaddedWidth * glpyhSpaceScale); // inverse letter scale 
-                        this.geometryBuffer[geometryBufferIdx + 14] = halfDepth; // depth 
-                        this.geometryBuffer[geometryBufferIdx + 15] = Math.max(parseFloat(computedStyle.getPropertyValue("--letterSmoothness")) * oneOverX, 0.0001); // smoothness between letters
+                        const letterHeight = element.measureHeight(rects[0][0]) * oneOverX;
+                        const glpyhSpaceScale = letterHeight / glyphsUnpaddedHeight; // how much one unit of "glyph-space" is in world-space 
+                        this.geometryBuffer[geometryBufferIdx + 0] = SdfCanvas.intToFloatBits(numLetters); // amount of letters
+                        this.geometryBuffer[geometryBufferIdx + 1] = 1 / (glyphsPaddedWidth * glpyhSpaceScale); // inverse letter scale 
+                        this.geometryBuffer[geometryBufferIdx + 2] = halfDepth; // depth 
+                        this.geometryBuffer[geometryBufferIdx + 3] = Math.max(parseFloat(computedStyle.getPropertyValue("--letterSmoothness")) * oneOverX, 0.0001); // smoothness between letters
 
                         let inverseMat3 = Matrix.extractMat3FromMat4(mat);
                         let wordCenterLocal = new Float32Array(3);
+                        let referenceX, referenceY, referenceZ = 0;
 
                         let letterIdx = 0;
                         textOuterLoop:
@@ -682,10 +677,29 @@ class SdfCanvas {
                                     currentSubstringWidth += 22.5 * glpyhSpaceScale;// * oneOverX;
                                 }
 
-                                this.geometryBuffer[geometryBufferIdx + 16 + letterIdx * 4 + 0] = -wordCenterLocal[0] - (wordLeftEdgeLocalX + currentSubstringWidth); // offsetX
-                                this.geometryBuffer[geometryBufferIdx + 16 + letterIdx * 4 + 1] = -wordCenterLocal[1] - halfHeight + SdfCanvas.GLYPHS_PADDING * glpyhSpaceScale; // offsetY
-                                this.geometryBuffer[geometryBufferIdx + 16 + letterIdx * 4 + 2] = -wordCenterLocal[2]; // offsetZ
-                                this.geometryBuffer[geometryBufferIdx + 16 + letterIdx * 4 + 3] = SdfCanvas.intToFloatBits(SdfCanvas.getCharIndex(currentLetter)); // letterCode
+                                if (letterIdx == 0) {
+                                    // the first letter is the reference point and for all the other letters an offset to the first one is stored
+                                    this.geometryBuffer[savedGeometryBufferIdx + 9] = -wordCenterLocal[0] - (wordLeftEdgeLocalX + currentSubstringWidth);; // tx, column 4 [tx, ty, tz, 1]^T
+                                    this.geometryBuffer[savedGeometryBufferIdx + 10] = -wordCenterLocal[1] - letterHeight * 0.5 + SdfCanvas.GLYPHS_PADDING * glpyhSpaceScale; // ty
+                                    this.geometryBuffer[savedGeometryBufferIdx + 11] = -wordCenterLocal[2]; // tz
+
+                                    this.geometryBuffer[geometryBufferIdx + 4 + letterIdx * 4 + 0] = parseFloat(computedStyle.getPropertyValue("--extrude")) * oneOverX; // rounding
+                                    this.geometryBuffer[geometryBufferIdx + 4 + letterIdx * 4 + 1] = 0; // still unused
+                                    this.geometryBuffer[geometryBufferIdx + 4 + letterIdx * 4 + 2] = 0; // still unused
+
+                                    referenceX = wordCenterLocal[0] + wordLeftEdgeLocalX;
+                                    referenceY = wordCenterLocal[1];
+                                    referenceZ = wordCenterLocal[2];
+                                } else {
+                                    const difx = wordCenterLocal[0] + wordLeftEdgeLocalX - referenceX;
+                                    const dify = wordCenterLocal[1] - referenceY;
+                                    const difz = wordCenterLocal[2] - referenceZ; // should be 0
+
+                                    this.geometryBuffer[geometryBufferIdx + 4 + letterIdx * 4 + 0] = - (difx + currentSubstringWidth); // offsetX
+                                    this.geometryBuffer[geometryBufferIdx + 4 + letterIdx * 4 + 1] = - dify; // offsetY
+                                    this.geometryBuffer[geometryBufferIdx + 4 + letterIdx * 4 + 2] = - difz; // offsetZ
+                                }
+                                this.geometryBuffer[geometryBufferIdx + 4 + letterIdx * 4 + 3] = SdfCanvas.intToFloatBits(SdfCanvas.getCharIndex(currentLetter)); // letterCode
                                 letterIdx++;
                                 if (letterIdx >= numLetters) {
                                     break textOuterLoop;
@@ -694,27 +708,13 @@ class SdfCanvas {
                         }
                         break;
                 }
-
-                // Shading Information
-                this.shadingBuffer[geometryBufferIdx + 0] = SdfCanvas.intToFloatBits(SdfCanvas.cssColorToUint32(computedStyle.getPropertyValue("--diffuse-color"))); // diffuse color
-                this.shadingBuffer[geometryBufferIdx + 1] = SdfCanvas.intToFloatBits(SdfCanvas.cssColorToUint32(computedStyle.getPropertyValue("--specular-color"))); // specular color
-                this.shadingBuffer[geometryBufferIdx + 2] = SdfCanvas.intToFloatBits(SdfCanvas.cssColorToUint32(computedStyle.getPropertyValue("--ambient-color"))); // ambient color
-                this.shadingBuffer[geometryBufferIdx + 3] = parseFloat(computedStyle.getPropertyValue("--kd")); // diffuse material property
-
-                this.shadingBuffer[geometryBufferIdx + 4] = parseFloat(computedStyle.getPropertyValue("--ks")); // specular material property
-                this.shadingBuffer[geometryBufferIdx + 5] = parseFloat(computedStyle.getPropertyValue("--p")); // specular exponent
-                this.shadingBuffer[geometryBufferIdx + 6] = parseFloat(computedStyle.getPropertyValue("--ka")); // ambient material property
-                this.shadingBuffer[geometryBufferIdx + 7] = 1.; // unused for now
-
                 geometryBufferIdx += SdfCanvas.getElementSize(element) * 4;
             }
         }
 
         this.numCommands = (commandBufferIdx / 4);
 
-        function sizeInBuffers(numGeomentryToAdd) {
-            return commandBufferIdx + 1 < SdfCanvas.MAX_NUM_COMMANDS || (geometryBufferIdx / 4 + numGeomentryToAdd) < SdfCanvas.MAX_SIZE_ELEMENT_BUFFER;
-        }
+
     }
 
     resizeCanvasToDisplaySize() {

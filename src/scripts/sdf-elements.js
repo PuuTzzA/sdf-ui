@@ -1,5 +1,6 @@
 import { SdfCanvas } from "./webgl/sdf-canvas.js";
 import { TextMeter } from "./helper/text-meter.js"
+import { SdfCommands } from "./webgl/sdf-commands.js";
 
 class ASdfElement extends HTMLElement {
     static observedAttributes = ["data-layer-index", "data-element-type"];
@@ -49,7 +50,7 @@ class ASdfElement extends HTMLElement {
 
 class SdfSphere extends ASdfElement {
     getElementType() {
-        return SdfCanvas.Commands.SPHERE;
+        return SdfCommands.SPHERE;
     }
 }
 
@@ -57,7 +58,7 @@ customElements.define("sdf-sphere", SdfSphere);
 
 class SdfBoxSimple extends ASdfElement {
     getElementType() {
-        return SdfCanvas.Commands.BOX_SIMPLE;
+        return SdfCommands.BOX_SIMPLE;
     }
 }
 
@@ -65,19 +66,11 @@ customElements.define("sdf-box-simple", SdfBoxSimple);
 
 class SdfBox extends ASdfElement {
     getElementType() {
-        return SdfCanvas.Commands.BOX;
+        return SdfCommands.BOX;
     }
 }
 
 customElements.define("sdf-box", SdfBox);
-
-class SdfRoundBox extends ASdfElement {
-    getElementType() {
-        return SdfCanvas.Commands.BOX_ROUND;
-    }
-}
-
-customElements.define("sdf-box-round", SdfRoundBox);
 
 class SdfText extends ASdfElement {
     connectedCallback() {
@@ -92,7 +85,7 @@ class SdfText extends ASdfElement {
     }
 
     getElementType() {
-        return SdfCanvas.Commands.TEXT;
+        return SdfCommands.TEXT;
     }
 
     getNumberOfLetters() {
@@ -106,7 +99,7 @@ class SdfText extends ASdfElement {
 
     update() { // to avoid size changing during function calls or something
         this.numLetters = this.textContent.replace(/\s+/g, '').length;
-        this.size = 4 + this.numLetters;
+        this.size = 1 + this.numLetters;
         this.textMeter.updateStyles();
     }
 

@@ -84,6 +84,7 @@ A simple box with width, height and depth.
 ```
 * **width, heigth:** Width and height are controled with the standard css properties widht and height
 * **--depth:** Controls the depth of the box. 
+* **--extrude:** Extrudes all surfaces along their normal. Allows for rounded corners.
 
 ### 3. Box
 A more general box that also supports border-radius.
@@ -101,14 +102,7 @@ A more general box that also supports border-radius.
   * **0:** Default, corners that are parallel to the z-axis are rounded.
   * **1:** Corners parallel to the x-axis are rounded.
   * **2:** Corners parallel to the y-axis are rounded.
-
-### 4. Rounded Box
-A box where all edges are rounded.
-```html
-<sdf-box-round id="test-sdf-box-round" data-layer-index="1">Rounded Box</sdf-box-round>
-```
-* **width, heigth, depth:** Controled in the same way as for the simple box (css properties width, height, --depth).
-* **--r:** Controls the border radius that is applied to all edges.
+* **--extrude:** Extrudes all surfaces along their normal. Allows for rounded corners.
 
 ### 5. Text
 A element that contains text that which is rendered as sdf elements. As of now there is one supported font **metaballs** (only lower case letters and numbers for now). All the letters inside one sdf-text elment will have the same material and size. Sdf-text elements support `letter-spacing`, `word-spacing` and `word-break`.
@@ -119,6 +113,7 @@ A element that contains text that which is rendered as sdf elements. As of now t
 
 * **--depth:** Controls the depth of the letters.
 * **--letterSmoothness:** Controls the smoothing between individual letters, wich are internally combined using a `SMOOTH_UNION` function. A value of 0 means no smoothing at all.
+* **--extrude:** Extrudes all surfaces along their normal. Allows for rounded corners.
 
 ## Layers
 
