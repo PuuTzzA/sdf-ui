@@ -2,6 +2,7 @@ import { loadShadersFromDisk, initShaderProgram, initBuffers, injectGLSL } from 
 import { Matrix } from "../helper/matrix.js";
 import { SdfCommands } from "./sdf-commands.js";
 import { SdfLayer } from "./sdf-layer.js";
+import { Twist } from "../modifiers.js";
 
 class SdfCanvas {
     // ╔══════════════════════════════════════════════════════════╗
@@ -117,7 +118,7 @@ class SdfCanvas {
             case SdfCommands.BOX:
                 return 3;
             case SdfCommands.TEXT: // variable length
-                return element.getSize();
+                return element.size;
         }
     }
 
@@ -474,6 +475,14 @@ class SdfCanvas {
             commandBufferIdx += 4;
         }
 
+        const addToCommandBufferIfSize = (command, numGeomentryToAdd) => {
+            if (!sizeInBuffers(numGeomentryToAdd)) {
+                return false;
+            }
+            addToCommandBuffer(command);
+            return true;
+        }
+
         allElementsLoop:
         for (let layerIdx = 0; layerIdx < SdfCanvas.layers.length; layerIdx++) {
             const layer = SdfCanvas.layers[layerIdx];
@@ -492,13 +501,9 @@ class SdfCanvas {
                 layerDistortion = overwriteLayer.layerDistortion;
             }
 
-            if (!sizeInBuffers(1)) {
+            if (!addToCommandBufferIfSize(SdfCommands.SET_LAYER_DATA, 1)) {
                 break allElementsLoop;
             };
-
-            this.commandBuffer[commandBufferIdx] = SdfCommands.SET_LAYER_DATA;
-            this.commandBuffer[commandBufferIdx + 1] = geometryBufferIdx / 4;
-            commandBufferIdx += 4;
             this.geometryBuffer[geometryBufferIdx] = SdfCanvas.intToFloatBits(layerOperation);
             this.geometryBuffer[geometryBufferIdx + 1] = smoothingFactor * oneOverX;
             this.geometryBuffer[geometryBufferIdx + 2] = SdfCanvas.intToFloatBits(layerDistortion);
@@ -517,15 +522,14 @@ class SdfCanvas {
 
                 if (elementType == SdfCommands.TEXT) {
                     element.update();
-                    if (element.getNumberOfLetters() <= 0) { // skip empty strings
+                    if (element.numLetters <= 0) { // skip empty strings
                         continue;
                     }
                 }
 
-                if (!sizeInBuffers(3)) {
+                if (!addToCommandBufferIfSize(SdfCommands.LOAD_ELEMENT_MATRIX_AND_MATERIAL, 3)) {
                     break allElementsLoop;
                 };
-                addToCommandBuffer(SdfCommands.LOAD_ELEMENT_MATRIX_AND_MATERIAL);
 
                 const rect = element.getBoundingClientRect();
                 const computedStyle = getComputedStyle(element);
@@ -581,20 +585,60 @@ class SdfCanvas {
                 this.shadingBuffer[geometryBufferIdx + 5] = parseFloat(computedStyle.getPropertyValue("--p")); // specular exponent
                 this.shadingBuffer[geometryBufferIdx + 6] = parseFloat(computedStyle.getPropertyValue("--ka")); // ambient material property
                 this.shadingBuffer[geometryBufferIdx + 7] = 1.; // unused for now
-
                 geometryBufferIdx += 3 * 4;
 
-                // here is the spot for all domain distortions
-                /* if (element.getElementType() == SdfCommands.BOX) {
-                    this.commandBuffer[commandBufferIdx] = SdfCommands.LAYER_TWIST;
-                    this.commandBuffer[commandBufferIdx + 1] = geometryBufferIdx / 4;
-                    commandBufferIdx += 4;
-                } */
+                // Add modifiers
+                const modifiers = element.modifiers;
+                for (let modifierIdx = 0; modifierIdx < modifiers.length; modifierIdx++) {
+                    const modifier = modifiers[modifierIdx];
+                    const modifierType = modifier.getModifierType();
+                    addToCommandBuffer(modifierType);
 
-                if (!sizeInBuffers(SdfCanvas.getElementSize(element))) {
+                    if (!addToCommandBufferIfSize(modifierType, modifier.getModifierSize())) {
+                        break allElementsLoop;
+                    };
+
+                    let targetOffsetX = 0;
+                    let targetOffsetY = 0;
+                    let targetOffsetZ = 0;
+
+                    if (modifier.target != null) {
+                        targetOffsetX = this.geometryBuffer[savedGeometryBufferIdx + 9];
+                        targetOffsetY = this.geometryBuffer[savedGeometryBufferIdx + 10];
+                        targetOffsetZ = this.geometryBuffer[savedGeometryBufferIdx + 11];
+
+                        const targetRect = modifier.target.getBoundingClientRect();
+                        targetOffsetX += (targetRect.left + targetRect.width * 0.5) * oneOverX;
+                        targetOffsetY += (targetRect.top + targetRect.height * 0.5) * oneOverX;
+                        targetOffsetZ += this.twoDMode ? 0 : parseFloat(getComputedStyle(modifier.target).getPropertyValue("--z")) * oneOverX;
+                    }
+
+                    if (elementType == SdfCommands.TEXT) { // text has the origin at the bottom-left not in the center like the other elements
+                        const { x, y } = element.getOffsetToCenter();
+                        targetOffsetX += x * oneOverX;
+                        targetOffsetY += y * oneOverX; // height * 0.5 * oneOverX;
+                    }
+
+                    switch (modifierType) {
+                        case SdfCommands.TWIST:
+
+                            this.geometryBuffer[geometryBufferIdx + 0] = targetOffsetX; // ofset
+                            this.geometryBuffer[geometryBufferIdx + 1] = targetOffsetY; // ofset
+                            this.geometryBuffer[geometryBufferIdx + 2] = targetOffsetZ; // ofset
+                            this.geometryBuffer[geometryBufferIdx + 3] = modifier.amount / oneOverX; // amount
+
+                            this.geometryBuffer[geometryBufferIdx + 4] = modifier.axis[0]; // axis
+                            this.geometryBuffer[geometryBufferIdx + 5] = modifier.axis[1]; // axis
+                            this.geometryBuffer[geometryBufferIdx + 6] = modifier.axis[2]; // axis
+                            break;
+                    }
+
+                    geometryBufferIdx += modifier.getModifierSize() * 4;
+                }
+
+                if (!addToCommandBufferIfSize(elementType, SdfCanvas.getElementSize(element))) {
                     break allElementsLoop;
                 };
-                addToCommandBuffer(elementType);
 
                 // Element specific data
                 switch (elementType) {
@@ -626,10 +670,9 @@ class SdfCanvas {
                         // The text expects an array of letters where the x,y,z position is at the same place as the origin of the letters in "glyph-space"
                         // The scale is how big the texture is in world space (including padding), send inverse scale so that we can multiply by it to get to glyph-space 
                         const rects = element.getWordRects();
-                        const numLetters = element.getNumberOfLetters();
                         const letterHeight = element.measureHeight(rects[0][0]) * oneOverX;
                         const glpyhSpaceScale = letterHeight / glyphsUnpaddedHeight; // how much one unit of "glyph-space" is in world-space 
-                        this.geometryBuffer[geometryBufferIdx + 0] = SdfCanvas.intToFloatBits(numLetters); // amount of letters
+                        this.geometryBuffer[geometryBufferIdx + 0] = SdfCanvas.intToFloatBits(element.numLetters); // amount of letters
                         this.geometryBuffer[geometryBufferIdx + 1] = 1 / (glyphsPaddedWidth * glpyhSpaceScale); // inverse letter scale 
                         this.geometryBuffer[geometryBufferIdx + 2] = halfDepth; // depth 
                         this.geometryBuffer[geometryBufferIdx + 3] = Math.max(parseFloat(computedStyle.getPropertyValue("--letterSmoothness")) * oneOverX, 0.0001); // smoothness between letters
@@ -640,11 +683,7 @@ class SdfCanvas {
 
                         let letterIdx = 0;
                         textOuterLoop:
-                        for (let wordIdx = 0; wordIdx < rects.length; wordIdx++) {
-                            const currentWord = rects[wordIdx];
-                            const currentText = currentWord[0];
-                            const currentRect = currentWord[1];
-
+                        for (const [currentText, currentRect] of rects) {
                             // Get the screen/world space X and Y for the word's center
                             const currentOffsetX = (currentRect.left + currentRect.width * 0.5) * oneOverX;
                             const currentOffsetY = (currentRect.top + currentRect.height * 0.5) * oneOverX;
@@ -670,7 +709,7 @@ class SdfCanvas {
                             // In local space, the word is unrotated and its own center is at (0,0).
                             const wordLeftEdgeLocalX = -element.measure(currentText) * 0.5 * oneOverX; // currentHalfWidth
 
-                            for (let currentLetterIdx = 0; currentLetterIdx < currentWord[0].length; currentLetterIdx++) {
+                            for (let currentLetterIdx = 0; currentLetterIdx < currentText.length; currentLetterIdx++) {
                                 let currentSubstringWidth = element.measure(currentText.substring(0, currentLetterIdx)) * oneOverX;
                                 const currentLetter = currentText.charAt(currentLetterIdx);
                                 if (currentLetter == "t") {
@@ -701,7 +740,7 @@ class SdfCanvas {
                                 }
                                 this.geometryBuffer[geometryBufferIdx + 4 + letterIdx * 4 + 3] = SdfCanvas.intToFloatBits(SdfCanvas.getCharIndex(currentLetter)); // letterCode
                                 letterIdx++;
-                                if (letterIdx >= numLetters) {
+                                if (letterIdx >= element.numLetters) {
                                     break textOuterLoop;
                                 }
                             }

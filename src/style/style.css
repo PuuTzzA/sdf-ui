@@ -290,3 +290,13 @@ html,
 #lkj {
     transform: rotate(-100deg);
 }
+
+#target {
+    width: 5rem;
+    height: 5rem;
+    background-color: transparent;
+    z-index: 100;
+    width: 100%;
+    margin-top: 20rem;
+    --z: -5rem;
+}

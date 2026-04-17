@@ -179,6 +179,20 @@ float opRound(in float primitive, in float rad) {
     return primitive - rad;
 }
 
+vec3 opTwist(vec3 p, vec3 axis, float k) {
+    axis = normalize(axis);
+    
+    float distAlongAxis = dot(p, axis);
+    float angle = k * distAlongAxis;
+    
+    float c = cos(angle);
+    float s = sin(angle);
+    
+    // Rotate the point around the arbitrary axis using Rodrigues' formula
+    vec3 twistedPos = p * c + cross(axis, p) * s + axis * distAlongAxis * (1.0f - c);
+    return twistedPos;
+}
+
 // ╔══════════════════════════════════════════════════════════╗
 // ║                 SDF COMBINING OPERATIONS                 ║
 // ╚══════════════════════════════════════════════════════════╝
@@ -365,43 +379,6 @@ float getBakedSDF(int charIndex, vec3 pos, float scale, float depth) {
     return opExtrusion(pos, (baseDist + exteriorDist) / bakeToWorldRatio, depth); // convert the distance form glyph-space to world space
 }
 
-vec3 opTwist( in vec3 p )
-{
-    float amount = 30.0 * p.y;
-    float c = cos(amount);
-    float s = sin(amount);
-    mat2  m = mat2(c,-s,s,c);
-    // Copy original point
-    vec3 q = p; 
-    
-    // Rotate ONLY the X and Z coordinates
-    q.xz = m * p.xz; 
-
-    return q;
-}
-
-vec3 opTwistArbitrary(vec3 p, vec3 axis, float k) 
-{
-    // Ensure the axis is a normalized direction vector (length of 1)
-    axis = normalize(axis);
-    
-    // 1. Find how far along the axis the current point is using the dot product
-    float distAlongAxis = dot(p, axis);
-    
-    // 2. Calculate the rotation angle based on that distance
-    float angle = k * distAlongAxis;
-    
-    float c = cos(angle);
-    float s = sin(angle);
-    
-    // 3. Rotate the point around the arbitrary axis using Rodrigues' formula
-    vec3 twistedPos = p * c + cross(axis, p) * s + axis * distAlongAxis * (1.0 - c);
-    
-    return twistedPos;
-}
-
-
-
 Surface map(vec3 p) {
     Surface accumulatedResult; /* fixed size stack */
     initializeData(accumulatedResult);
@@ -440,13 +417,9 @@ Surface map(vec3 p) {
             } 
             /* Twist */
             else if (command == 202) {
-                // 1. Define the origin/pivot point you want to twist around
-                vec3 pivot = vec3(0.0);; // geometryData[elementIdx + 2].yzw + vec3(0.5, 0.5, 0.0);
-                // 2. Move the space so the pivot is at 0,0,0
+                vec3 pivot = geometryData[elementIdx].xyz;
                 pos -= pivot;
-                // 3. Apply the twist
-                pos = opTwistArbitrary(pos, vec3(0., 1., 0.), twistAmount);
-                // 4. Move the space back to exactly where it was
+                pos = opTwist(pos, geometryData[elementIdx + 1].xyz, geometryData[elementIdx].w);
                 pos += pivot;
             }
             continue;

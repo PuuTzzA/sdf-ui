@@ -1,4 +1,5 @@
 import { SdfCanvas } from "./webgl/sdf-canvas.js";
+import { Twist } from "./modifiers.js";
 
 const sdfCanvas = new SdfCanvas("canvas");
 sdfCanvas.initWebgl();
@@ -17,6 +18,10 @@ const compilingScreen = document.querySelector("#compiling-screen")
 const testDiv = document.querySelector("#test-div");
 const fpsDiv = document.querySelector("#fps-counter");
 let lastFps = []
+
+const target = document.querySelector("#target");
+testDiv.addModifier(new Twist(target, 0.1, [0, 1, 0]));
+testtext.addModifier(new Twist(null, 0.1, [0, 1, 0]));
 
 const SIZE = 90;
 for (let i = 0; i < SIZE; i++) {
