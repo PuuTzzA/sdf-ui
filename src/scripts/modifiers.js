@@ -25,7 +25,7 @@ class Twist extends AModifier {
         ABSOLUTE: 1,
     });
 
-    #target;
+    target;
     #amount;
     #axis;
 
@@ -37,14 +37,6 @@ class Twist extends AModifier {
     }
 
     // getters and setters 
-    get target() {
-        return this.#target;
-    }
-
-    set target(val) {
-        this.#target = val;
-    }
-
     get amount() {
         const rootFontSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
         return 0.5 * Math.PI * this.#amount / rootFontSize;

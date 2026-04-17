@@ -385,7 +385,6 @@ Surface map(vec3 p) {
 
     int layerOperation = 101; /* persistent layer operation */
     float smoothness = 0.001f; /* persistent smoothness parameter for layerOperations */
-    int layerDistortion = 200; /* persistent layer distortion */
 
     vec3 pos; 
     Surface current; 
@@ -402,7 +401,6 @@ Surface map(vec3 p) {
             if (command == 200) { 
                 layerOperation = floatBitsToInt(geometryData[elementIdx].x);
                 smoothness = geometryData[elementIdx].y;
-                layerDistortion = floatBitsToInt(geometryData[elementIdx].z);
             }
             /* Load Element Matrix and Material */
             if (command == 201) {
