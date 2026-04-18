@@ -278,6 +278,21 @@ class SdfTriangle extends ASdfElement {
 
 customElements.define("sdf-triangle", SdfTriangle);
 
+class SdfCustom extends ASdfElement {
+    connectedCallback() {
+        super.connectedCallback();
+
+        if (this.dataset.customIndex == undefined) {
+            this.dataset.customIndex = 0;
+        }
+    }
+
+    getElementType() {
+        return SdfCommands.CUSTOM;
+    }
+}
+customElements.define("sdf-custom", SdfCustom);
+
 class SdfLight extends HTMLElement {
     constructor() {
         super();

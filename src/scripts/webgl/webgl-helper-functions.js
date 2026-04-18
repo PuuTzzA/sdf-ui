@@ -255,4 +255,16 @@ function injectGLSL(mainString, searchString, replaceString) {
     return mainString.replace(regex, replaceString);
 }
 
-export { loadShadersFromDisk, initShaderProgram, initBuffers, injectGLSL };
+function toGlslVec2Array(points) {
+    const formatFloat = (num) => {
+        return Number.isInteger(num) ? `${num.toFixed(1)}f` : `${num}f`;
+    };
+
+    const vecStrings = points.map(([x, y]) => {
+        return `vec2(${formatFloat(x)}, ${formatFloat(y)})`;
+    });
+
+    return `vec2[](${vecStrings.join(', ')})`;
+}
+
+export { loadShadersFromDisk, initShaderProgram, initBuffers, injectGLSL, toGlslVec2Array };

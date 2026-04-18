@@ -7,6 +7,10 @@ export const SdfCommands = Object.freeze({
     CYLINDER: 4,
     TRIANGLE: 5,
 
+    CUSTOM_START: 10,
+    CUSTOM: 11, // Custom elements have this type but can have commands from CUSTOM_START to min(CUSTOM_START + num_custom_elements, CUSTOM_END)
+    CUSTOM_END: 99,
+
     // Layer Operations
     UNION: 100,
     SUBTRACTION: 101,

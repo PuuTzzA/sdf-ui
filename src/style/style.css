@@ -64,6 +64,12 @@
     initial-value: 0px 100px;
 }
 
+@property --scale {
+    syntax: "<length>";
+    inherits: false;
+    initial-value: 100px;
+}
+
 @property --diffuse-color {
     syntax: "<color>";
     inherits: false;

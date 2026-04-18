@@ -7,7 +7,7 @@ The origin of the canvas is top left and goes to 1, height/width if fullscreen. 
 There are a few variables that can only be set at the very beginning **before** calling `initWebgl`. These are:
 
 * **useAA:** enables Anti-Aliasing. This program uses Multisample Anti-Aliasing with four samples. 
-  > [!Note]
+  > [!Tip]
   > Enabling Anti-Aliasing massively decreases performance because all calculations need to be performed four times. Additionally compile time increases when enabling it. Therefore it is suggested to only turn on Anti-Aliasing when using the 2d-mode, because there performance and compile time are massively reduced by default. 
 * **twoDMode:** Enables a 2d mode, where instead of tracing a ray through the scene, the sdf is only evaluated once at a z-Depth of 0. 
 * **useCustomShadeFunction:** Enables the use of a custom `shade` function to control the exact look of the scene. Otherwise the scene is shaded as described below in the Shading section. If a custom shading function is used it has to be stored as a string in the `customShadeFunction` member of the sdfCanvas object. This custom shade function takes the traced position as an input and returns the color that should be rendered at that point. It has to be of the following format:
@@ -35,6 +35,15 @@ struct HitInfo {
     vec3 normal; // normal of the surface point
     Surface surface; // blended surface at the surface point
 };
+```
+* **customElements:** You can define custom elements by setting the `customElements` member variable of the `SdfCanvas` object. This is an array of arrays of two d points that define the vertices of custom elemets in object space. See below how to use the custom elements.
+  > [!Tip]
+  > The more custom elements you define, the longer compile times will be, because each custom element adds one branch to the map funciton. Therfore you should only add the minimum amount of custom elements.
+```js
+sdfCanvas.customElements = [
+    [[-0.5, 0], [0.5, 0], [0.5, 0.5]],
+    [[-1.5, 0], [1.5, 0], [0.3, 2.5], [0.1, 0.5]],
+];
 ```
 
 ## Shading
@@ -104,7 +113,7 @@ A more general box that also supports border-radius.
   * **y:** Corners parallel to the y-axis are rounded.
 * **--extrude:** Extrudes all surfaces along their normal. Allows for rounded corners.
 
-### 5. Text
+### 4. Text
 A element that contains text that which is rendered as sdf elements. As of now there is one supported font **metaballs** (only lower case letters and numbers for now). All the letters inside one sdf-text elment will have the same material and size. Sdf-text elements support `letter-spacing`, `word-spacing` and `word-break`.
 
 ```html
@@ -114,6 +123,41 @@ A element that contains text that which is rendered as sdf elements. As of now t
 * **--depth:** Controls the depth of the letters.
 * **--letterSmoothness:** Controls the smoothing between individual letters, wich are internally combined using a `SMOOTH_UNION` function. A value of 0 means no smoothing at all.
 * **--extrude:** Extrudes all surfaces along their normal. Allows for rounded corners.
+
+### 5. Cylinder
+A cylinder.
+
+```html
+<sdf-cylinder id="test-sdf-cylinder" data-layer-index="2">Cylinder</sdf-cylinder>
+```
+* **--axis:** Controls along which axis the cylider is formed. Can be {`x`, `y`, `z`}. Depending on this value **width**, **height** and **--depth** controll the height and the radius of the cylinder.
+* **--extrude:** Extrudes all surfaces along their normal. Allows for rounded corners.
+
+### 6. Trinagle
+An arbitrary triangle.
+```html
+<sdf-triangle id="test-sdf-triangle" data-layer-index="2">Triangle</sdf-triangle>
+```
+* **--point-a --point-b --pointc:** The three vertices of the triangle. They are vec2s that are set like so in css:
+```css
+--point-a: -5rem -5rem;
+--point-b: 5rem -5rem;
+--point-c: 0px 5rem;
+```
+* **--depth:** Controls the depth of the triangle.
+* **--extrude:** Extrudes all surfaces along their normal. Allows for rounded corners.
+
+### 7. Custom Elements
+Arbitrary 2d polygons that are extruded along the local z-axis. You have to define the shape before initializing the webgl canvas (see Section Compile Time Constants > Custom Elements). 
+
+```html
+<sdf-custom id="test-sdf-custom" data-custom-index="0" data-layer-index="2"></sdf-custom>
+```
+* **data-custom-index:** This custom attribute of the element controls which of the previously defined polygons this element should be rendered as.
+* **--scale:** Controls the scale of the custom elements. E.g. if scale is set to 10rem then 1 unit of object space (the space in which you defined the polygon) will appear to be 10rem on the screen.
+* **--depth:** Controls the depth of the polygon.
+* **--extrude:** Extrudes all surfaces along their normal. Allows for rounded corners.
+
 
 ## Layers
 

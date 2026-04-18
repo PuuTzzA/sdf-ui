@@ -1,8 +1,7 @@
-import { loadShadersFromDisk, initShaderProgram, initBuffers, injectGLSL } from "./webgl-helper-functions.js";
+import { loadShadersFromDisk, initShaderProgram, initBuffers, injectGLSL, toGlslVec2Array } from "./webgl-helper-functions.js";
 import { Matrix } from "../helper/matrix.js";
 import { SdfCommands } from "./sdf-commands.js";
 import { SdfLayer } from "../sdf-layer.js";
-import { Twist } from "../modifiers.js";
 
 class SdfCanvas {
     // ╔══════════════════════════════════════════════════════════╗
@@ -164,6 +163,8 @@ class SdfCanvas {
                 return 1;
             case SdfCommands.TRIANGLE:
                 return 2;
+            case SdfCommands.CUSTOM:
+                return 1;
         }
     }
 
@@ -263,8 +264,9 @@ class SdfCanvas {
     cameraZ;
     useAA;
     twoDMode;
-    useCustomShadeFunction;
     customShadeFunction;
+
+    customElements;
 
     // Private Properties
     #canvasName;
@@ -279,6 +281,7 @@ class SdfCanvas {
     #shadingBuffer;
     #lightBuffer;
     #overwriteLayers;
+    #lastCustomIdx;
 
     // Getters and Setters
     get ready() {
@@ -298,8 +301,8 @@ class SdfCanvas {
         this.cameraZ = 10;
         this.useAA = false;
         this.twoDMode = false;
-        this.useCustomShadeFunction = false;
-        this.customShadeFunction = ` 
+        this.customShadeFunction = "";
+        ` 
         vec3 shade(Surface surface) {
             float sdfValue = surface.distance * 80.0f;
             
@@ -317,6 +320,11 @@ class SdfCanvas {
             return vec3(finalColor);
         }
         `
+
+        this.customElements = [
+            [[-0.5, 0], [0.5, 0], [0.5, 0.5]],
+            [[-1.5, 0], [1.5, 0], [0.3, 2.5], [0.1, 0.5]],
+        ];
 
         this.#canvas;
         this.#gl;
@@ -373,12 +381,29 @@ class SdfCanvas {
         if (this.useAA) {
             defines += "#define AA\n";
         }
-        if (this.useCustomShadeFunction) {
+        if (this.customShadeFunction != "") {
             defines += "#define CUSTOM_SHADE_FUNCTION"
             fragmentSource = injectGLSL(fragmentSource, "SHADE_FUNCTION", this.customShadeFunction);
         }
-
         fragmentSource = injectGLSL(fragmentSource, "DEFINES", defines)
+
+        // Custom elements
+        let functionString = "";
+        let commandString = "";
+
+        for (let i = 0; i < Math.min(this.customElements.length, SdfCommands.CUSTOM_END - SdfCommands.CUSTOM_START); i++) {
+            const array = this.customElements[i];
+
+            const functionName = `customElement${i}`;
+            const glslArray = toGlslVec2Array(array);
+
+            functionString += `CUSTOM_ELEMENT_FUNCTION(${functionName}, ${glslArray})`;
+            commandString += `CUSTOM_ELEMENT_IF(${functionName}, ${SdfCommands.CUSTOM_START + i})`;
+        }
+        this.#lastCustomIdx = Math.min(SdfCommands.CUSTOM_START + this.customElements.length - 1, SdfCommands.CUSTOM_END);
+
+        fragmentSource = injectGLSL(fragmentSource, "CUSTOM_ELEMENTS_FUNCTIONS", functionString);
+        fragmentSource = injectGLSL(fragmentSource, "CUSTOM_ELEMENTS_COMMANDS", commandString);
 
         const shaderProgram = await initShaderProgram(this.#gl, vertexSource, fragmentSource);
 
@@ -736,6 +761,7 @@ class SdfCanvas {
                     geometryBufferIdx += modifier.getModifierSize() * 4;
                 }
 
+                const savedCommandBufferIdx = commandBufferIdx;
                 if (!addToCommandBufferIfSize(elementType, SdfCanvas.#getElementSize(element))) {
                     break allElementsLoop;
                 };
@@ -931,6 +957,14 @@ class SdfCanvas {
                         this.#geometryBuffer[geometryBufferIdx + 5] = cY * oneOverX;
                         this.#geometryBuffer[geometryBufferIdx + 6] = halfDepth;
                         this.#geometryBuffer[geometryBufferIdx + 7] = parseFloat(computedStyle.getPropertyValue("--extrude")) * oneOverX; // rounding
+                        break;
+                    case SdfCommands.CUSTOM:
+                        const elementIdx = Math.max(Math.min(SdfCommands.CUSTOM_START + parseInt(element.dataset.customIndex), this.#lastCustomIdx), SdfCommands.CUSTOM_START);
+                        this.#commandBuffer[savedCommandBufferIdx] = elementIdx; // clamped to the appropriate range
+
+                        this.#geometryBuffer[geometryBufferIdx + 0] = 1 / (parseFloat(computedStyle.getPropertyValue("--scale")) * oneOverX);
+                        this.#geometryBuffer[geometryBufferIdx + 1] = halfDepth;
+                        this.#geometryBuffer[geometryBufferIdx + 2] = parseFloat(computedStyle.getPropertyValue("--extrude")) * oneOverX; // rounding
                         break;
                 }
                 geometryBufferIdx += SdfCanvas.#getElementSize(element) * 4;

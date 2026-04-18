@@ -194,6 +194,26 @@ float sdTriangle(in vec2 p, in vec2 p0, in vec2 p1, in vec2 p2) {
     return -sqrt(d.x) * sign(d.y);
 }
 
+#define CUSTOM_ELEMENT_FUNCTION(functionName, pointsArray)                       \
+float functionName(in vec2 p) {                                                  \
+    vec2 vec[] = pointsArray;                                                    \
+    const int N = vec.length();                                                  \
+    float d = dot(p - vec[0], p - vec[0]);                                       \
+    float s = 1.0;                                                               \
+    for(int i = 0, j = N - 1; i < N; j = i, i++) {                               \
+        vec2 e = vec[j] - vec[i];                                                \
+        vec2 w = p - vec[i];                                                     \
+        vec2 b = w - e * clamp(dot(w, e) / dot(e, e), 0.0, 1.0);                 \
+        d = min(d, dot(b, b));                                                   \
+        bvec3 c = bvec3(p.y >= vec[i].y, p.y < vec[j].y, e.x * w.y > e.y * w.x); \
+        if(all(c) || all(not(c))) {                                              \
+            s *= -1.0;                                                           \
+        }                                                                        \
+    }                                                                            \
+    return s * sqrt(d);                                                          \
+}
+
+#insert CUSTOM_ELEMENTS_FUNCTIONS
 
 // ╔══════════════════════════════════════════════════════════╗
 // ║                    SDF OPERATIONS                        ║
@@ -408,6 +428,13 @@ float getBakedSDF(int charIndex, vec3 pos, float scale, float depth) {
     return opExtrusion(pos, (baseDist + exteriorDist) / bakeToWorldRatio, depth); // convert the distance form glyph-space to world space
 }
 
+#define CUSTOM_ELEMENT_IF(functionName, index)                                                                 \
+        else if (command == index) {                                                                           \
+            float scale = geometryData[elementIdx].x;                                                          \
+            float val = functionName(pos.xy * scale) / scale;                                                  \
+            current.distance = opExtrusion(pos, val, geometryData[elementIdx].y) - geometryData[elementIdx].z; \
+        }                                                                                                      \
+
 Surface map(vec3 p) {
     Surface accumulatedResult; /* fixed size stack */
     initializeData(accumulatedResult);
@@ -493,6 +520,8 @@ Surface map(vec3 p) {
             float val = sdTriangle(pos.xy, geometryData[elementIdx].xy, geometryData[elementIdx].zw, geometryData[elementIdx + 1].xy);
             current.distance = opExtrusion(pos, val, geometryData[elementIdx + 1].z) - geometryData[elementIdx + 1].w;
         }
+        /* Custom Elements */
+        #insert CUSTOM_ELEMENTS_COMMANDS
         switch (layerOperation) {
             case 100: /* Union */
                 accumulatedResult = opUnion(current, accumulatedResult);
