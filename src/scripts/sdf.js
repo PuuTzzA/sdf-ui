@@ -20,8 +20,8 @@ const fpsDiv = document.querySelector("#fps-counter");
 let lastFps = []
 
 const target = document.querySelector("#target");
-testDiv.addModifier(new Twist(target, 0.1, [0, 1, 0]));
-testtext.addModifier(new Twist(null, 0.1, [0, 1, 0]));
+//testDiv.addModifier(new Twist(target, 0.1, [0, 1, 0]));
+//testtext.addModifier(new Twist(null, 0.1, [0, 1, 0]));
 
 const SIZE = 90;
 for (let i = 0; i < SIZE; i++) {

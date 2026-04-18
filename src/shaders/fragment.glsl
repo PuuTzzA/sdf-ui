@@ -4,8 +4,9 @@ precision highp float;
 #insert DEFINES
 
 #define MAX_NUM_COMMANDS 1024
-#define MAX_SIZE_ELEMENT_BUFFER 512
-#define MAX_LAYERS 16
+#define MAX_SIZE_ELEMENT_BUFFER 1024
+#define MAX_NUM_LIGHTS 128
+#define VEC4_PER_LIGHT 3
 #define EPSILON 1e-4
 #define MAX_FLOAT 3.402823466e+38f
 #define ZERO (min(uNumCommands,0)) // non-constant zero to avoid inlining of functions
@@ -14,7 +15,7 @@ precision highp float;
 // ║                       UNIFORMS                           ║
 // ╚══════════════════════════════════════════════════════════╝
 layout (std140) uniform CommandBlock {
-    ivec4 commandData[MAX_SIZE_ELEMENT_BUFFER / 4];
+    ivec4 commandData[MAX_NUM_COMMANDS];
 };
 layout (std140) uniform GeometryBlock {
     vec4 geometryData[MAX_SIZE_ELEMENT_BUFFER];
@@ -22,17 +23,19 @@ layout (std140) uniform GeometryBlock {
 layout (std140) uniform ShadingBlock {
     vec4 shadingData[MAX_SIZE_ELEMENT_BUFFER];
 };
+layout (std140) uniform LightBlock {
+    vec4 lightData[MAX_NUM_LIGHTS * VEC4_PER_LIGHT];
+};
 
 uniform int uNumCommands;
+uniform int uNumLights;
 
 uniform vec2 uResolution;
 uniform float uTopOffset;
 uniform float uLeftOffset;
 uniform float uWindowWidth;
 uniform float uWindowHeight;
-
 uniform float uCameraZ;
-uniform bool uTwoDMode;
 
 // Uniforms for the Glyph Texture
 uniform highp sampler2DArray uSdfArray;
@@ -708,32 +711,67 @@ vec3 shade(HitInfo hit) {
     } */
     // return hit.surface.colorDiffuse;
 
-    const vec3 lightPos = vec3(0.0f, 0.0f, 1.0f);
-
-    vec3 vecToLight = normalize(lightPos - hit.pos);
-    vec3 vecFromLight = normalize(hit.pos - lightPos);
+    //float mixFactor = gaussian(surface.mix, 0.5f, 0.07f); 
 
     Surface surface = hit.surface;
 
-    float mixFacotr = gaussian(surface.mix, 0.5f, 0.07f);
+    // The view vector used in your original specular calculation
+    const vec3 viewDir = vec3(0.0f, 0.0f, 1.0f); 
 
-    float ld = 1.f; // diffuse light intensity (light source dependent)
-    float la = 1.f; // ambient light intensity (constant for scene)
-    float ls = 1.f; // specular light intensity (light source dependent)
+    // Calculate Ambient Light once, not per light
+    float la = 1.0f; // ambient light intensity 
+    vec3 resultColor = surface.ka * la * surface.colorAmbient;
 
-    float iDiffuse = surface.kd * ld * max(0.0f, dot(vecToLight, hit.normal));
-    float iAmbient = surface.ka * la;
-    float iSpecular = surface.ks * ls * pow(max(0.0f, dot(reflect(vecFromLight, hit.normal), vec3(0.0f, 0.0f, 1.0f))), surface.p); // phong
-    // float iSpecular = surface.ks * ls * pow(max(0.0f, dot(hit.normal, (hit.normal + vecToLight) * 0.5f)), 10.0f * surface.p); // blinn-phong
+    for (int i = 0; i < uNumLights; ++i) {
+        int dataIdx = i * VEC4_PER_LIGHT;
+        
+        vec3 lightPos = lightData[dataIdx].xyz;
+        vec3 lightColor = unpackColor(lightData[dataIdx].w);
+        
+        float lightType = lightData[dataIdx + 1].w; // 0 for point light, 1 for directional light
+        vec3 lightDir = lightData[dataIdx + 1].xyz; // only used for directional lights
 
-    // float shadow = shadow(hit.pos, vecToLight, 0.001f, 5.f); all three shadows look bad
-    // float shadow = softshadow(hit.pos, vecToLight, 0.001f, 5.f, 0.1f);
-    // float shadow = calcSoftshadow(hit.pos, vecToLight, 0.01f, 5.0f, 16.0f);
-    float shadow = 1.0f;
+        float intensity = lightData[dataIdx + 2].x;
+        float radius = lightData[dataIdx + 2].y;
+        float falloff = 1.5f; // lightData[dataIdx + 2].z;
 
-    //return vec3(shadow);
-    //return hit.id != -1 ? vec3(1.f) : vec3(0.f);
-    return shadow * (iDiffuse * surface.colorDiffuse + iSpecular * surface.colorSpecular) + iAmbient * surface.colorAmbient;
+        // light attenuation for point light (taken from https://lisyarus.github.io/blog/posts/point-light-attenuation.html)
+        vec3 pointVec = lightPos - hit.pos;
+        float dist = length(pointVec);
+
+        float s = dist / radius;
+        float attenuation = 0.0f;
+        if (s < 1.0f) {
+            float temp = (1.0f - s * s);
+            attenuation = (temp * temp) / (1.0f + falloff * s);
+        }
+        float finalAtt = mix(attenuation, 1.0f, lightType);
+        vec3 finalLightEnergy = lightColor * intensity * finalAtt;
+
+        // If type == 0.0 (Point), rawVec becomes (lightPos - hit.pos)
+        // If type == 1.0 (Directional), rawVec becomes -lightDir 
+        vec3 rawVec = mix(lightPos - hit.pos, -lightDir, lightType);
+        vec3 vecToLight = normalize(rawVec);
+        vec3 vecFromLight = -vecToLight;
+
+        // Diffuse
+        float iDiffuse = max(0.0f, dot(vecToLight, hit.normal));
+        vec3 diffuse = surface.kd * iDiffuse * surface.colorDiffuse;
+        
+        // Specular (Phong)
+        vec3 reflection = reflect(vecFromLight, hit.normal);
+        float iSpecular = pow(max(0.0f, dot(reflection, viewDir)), surface.p);
+        vec3 specular = surface.ks * iSpecular * surface.colorSpecular;
+        
+        // Specular (Blinn-Phong) alternative
+        // vec3 halfDir = normalize(vecToLight + viewDir);
+        // float specFactor = pow(max(0.0f, dot(hit.normal, halfDir)), 10.0f * surface.p);
+        // vec3 specular = surface.ks * specFactor * surface.colorSpecular;
+
+        resultColor += (diffuse + specular) * finalLightEnergy;
+    }
+
+    return resultColor;
 }
 #endif // 2d mode
 #endif // custom shade function
@@ -742,6 +780,9 @@ vec3 shade(HitInfo hit) {
 // ║                          MAIN                            ║
 // ╚══════════════════════════════════════════════════════════╝
 void main(void) {
+/*     fragColor = vec4(lightData[0].xyz, 1.0);
+    return; */
+
     vec2 uv = vUv; // origin = top left
     uv *= vec2(uWindowWidth, uWindowHeight);
     uv += vec2(uLeftOffset, uTopOffset);

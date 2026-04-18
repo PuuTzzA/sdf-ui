@@ -136,7 +136,7 @@ function initCommandBufferObject(gl, programInfo) {
 
     gl.bufferData(
         gl.UNIFORM_BUFFER,
-        SdfCanvas.MAX_NUM_COMMANDS * Int32Array.BYTES_PER_ELEMENT,
+        SdfCanvas.MAX_NUM_COMMANDS * 4 * Int32Array.BYTES_PER_ELEMENT,
         gl.DYNAMIC_DRAW,
     )
 
@@ -191,6 +191,30 @@ function initShadingBufferObject(gl, programInfo) {
     return shadingBuffer;
 }
 
+function initLightBufferObject(gl, programInfo) {
+    const lightBuffer = gl.createBuffer();
+
+    gl.uniformBlockBinding(
+        programInfo.program,
+        programInfo.uniformLocations.lightBlock,
+        SdfCanvas.LIGHT_BLOCK_UNIFORM_BUFFER_BINDING_INDEX,
+    );
+
+    gl.bindBufferBase(
+        gl.UNIFORM_BUFFER,
+        SdfCanvas.LIGHT_BLOCK_UNIFORM_BUFFER_BINDING_INDEX,
+        lightBuffer,
+    );
+
+    gl.bufferData(
+        gl.UNIFORM_BUFFER,
+        SdfCanvas.MAX_NUM_LIGHTS * SdfCanvas.VEC4_PER_LIGHT * 4 * Float32Array.BYTES_PER_ELEMENT,
+        gl.DYNAMIC_DRAW,
+    );
+
+    return lightBuffer;
+}
+
 function initBuffers(gl, programInfo) {
     const vao = gl.createVertexArray();
     gl.bindVertexArray(vao);
@@ -200,6 +224,7 @@ function initBuffers(gl, programInfo) {
     const commandBuffer = initCommandBufferObject(gl, programInfo);
     const geometryBuffer = initGeometryBufferObject(gl, programInfo);
     const shadingBuffer = initShadingBufferObject(gl, programInfo);
+    const lightBuffer = initLightBufferObject(gl, programInfo);
 
     gl.bindVertexArray(null);
 
@@ -210,6 +235,7 @@ function initBuffers(gl, programInfo) {
         commandBuffer: commandBuffer,
         geometryBuffer: geometryBuffer,
         shadingBuffer: shadingBuffer,
+        lightBuffer: lightBuffer,
     };
 }
 

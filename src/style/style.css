@@ -74,15 +74,15 @@ html,
 }
 
 @property --border-radius-type {
-    syntax: "<number>";
+    syntax: "circle | parabola | cosine | cubic";
     inherits: false;
-    initial-value: 0;
+    initial-value: circle;
 }
 
 @property --rotation-offset {
-    syntax: "<number>";
+    syntax: "x | y | z";
     inherits: false;
-    initial-value: 0;
+    initial-value: z;
 }
 
 @property --diffuse-color {
@@ -125,6 +125,30 @@ html,
     syntax: "<number>";
     inherits: false;
     initial-value: 1;
+}
+
+@property --light-type {
+    syntax: "point | directional";
+    inherits: false;
+    initial-value: point;
+}
+
+@property --light-direction {
+    syntax: "<number>+";
+    inherits: false;
+    initial-value: 0 0 0;
+}
+
+@property --light-intensity {
+    syntax: "<number>";
+    inherits: false;
+    initial-value: 1;
+}
+
+@property --light-radius {
+    syntax: "<length>";
+    inherits: false;
+    initial-value: 0px;
 }
 
 .sdf-ui-base-class {
@@ -176,7 +200,7 @@ html,
     border-bottom-left-radius: 3rem;
     border-bottom-right-radius: 7rem;
 
-    --border-radius-type: 2;
+    --border-radius-type: cosine;
     --rotation-offset: 3;
 
     --kd: 1;
@@ -254,7 +278,7 @@ html,
     text-align: center;
     font-size: 30rem;
     width: 20rem;
-/*     letter-spacing: 10rem;
+    /*     letter-spacing: 10rem;
  */
     /*     word-spacing: 10rem;
  */
@@ -262,10 +286,11 @@ html,
 
     --letterSmoothness: 0.1rem;
 
-/*     transform: rotateX(45deg) rotateY(30deg);
- */    /*     transform: translateZ(-1rme) rotateY(40deg) rotateX(30deg);
+    /*     transform: rotateX(45deg) rotateY(30deg);
  */
-/*     transform: translateZ(-10rem) rotate(100deg);
+    /*     transform: translateZ(-1rme) rotateY(40deg) rotateX(30deg);
+ */
+    /*     transform: translateZ(-10rem) rotate(100deg);
  */
     word-break: break-all;
 

@@ -45,12 +45,12 @@
     height: 5rem;
 
     border-radius: 2rem 1rem 2.5rem;
-    --border-radius-type: 0;
+    --border-radius-type: cubic;
     --ks: 0.1;
 }
 
 #test-sdf-box-2 {
-    --rotation-offset: 2;
+    --rotation-offset: y;
     --depth: 5rem;
 }
 
@@ -58,4 +58,37 @@
     width: 10rem;
     height: 10rem;
     --r: 5rem;
+}
+
+.light {
+    position: absolute;
+    width: 1rem;
+    height: 1rem;
+    border-radius: 0.5rem;
+    background-color: red !important;
+    top: 0;
+    left: 0;
+    z-index: 10;
+}
+
+#light-1 {
+    background-color: yellow !important;
+    --diffuse-color: white;
+    top: 30rem;
+    left: 50%;
+    --z: 10rem;
+    --light-type: directional;
+    --light-direction: 1 1 -1;
+    --light-intensity: 1;
+    --light-radius: 100rem;
+}
+
+#light-2 {
+    --diffuse-color: red;
+    top: 10rem;
+    left: 10rem;
+    --z: 10rem;
+    --light-type: point;
+    --light-intensity: 0.9;
+    --light-radius: 50rem;
 }

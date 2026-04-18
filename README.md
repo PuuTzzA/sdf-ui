@@ -93,15 +93,15 @@ A more general box that also supports border-radius.
 ```
 * **width, heigth, depth:** Controled in the same way as for the simple box (css properties width, height, --depth).
 * **border-radius:** Controls the border radius (same as normal css). May be different for each corner.
-* **--border-radius-type:** Controls the type of the radius. See [this article](https://iquilezles.org/articles/roundedboxes/) for more details. It should be an integer in {0, 1, 2, 3}. These are the options:
+* **--border-radius-type:** Controls the type of the radius. See [this article](https://iquilezles.org/articles/roundedboxes/) for more details. It should be one of those four options {`circle`, `parabola`, `cosine`, `cubic`}.
   * **1: Circle:** Default, normal circle (css uses this).
   * **2: Parabola:** Parabolic corner (smoother than circle).
   * **3: Cosine:** Both of the previvous solution have discontinuities in the second derivative of the normal, leading to a hard cut in the lighting. Cosing similarity fixes this by fitting a cosine to the curve. But this is **more computationally expensive** because there is no closed form solution and the result is found with binary search.
   * **4: Cubic:** Also provides continuous second derivatives (smooth lighting), also requires **binary search** to find the result.
-* **--rotation-offset:** Controlls the intitial rotation of the box, i.e. axis around wich the corners are rounded. Can be {0, 1, 2}. 
-  * **0:** Default, corners that are parallel to the z-axis are rounded.
-  * **1:** Corners parallel to the x-axis are rounded.
-  * **2:** Corners parallel to the y-axis are rounded.
+* **--rotation-offset:** Controlls the intitial rotation of the box, i.e. axis around wich the corners are rounded. Can be {`x`, `y`, `z`}. 
+  * **z:** Default, corners that are parallel to the z-axis are rounded.
+  * **x:** Corners parallel to the x-axis are rounded.
+  * **y:** Corners parallel to the y-axis are rounded.
 * **--extrude:** Extrudes all surfaces along their normal. Allows for rounded corners.
 
 ### 5. Text

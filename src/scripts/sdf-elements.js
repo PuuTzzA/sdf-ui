@@ -3,7 +3,7 @@ import { TextMeter } from "./helper/text-meter.js"
 import { SdfCommands } from "./webgl/sdf-commands.js";
 
 class ASdfElement extends HTMLElement {
-    static observedAttributes = ["data-layer-index", "data-element-type"];
+    static observedAttributes = ["data-layer-index"];
 
     #modifiers;
     get modifiers() {
@@ -38,11 +38,11 @@ class ASdfElement extends HTMLElement {
     }
 
     connectedMoveCallback() {
-        console.log("Custom element moved with moveBefore()");
+        // console.log("Custom element moved with moveBefore()");
     }
 
     adoptedCallback() {
-        console.log("Custom element moved to new page.");
+        // console.log("Custom element moved to new page.");
     }
 
     attributeChangedCallback(name, oldValue, newValue) {
@@ -260,4 +260,25 @@ class SdfText extends ASdfElement {
     }
 }
 
-customElements.define("sdf-text", SdfText)
+customElements.define("sdf-text", SdfText);
+
+class SdfLight extends HTMLElement {
+    constructor() {
+        super();
+    }
+
+    connectedCallback() {
+        if (this.dataset.renderLayers == undefined) {
+            this.dataset.renderLayers = 0;
+        }
+
+        this.classList.add("sdf-ui-base-class");
+        SdfCanvas.addTrackedLight(this);
+    }
+
+    disconnectedCallback() {
+        SdfCanvas.removeTrackedLight(this);
+    }
+}
+
+customElements.define("sdf-light", SdfLight);

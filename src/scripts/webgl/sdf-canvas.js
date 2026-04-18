@@ -8,14 +8,16 @@ class SdfCanvas {
     // ╔══════════════════════════════════════════════════════════╗
     // ║                       Constants                          ║
     // ╚══════════════════════════════════════════════════════════╝
-    static MAX_NUM_COMMANDS = 1024; // maximum number of commands per canvas (in amount of int)
-    static MAX_SIZE_ELEMENT_BUFFER = 512; // number of vec4 in the buffer
+    static MAX_NUM_COMMANDS = 1024; // maximum number of commands per canvas
+    static MAX_SIZE_ELEMENT_BUFFER = 1024; // number of vec4 in the buffer
+    static MAX_NUM_LIGHTS = 128; // maximum number of lights per canvas 
 
-    static MAX_LAYERS = 16;
+    static VEC4_PER_LIGHT = 3; // amount of vec4 used for each light
 
     static COMMAND_BLOCK_UNIFORM_BUFFER_BINDING_INDEX = 0;
     static GEOMETRY_BLOCK_UNIFORM_BUFFER_BINDING_INDEX = 1;
     static SHADING_BLOCK_UNIFORM_BUFFER_BINDING_INDEX = 2;
+    static LIGHT_BLOCK_UNIFORM_BUFFER_BINDING_INDEX = 3;
 
     // ╔══════════════════════════════════════════════════════════╗
     // ║                      Glyphs Texture                      ║
@@ -103,6 +105,9 @@ class SdfCanvas {
     static #instantiatedCanvases = [];
 
     static #trackedElements = [];
+
+    static #trackedLights = [];
+
     static #layers = [
         new SdfLayer(SdfCommands.UNION, 0),
         new SdfLayer(SdfCommands.SMOOTH_UNION, 30),
@@ -131,6 +136,18 @@ class SdfCanvas {
     static sortTrackedElements() {
         this.#trackedElements.sort((a, b) => (a.dataset.layerIndex - b.dataset.layerIndex));
         this.#updateLayers();
+    }
+
+    static addTrackedLight(light) {
+        this.#trackedLights.push(light);
+    }
+
+    static removeTrackedLight(light) {
+        const index = this.#trackedLights.indexOf(light);
+        if (index <= -1) {
+            return;
+        }
+        this.#trackedLights.splice(index, 1);
     }
 
     static #getElementSize(element) { // in amounts of vec4s
@@ -252,9 +269,11 @@ class SdfCanvas {
     #programInfo;
     #buffers;
     #numCommands;
+    #numLights;
     #commandBuffer;
     #geometryBuffer;
     #shadingBuffer;
+    #lightBuffer;
 
     // Getters and Setters
     get ready() {
@@ -298,9 +317,10 @@ class SdfCanvas {
         this.#programInfo;
         this.#buffers;
         this.#numCommands = 0;
-        this.#commandBuffer = new Int32Array(SdfCanvas.MAX_NUM_COMMANDS);
+        this.#commandBuffer = new Int32Array(SdfCanvas.MAX_NUM_COMMANDS * 4);
         this.#geometryBuffer = new Float32Array(SdfCanvas.MAX_SIZE_ELEMENT_BUFFER * 4);
         this.#shadingBuffer = new Float32Array(SdfCanvas.MAX_SIZE_ELEMENT_BUFFER * 4);
+        this.#lightBuffer = new Float32Array(SdfCanvas.MAX_NUM_LIGHTS * SdfCanvas.VEC4_PER_LIGHT * 4);
 
         this.overwriteLayers = new Map();
         // this.#overwriteLayers.set(1, new SdfLayer(SdfCommands.SMOOTH_UNION, 50));
@@ -339,9 +359,6 @@ class SdfCanvas {
         let { vertexSource, fragmentSource } = await loadShadersFromDisk("vertex.glsl", "fragment.glsl");
 
         // Initialize a shader program; this is where all the lighting
-        // for the vertices and so forth is established.
-        const startTime = performance.now()
-
         // Change the vertex according to the canvas settings
         let defines = "";
         if (this.twoDMode) {
@@ -359,11 +376,6 @@ class SdfCanvas {
 
         const shaderProgram = await initShaderProgram(this.#gl, vertexSource, fragmentSource);
 
-        const endTime = performance.now()
-        console.log(`Call to doSomething took ${endTime - startTime} milliseconds`)
-
-
-        console.log("after initShaderProgram")
         // Collect all the info needed to use the shader program.
         // Look up which attribute our shader program is using
         // for aVertexPosition and look up uniform locations.
@@ -386,6 +398,7 @@ class SdfCanvas {
                 twoDMode: this.#gl.getUniformLocation(shaderProgram, "uTwoDMode"),
 
                 numCommands: this.#gl.getUniformLocation(shaderProgram, "uNumCommands"),
+                numLights: this.#gl.getUniformLocation(shaderProgram, "uNumLights"),
 
                 // Uniforms for the Glyph Texture
                 sdfArray: this.#gl.getUniformLocation(shaderProgram, 'uSdfArray'),
@@ -394,7 +407,8 @@ class SdfCanvas {
 
                 commandBlock: this.#gl.getUniformBlockIndex(shaderProgram, "CommandBlock"),
                 geometryBlock: this.#gl.getUniformBlockIndex(shaderProgram, "GeometryBlock"),
-                shadingBlock: this.#gl.getUniformBlockIndex(shaderProgram, "ShadingBlock")
+                shadingBlock: this.#gl.getUniformBlockIndex(shaderProgram, "ShadingBlock"),
+                lightBlock: this.#gl.getUniformBlockIndex(shaderProgram, "LightBlock"),
             },
         };
 
@@ -446,9 +460,12 @@ class SdfCanvas {
         this.#gl.bindTexture(this.#gl.TEXTURE_2D_ARRAY, SdfCanvas.glyphsTexture);
 
         // Set uniform buffer values
-        this.#updateUniformBuffers();
+        this.#updateUniforms();
+        this.#updateUniformBufferData();
+        this.#updateLightBufferData();
 
         this.#gl.uniform1i(this.#programInfo.uniformLocations.numCommands, this.#numCommands);
+        this.#gl.uniform1i(this.#programInfo.uniformLocations.numLights, this.#numLights);
 
         this.#gl.bindBuffer(this.#gl.UNIFORM_BUFFER, this.#buffers.commandBuffer);
         this.#gl.bufferSubData(this.#gl.UNIFORM_BUFFER, 0, this.#commandBuffer);
@@ -459,11 +476,39 @@ class SdfCanvas {
         this.#gl.bindBuffer(this.#gl.UNIFORM_BUFFER, this.#buffers.shadingBuffer);
         this.#gl.bufferSubData(this.#gl.UNIFORM_BUFFER, 0, this.#shadingBuffer);
 
+        this.#gl.bindBuffer(this.#gl.UNIFORM_BUFFER, this.#buffers.lightBuffer);
+        this.#gl.bufferSubData(this.#gl.UNIFORM_BUFFER, 0, this.#lightBuffer);
+
         // Draw Scene
         {
             const offset = 0;
             const vertexCount = 4;
             this.#gl.drawArrays(this.#gl.TRIANGLE_STRIP, offset, vertexCount);
+        }
+    }
+
+    resizeCanvasToDisplaySize() {
+        // 1. Get the pixel density of the screen (e.g., Retina screens are often 2)
+        const dpr = window.devicePixelRatio || 1;
+
+        // 2. Calculate the actual physical pixels of the display area
+        const displayWidth = this.#canvas.clientWidth * dpr;
+        const displayHeight = this.#canvas.clientHeight * dpr;
+
+        // 3. Apply your downscale factor to determine the WebGL rendering resolution
+        // (Math.max is used to prevent the canvas from ever being 0x0 pixels)
+        const renderWidth = Math.max(1, Math.round(displayWidth / this.downscaleFactorX));
+        const renderHeight = Math.max(1, Math.round(displayHeight / this.downscaleFactorY));
+
+        // 4. If the rendering resolution changed, update the canvas and viewport
+        if (this.#canvas.width !== renderWidth || this.#canvas.height !== renderHeight) {
+
+            // This changes the internal rendering resolution (the WebGL buffer size)
+            this.#canvas.width = renderWidth;
+            this.#canvas.height = renderHeight;
+
+            // The WebGL viewport MUST match the internal buffer size, 
+            this.#gl.viewport(0, 0, renderWidth, renderHeight);
         }
     }
 
@@ -487,8 +532,7 @@ class SdfCanvas {
         this.#gl.uniform1i(this.#programInfo.uniformLocations.twoDMode, this.twoDMode);
     }
 
-    #updateUniformBuffers() {
-        this.#updateUniforms();
+    #updateUniformBufferData() {
         const oneOverX = 1 / window.innerWidth;
         const glyphsUnpaddedHeight = SdfCanvas.GLYPHS_MAX_BOUNDING_BOX[1][1] - SdfCanvas.GLYPHS_MAX_BOUNDING_BOX[0][1];
         const glyphsUnpaddedWidth = SdfCanvas.GLYPHS_MAX_BOUNDING_BOX[1][0] - SdfCanvas.GLYPHS_MAX_BOUNDING_BOX[0][0];
@@ -641,6 +685,9 @@ class SdfCanvas {
                         targetOffsetX += (targetRect.left + targetRect.width * 0.5) * oneOverX;
                         targetOffsetY += (targetRect.top + targetRect.height * 0.5) * oneOverX;
                         targetOffsetZ += this.twoDMode ? 0 : parseFloat(getComputedStyle(modifier.target).getPropertyValue("--z")) * oneOverX;
+
+                        let targetMat = Matrix.parseMatrix(computedStyle.transform);
+                        targetOffsetZ += targetMat[14] * oneOverX;
                     }
 
                     if (elementType == SdfCommands.TEXT) { // text has the origin at the bottom-left not in the center like the other elements
@@ -692,8 +739,37 @@ class SdfCanvas {
                         this.#geometryBuffer[geometryBufferIdx + 6] = parseFloat(computedStyle.borderBottomLeftRadius) * oneOverX;
                         this.#geometryBuffer[geometryBufferIdx + 7] = parseFloat(computedStyle.borderTopLeftRadius) * oneOverX;
 
-                        this.#geometryBuffer[geometryBufferIdx + 8] = SdfCanvas.#intToFloatBits(parseInt(computedStyle.getPropertyValue("--border-radius-type"))); // border radius
-                        this.#geometryBuffer[geometryBufferIdx + 9] = SdfCanvas.#intToFloatBits(parseInt(computedStyle.getPropertyValue("--rotation-offset"))); // initial rotation
+                        let borderType = 0;
+                        switch (computedStyle.getPropertyValue("--border-radius-type")) {
+                            case "circle":
+                                borderType = 0;
+                                break;
+                            case "parabola":
+                                borderType = 1;
+                                break;
+                            case "cosine":
+                                borderType = 2;
+                                break;
+                            case "cubic":
+                                borderType = 3;
+                                break;
+                        }
+
+                        let rotationOffset = 0;
+                        switch (computedStyle.getPropertyValue("--rotation-offset")) {
+                            case "z":
+                                rotationOffset = 0;
+                                break;
+                            case "x":
+                                rotationOffset = 1;
+                                break;
+                            case "y":
+                                rotationOffset = 2;
+                                break;
+                        }
+
+                        this.#geometryBuffer[geometryBufferIdx + 8] = SdfCanvas.#intToFloatBits(borderType); // border radius
+                        this.#geometryBuffer[geometryBufferIdx + 9] = SdfCanvas.#intToFloatBits(rotationOffset); // initial rotation
                         this.#geometryBuffer[geometryBufferIdx + 10] = parseFloat(computedStyle.getPropertyValue("--extrude")) * oneOverX; // rounding
                         break;
                     case SdfCommands.TEXT:
@@ -784,29 +860,60 @@ class SdfCanvas {
         this.#numCommands = commandBufferIdx / 4;
     }
 
-    resizeCanvasToDisplaySize() {
-        // 1. Get the pixel density of the screen (e.g., Retina screens are often 2)
-        const dpr = window.devicePixelRatio || 1;
+    #updateLightBufferData() {
+        const oneOverX = 1 / window.innerWidth;
 
-        // 2. Calculate the actual physical pixels of the display area
-        const displayWidth = this.#canvas.clientWidth * dpr;
-        const displayHeight = this.#canvas.clientHeight * dpr;
+        let lightBufferIdx = 0;
+        for (let i = 0; i < SdfCanvas.#trackedLights.length; i++) {
+            const light = SdfCanvas.#trackedLights[i];
 
-        // 3. Apply your downscale factor to determine the WebGL rendering resolution
-        // (Math.max is used to prevent the canvas from ever being 0x0 pixels)
-        const renderWidth = Math.max(1, Math.round(displayWidth / this.downscaleFactorX));
-        const renderHeight = Math.max(1, Math.round(displayHeight / this.downscaleFactorY));
+            if (!this.#containedInRenderLayers(light)) {
+                continue;
+            }
 
-        // 4. If the rendering resolution changed, update the canvas and viewport
-        if (this.#canvas.width !== renderWidth || this.#canvas.height !== renderHeight) {
+            if (lightBufferIdx / (SdfCanvas.VEC4_PER_LIGHT * 4) >= SdfCanvas.MAX_NUM_LIGHTS) {
+                break;
+            }
 
-            // This changes the internal rendering resolution (the WebGL buffer size)
-            this.#canvas.width = renderWidth;
-            this.#canvas.height = renderHeight;
+            const rect = light.getBoundingClientRect();
+            const computedStyle = getComputedStyle(light);
+            let mat = Matrix.parseMatrix(computedStyle.transform);
 
-            // The WebGL viewport MUST match the internal buffer size, 
-            this.#gl.viewport(0, 0, renderWidth, renderHeight);
+            const offsetX = (rect.left + rect.width * 0.5) * oneOverX;
+            const offsetY = (rect.top + rect.height * 0.5) * oneOverX;
+            const offsetZ = this.twoDMode ? 0 : (parseFloat(computedStyle.getPropertyValue("--z")) + mat[14]) * oneOverX;
+
+            this.#lightBuffer[lightBufferIdx + 0] = offsetX;
+            this.#lightBuffer[lightBufferIdx + 1] = offsetY;
+            this.#lightBuffer[lightBufferIdx + 2] = offsetZ;
+            this.#lightBuffer[lightBufferIdx + 3] = SdfCanvas.#intToFloatBits(SdfCanvas.#cssColorToUint32(computedStyle.getPropertyValue("--diffuse-color"))); // light color
+
+            let lightType = 0;
+            switch (computedStyle.getPropertyValue("--light-type")) {
+                case "point":
+                    lightType = 0;
+                    break;
+                case "directional":
+                    lightType = 1;
+                    break;
+            }
+
+            const cssValues = computedStyle.getPropertyValue('--light-direction');
+            const [dirX, dirY, dirZ] = cssValues.split(' ').map(val => parseFloat(val));
+
+            this.#lightBuffer[lightBufferIdx + 4] = dirX;
+            this.#lightBuffer[lightBufferIdx + 5] = dirY;
+            this.#lightBuffer[lightBufferIdx + 6] = dirZ;
+            this.#lightBuffer[lightBufferIdx + 7] = lightType;
+
+            this.#lightBuffer[lightBufferIdx + 8] = parseFloat(computedStyle.getPropertyValue("--light-intensity")); // intensity
+            this.#lightBuffer[lightBufferIdx + 9] = parseFloat(computedStyle.getPropertyValue("--light-radius")) * oneOverX; // radius
+            // this.#lightBuffer[lightBufferIdx + 10] = 1.5; // for now this is hardcoded in the shader
+
+            lightBufferIdx += SdfCanvas.VEC4_PER_LIGHT * 4;
         }
+
+        this.#numLights = lightBufferIdx / (SdfCanvas.VEC4_PER_LIGHT * 4);
     }
 
     #containedInRenderLayers(element) {

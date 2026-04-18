@@ -3,7 +3,6 @@ precision highp float;
 
 #define MAX_NUM_COMMANDS 1024
 #define MAX_SIZE_ELEMENT_BUFFER 512
-#define MAX_LAYERS 16
 #define EPSILON 1e-4
 #define MAX_FLOAT 3.402823466e+38f
 #define ZERO (min(uNumCommands,0)) // non-constant zero to avoid inlining of functions
