@@ -160,6 +160,8 @@ class SdfCanvas {
                 return 3;
             case SdfCommands.TEXT: // variable length
                 return element.size;
+            case SdfCommands.CYLINDER:
+                return 1;
         }
     }
 
@@ -560,6 +562,24 @@ class SdfCanvas {
             return true;
         }
 
+        const storeMat4InGeometryBuffer = (mat, index) => {
+            this.#geometryBuffer[index + 0] = mat[0]; // column 1 [mat[0], mat[1], mat[2], 0]^T
+            this.#geometryBuffer[index + 1] = mat[1];
+            this.#geometryBuffer[index + 2] = mat[2];
+
+            this.#geometryBuffer[index + 3] = mat[4]; // column 2 [mat[4], mat[5], mat[6], 0]^T
+            this.#geometryBuffer[index + 4] = mat[5];
+            this.#geometryBuffer[index + 5] = mat[6];
+
+            this.#geometryBuffer[index + 6] = mat[8]; // column 3 [mat[8], mat[9], mat[10], 0]^T
+            this.#geometryBuffer[index + 7] = mat[9];
+            this.#geometryBuffer[index + 8] = mat[10];
+
+            this.#geometryBuffer[index + 9] = mat[12]; // tx, column 4 [tx, ty, tz, 1]^T
+            this.#geometryBuffer[index + 10] = mat[13]; // ty
+            this.#geometryBuffer[index + 11] = mat[14]; // tz
+        }
+
         allElementsLoop:
         for (let layerIdx = 0; layerIdx < SdfCanvas.#layers.length; layerIdx++) {
             const layer = SdfCanvas.#layers[layerIdx];
@@ -625,29 +645,15 @@ class SdfCanvas {
                 const originalTz = mat[14]; // this is needed to compute the glyph z-positions for text
 
                 // if I want the surface to be the top surface
-                /* mat[12] -= mat[8] * halfDepth;
+                mat[12] -= mat[8] * halfDepth;
                 mat[13] -= mat[9] * halfDepth;
-                mat[14] -= mat[10] * halfDepth; */
+                mat[14] -= mat[10] * halfDepth;
 
                 // invert the matrix
                 Matrix.invertAffineMat4InPlace(mat);
 
                 // Inverse affine modelview matrix = computedStyle.transform @ T(offsetX, offsetY, offsetZ), computedStyle.transform used without translation since that is already in boundingclientrect
-                this.#geometryBuffer[geometryBufferIdx + 0] = mat[0]; // column 1 [mat[0], mat[1], mat[2], 0]^T
-                this.#geometryBuffer[geometryBufferIdx + 1] = mat[1];
-                this.#geometryBuffer[geometryBufferIdx + 2] = mat[2];
-
-                this.#geometryBuffer[geometryBufferIdx + 3] = mat[4]; // column 2 [mat[4], mat[5], mat[6], 0]^T
-                this.#geometryBuffer[geometryBufferIdx + 4] = mat[5];
-                this.#geometryBuffer[geometryBufferIdx + 5] = mat[6];
-
-                this.#geometryBuffer[geometryBufferIdx + 6] = mat[8]; // column 3 [mat[8], mat[9], mat[10], 0]^T
-                this.#geometryBuffer[geometryBufferIdx + 7] = mat[9];
-                this.#geometryBuffer[geometryBufferIdx + 8] = mat[10];
-
-                this.#geometryBuffer[geometryBufferIdx + 9] = mat[12]; // tx, column 4 [tx, ty, tz, 1]^T
-                this.#geometryBuffer[geometryBufferIdx + 10] = mat[13]; // ty
-                this.#geometryBuffer[geometryBufferIdx + 11] = mat[14]; // tz
+                storeMat4InGeometryBuffer(mat, geometryBufferIdx)
 
                 // Shading Information
                 this.#shadingBuffer[geometryBufferIdx + 0] = SdfCanvas.#intToFloatBits(SdfCanvas.#cssColorToUint32(computedStyle.getPropertyValue("--diffuse-color"))); // diffuse color
@@ -729,9 +735,34 @@ class SdfCanvas {
                         this.#geometryBuffer[geometryBufferIdx + 3] = parseFloat(computedStyle.getPropertyValue("--extrude")) * oneOverX; // rounding
                         break;
                     case SdfCommands.BOX:
-                        this.#geometryBuffer[geometryBufferIdx + 0] = halfWidth; // width 
-                        this.#geometryBuffer[geometryBufferIdx + 1] = halfHeight; // height 
-                        this.#geometryBuffer[geometryBufferIdx + 2] = halfDepth; // depth
+                        let w = halfWidth;
+                        let h = halfHeight;
+                        let d = halfDepth;
+
+                        switch (computedStyle.getPropertyValue("--rotation-offset")) {
+                            case "z":
+                                break;
+                            case "x":
+                                Matrix.mat4TimesMat4InPlace(Matrix.rotation90DegY, mat);
+                                storeMat4InGeometryBuffer(mat, savedGeometryBufferIdx);
+
+                                const temp = w;
+                                w = d;
+                                d = temp;
+                                break;
+                            case "y":
+                                Matrix.mat4TimesMat4InPlace(Matrix.rotation90DegX, mat);
+                                storeMat4InGeometryBuffer(mat, savedGeometryBufferIdx);
+
+                                const temp2 = h;
+                                h = d;
+                                d = temp2;
+                                break;
+                        }
+
+                        this.#geometryBuffer[geometryBufferIdx + 0] = w; // width 
+                        this.#geometryBuffer[geometryBufferIdx + 1] = h; // height 
+                        this.#geometryBuffer[geometryBufferIdx + 2] = d; // depth
                         this.#geometryBuffer[geometryBufferIdx + 3] = 0; // still unused
 
                         this.#geometryBuffer[geometryBufferIdx + 4] = parseFloat(computedStyle.borderBottomRightRadius) * oneOverX;
@@ -755,22 +786,9 @@ class SdfCanvas {
                                 break;
                         }
 
-                        let rotationOffset = 0;
-                        switch (computedStyle.getPropertyValue("--rotation-offset")) {
-                            case "z":
-                                rotationOffset = 0;
-                                break;
-                            case "x":
-                                rotationOffset = 1;
-                                break;
-                            case "y":
-                                rotationOffset = 2;
-                                break;
-                        }
 
                         this.#geometryBuffer[geometryBufferIdx + 8] = SdfCanvas.#intToFloatBits(borderType); // border radius
-                        this.#geometryBuffer[geometryBufferIdx + 9] = SdfCanvas.#intToFloatBits(rotationOffset); // initial rotation
-                        this.#geometryBuffer[geometryBufferIdx + 10] = parseFloat(computedStyle.getPropertyValue("--extrude")) * oneOverX; // rounding
+                        this.#geometryBuffer[geometryBufferIdx + 9] = parseFloat(computedStyle.getPropertyValue("--extrude")) * oneOverX; // rounding
                         break;
                     case SdfCommands.TEXT:
                         // The text expects an array of letters where the x,y,z position is at the same place as the origin of the letters in "glyph-space"
@@ -851,6 +869,31 @@ class SdfCanvas {
                                 }
                             }
                         }
+                        break;
+                    case SdfCommands.CYLINDER:
+                        let height, radius;
+                        switch (computedStyle.getPropertyValue("--axis")) {
+                            case "x":
+                                Matrix.mat4TimesMat4InPlace(Matrix.rotation90DegZ, mat);
+                                storeMat4InGeometryBuffer(mat, savedGeometryBufferIdx);
+                                height = halfWidth;
+                                radius = halfHeight;
+                                break;
+                            case "y":
+                                height = halfHeight;
+                                radius = halfWidth;
+                                break;
+                            case "z":
+                                Matrix.mat4TimesMat4InPlace(Matrix.rotation90DegX, mat);
+                                storeMat4InGeometryBuffer(mat, savedGeometryBufferIdx);
+                                radius = halfWidth;
+                                height = halfDepth;
+                                break;
+                        }
+                        this.#geometryBuffer[geometryBufferIdx + 0] = radius;
+                        this.#geometryBuffer[geometryBufferIdx + 1] = height;
+                        this.#geometryBuffer[geometryBufferIdx + 2] = parseFloat(computedStyle.getPropertyValue("--extrude")) * oneOverX; // rounding
+                        this.#geometryBuffer[geometryBufferIdx + 3] = 0;
                         break;
                 }
                 geometryBufferIdx += SdfCanvas.#getElementSize(element) * 4;

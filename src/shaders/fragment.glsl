@@ -169,6 +169,25 @@ float sdRoundBox2d(in vec2 p, in vec2 b, in vec4 r, int type) {
     return d * r.x * sqrt(0.5f);
 }
 
+/* float sdCappedCylinder(vec3 p, vec3 a, vec3 b, float r) {
+    vec3 ba = b - a;
+    vec3 pa = p - a;
+    float baba = dot(ba, ba);
+    float paba = dot(pa, ba);
+    float x = length(pa * baba - ba * paba) - r * baba;
+    float y = abs(paba - baba * 0.5f) - baba * 0.5f;
+    float x2 = x * x;
+    float y2 = y * y * baba;
+    float d = (max(x, y) < 0.0f) ? -min(x2, y2) : (((x > 0.0f) ? x2 : 0.0f)+((y > 0.0f) ? y2 : 0.0f));
+    return sign(d) * sqrt(abs(d)) / baba;
+} */
+
+float sdCappedCylinder(vec3 p, float r, float h) {
+    vec2 d = abs(vec2(length(p.xz), p.y)) - vec2(r, h);
+    return min(max(d.x, d.y), 0.0f) + length(max(d, 0.0f));
+}
+
+
 // ╔══════════════════════════════════════════════════════════╗
 // ║                    SDF OPERATIONS                        ║
 // ╚══════════════════════════════════════════════════════════╝
@@ -439,26 +458,11 @@ Surface map(vec3 p) {
             float h = geometryData[elementIdx].y;
             float d = geometryData[elementIdx].z;
             
-            int initialRotation = floatBitsToInt(geometryData[elementIdx + 2].y);
-            /* Adiddional Rotation (rounded edge selection) */
-            if (initialRotation == 1) {
-                mat3 Rot = mat3(0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, -1.0f, 0.0f, 0.0f);
-                pos = Rot * pos;
-                float temp = w;
-                w = d;
-                d = temp;
-            } else if (initialRotation == 2) {
-                mat3 Rot = mat3(1.0f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f, 0.0f, 1.0f, 0.0f);
-                pos = Rot * pos;
-                float temp = h;
-                h = d;
-                d = temp;
-            }
             float val = sdRoundBox2d(pos.xy, vec2(w, h), geometryData[elementIdx + 1], floatBitsToInt(geometryData[elementIdx + 2].x));
-            current.distance = opExtrusion(pos, val, d) - geometryData[elementIdx + 2].z;
+            current.distance = opExtrusion(pos, val, d) - geometryData[elementIdx + 2].y;
         }
         /* Text */
-        else if (command == 4) { 
+        else if (command == 3) { 
             /* The letters are stored in a TextureArray according to their index */
             int numLetters = floatBitsToInt(geometryData[elementIdx].x);
             float scale = geometryData[elementIdx].y; /* inverse scale */
@@ -472,6 +476,14 @@ Surface map(vec3 p) {
                 sdValue = opSmoothUnion(getBakedSDF(letterCode, letterPos, scale, depth), sdValue, letterSmoothness);
             }
             current.distance = sdValue - geometryData[elementIdx + 1].x;
+        }
+        /* Cylinder */
+        else if (command == 4) {
+            current.distance = sdCappedCylinder(pos, geometryData[elementIdx].x, geometryData[elementIdx].y) - geometryData[elementIdx].z;
+        }
+        /* Triangle */
+        else if (command == 5) {
+
         }
         switch (layerOperation) {
             case 100: /* Union */

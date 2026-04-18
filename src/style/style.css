@@ -85,6 +85,12 @@ html,
     initial-value: z;
 }
 
+@property --axis {
+    syntax: "x | y | z";
+    inherits: false;
+    initial-value: x;
+}
+
 @property --diffuse-color {
     syntax: "<color>";
     inherits: false;

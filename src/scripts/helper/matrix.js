@@ -1,4 +1,26 @@
 class Matrix {
+    // Attention all three are column major, so not as they appear
+    static rotation90DegX = new Float32Array([
+        1, 0, 0, 0,
+        0, 0, -1, 0,
+        0, 1, 0, 0,
+        0, 0, 0, 1,
+    ])
+
+    static rotation90DegY = new Float32Array([
+        0, 0, 1, 0,
+        0, 1, 0, 0,
+        -1, 0, 0, 0,
+        0, 0, 0, 1,
+    ])
+
+    static rotation90DegZ = new Float32Array([
+        0, -1, 0, 0,
+        1, 0, 0, 0,
+        0, 0, 1, 0,
+        0, 0, 0, 1,
+    ])
+
     static parseMatrix(string) {
         if (string == "none") {
             return new Float32Array([
@@ -182,6 +204,60 @@ class Matrix {
         v[0] = m[0] * v0 + m[3] * v1 + m[6] * v2;
         v[1] = m[1] * v0 + m[4] * v1 + m[7] * v2;
         v[2] = m[2] * v0 + m[5] * v1 + m[8] * v2;
+    }
+
+    /**
+     * Computes A @ B and stores the result in B
+     * Assumes A and B are Float32Array(16) in column-major order.
+     * 
+     * @param {Float32Array} A - The left operand
+     * @param {Float32Array} B - The right operand and the destination array
+     * @returns {Float32Array} B (for chaining)
+     */
+    static mat4TimesMat4InPlace(A, B) {
+        // Cache the entire A matrix upfront. 
+        // This is mathematically necessary because computing *any* column 
+        // of the result requires reading across all columns of A.
+        const a00 = A[0], a10 = A[1], a20 = A[2], a30 = A[3];
+        const a01 = A[4], a11 = A[5], a21 = A[6], a31 = A[7];
+        const a02 = A[8], a12 = A[9], a22 = A[10], a32 = A[11];
+        const a03 = A[12], a13 = A[13], a23 = A[14], a33 = A[15];
+
+        let b0, b1, b2, b3;
+
+        // --- Column 0 ---
+        // Read column 0 of B, then overwrite column 0 of B
+        b0 = B[0]; b1 = B[1]; b2 = B[2]; b3 = B[3];
+        B[0] = b0 * a00 + b1 * a01 + b2 * a02 + b3 * a03;
+        B[1] = b0 * a10 + b1 * a11 + b2 * a12 + b3 * a13;
+        B[2] = b0 * a20 + b1 * a21 + b2 * a22 + b3 * a23;
+        B[3] = b0 * a30 + b1 * a31 + b2 * a32 + b3 * a33;
+
+        // --- Column 1 ---
+        // Read column 1 of B, then overwrite column 1 of B
+        b0 = B[4]; b1 = B[5]; b2 = B[6]; b3 = B[7];
+        B[4] = b0 * a00 + b1 * a01 + b2 * a02 + b3 * a03;
+        B[5] = b0 * a10 + b1 * a11 + b2 * a12 + b3 * a13;
+        B[6] = b0 * a20 + b1 * a21 + b2 * a22 + b3 * a23;
+        B[7] = b0 * a30 + b1 * a31 + b2 * a32 + b3 * a33;
+
+        // --- Column 2 ---
+        // Read column 2 of B, then overwrite column 2 of B
+        b0 = B[8]; b1 = B[9]; b2 = B[10]; b3 = B[11];
+        B[8] = b0 * a00 + b1 * a01 + b2 * a02 + b3 * a03;
+        B[9] = b0 * a10 + b1 * a11 + b2 * a12 + b3 * a13;
+        B[10] = b0 * a20 + b1 * a21 + b2 * a22 + b3 * a23;
+        B[11] = b0 * a30 + b1 * a31 + b2 * a32 + b3 * a33;
+
+        // --- Column 3 ---
+        // Read column 3 of B, then overwrite column 3 of B
+        b0 = B[12]; b1 = B[13]; b2 = B[14]; b3 = B[15];
+        B[12] = b0 * a00 + b1 * a01 + b2 * a02 + b3 * a03;
+        B[13] = b0 * a10 + b1 * a11 + b2 * a12 + b3 * a13;
+        B[14] = b0 * a20 + b1 * a21 + b2 * a22 + b3 * a23;
+        B[15] = b0 * a30 + b1 * a31 + b2 * a32 + b3 * a33;
+
+        return B;
     }
 }
 

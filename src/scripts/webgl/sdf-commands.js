@@ -3,7 +3,9 @@ export const SdfCommands = Object.freeze({
     SPHERE: 0,
     BOX_SIMPLE: 1,
     BOX: 2,
-    TEXT: 4,
+    TEXT: 3,
+    CYLINDER: 4,
+    TRIANGLE: 5,
 
     // Layer Operations
     UNION: 100,

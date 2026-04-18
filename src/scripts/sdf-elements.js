@@ -262,6 +262,14 @@ class SdfText extends ASdfElement {
 
 customElements.define("sdf-text", SdfText);
 
+class SdfCylinder extends ASdfElement {
+    getElementType() {
+        return SdfCommands.CYLINDER;
+    }
+}
+
+customElements.define("sdf-cylinder", SdfCylinder);
+
 class SdfLight extends HTMLElement {
     constructor() {
         super();
