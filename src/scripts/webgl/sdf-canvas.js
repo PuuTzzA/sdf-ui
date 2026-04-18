@@ -162,6 +162,8 @@ class SdfCanvas {
                 return element.size;
             case SdfCommands.CYLINDER:
                 return 1;
+            case SdfCommands.TRIANGLE:
+                return 2;
         }
     }
 
@@ -256,13 +258,13 @@ class SdfCanvas {
     #ready; // no setter
     downscaleFactorX;
     downscaleFactorY;
+    topFace;
 
     cameraZ;
     useAA;
     twoDMode;
     useCustomShadeFunction;
     customShadeFunction;
-    overwriteLayers;
 
     // Private Properties
     #canvasName;
@@ -276,6 +278,7 @@ class SdfCanvas {
     #geometryBuffer;
     #shadingBuffer;
     #lightBuffer;
+    #overwriteLayers;
 
     // Getters and Setters
     get ready() {
@@ -290,6 +293,7 @@ class SdfCanvas {
         this.#ready = false;
         this.downscaleFactorX = 2;
         this.downscaleFactorY = 2;
+        this.topFace = false;
 
         this.cameraZ = 10;
         this.useAA = false;
@@ -324,7 +328,7 @@ class SdfCanvas {
         this.#shadingBuffer = new Float32Array(SdfCanvas.MAX_SIZE_ELEMENT_BUFFER * 4);
         this.#lightBuffer = new Float32Array(SdfCanvas.MAX_NUM_LIGHTS * SdfCanvas.VEC4_PER_LIGHT * 4);
 
-        this.overwriteLayers = new Map();
+        this.#overwriteLayers = new Map();
         // this.#overwriteLayers.set(1, new SdfLayer(SdfCommands.SMOOTH_UNION, 50));
     }
 
@@ -514,6 +518,17 @@ class SdfCanvas {
         }
     }
 
+    addOverwriteLayer(index, overwriteLayer) {
+        this.#overwriteLayers.set(index, overwriteLayer);
+    }
+
+    removeOverwriteLayer(index) {
+        if (!this.#overwriteLayers.has(index)) {
+            return;
+        }
+        this.#overwriteLayers.delete(index);
+    }
+
     #updateUniforms() {
         this.#gl.useProgram(this.#programInfo.program);
 
@@ -590,8 +605,8 @@ class SdfCanvas {
                 continue;
             }
 
-            if (this.overwriteLayers.has(layerIdx)) {
-                const overwriteLayer = this.overwriteLayers.get(layerIdx);
+            if (this.#overwriteLayers.has(layerIdx)) {
+                const overwriteLayer = this.#overwriteLayers.get(layerIdx);
                 layerOperation = overwriteLayer.layerOperation;
                 smoothingFactor = overwriteLayer.smoothingFactor;
             }
@@ -644,10 +659,12 @@ class SdfCanvas {
                 mat[15] = 1;
                 const originalTz = mat[14]; // this is needed to compute the glyph z-positions for text
 
-                // if I want the surface to be the top surface
-                mat[12] -= mat[8] * halfDepth;
-                mat[13] -= mat[9] * halfDepth;
-                mat[14] -= mat[10] * halfDepth;
+                if (this.topFace) {
+                    // if I want the surface to be the top surface
+                    mat[12] -= mat[8] * halfDepth;
+                    mat[13] -= mat[9] * halfDepth;
+                    mat[14] -= mat[10] * halfDepth;
+                }
 
                 // invert the matrix
                 Matrix.invertAffineMat4InPlace(mat);
@@ -894,6 +911,26 @@ class SdfCanvas {
                         this.#geometryBuffer[geometryBufferIdx + 1] = height;
                         this.#geometryBuffer[geometryBufferIdx + 2] = parseFloat(computedStyle.getPropertyValue("--extrude")) * oneOverX; // rounding
                         this.#geometryBuffer[geometryBufferIdx + 3] = 0;
+                        break;
+                    case SdfCommands.TRIANGLE:
+                        const aValues = computedStyle.getPropertyValue('--point-a');
+                        const [aX, aY] = aValues.split(' ').map(val => parseFloat(val));
+
+                        const bValues = computedStyle.getPropertyValue('--point-b');
+                        const [bX, bY] = bValues.split(' ').map(val => parseFloat(val));
+
+                        const cValues = computedStyle.getPropertyValue('--point-c');
+                        const [cX, cY] = cValues.split(' ').map(val => parseFloat(val));
+
+                        this.#geometryBuffer[geometryBufferIdx + 0] = aX * oneOverX;
+                        this.#geometryBuffer[geometryBufferIdx + 1] = aY * oneOverX;
+                        this.#geometryBuffer[geometryBufferIdx + 2] = bX * oneOverX;
+                        this.#geometryBuffer[geometryBufferIdx + 3] = bY * oneOverX;
+
+                        this.#geometryBuffer[geometryBufferIdx + 4] = cX * oneOverX;
+                        this.#geometryBuffer[geometryBufferIdx + 5] = cY * oneOverX;
+                        this.#geometryBuffer[geometryBufferIdx + 6] = halfDepth;
+                        this.#geometryBuffer[geometryBufferIdx + 7] = parseFloat(computedStyle.getPropertyValue("--extrude")) * oneOverX; // rounding
                         break;
                 }
                 geometryBufferIdx += SdfCanvas.#getElementSize(element) * 4;

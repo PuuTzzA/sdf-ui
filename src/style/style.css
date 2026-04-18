@@ -1,48 +1,3 @@
-body,
-html,
-* {
-    margin: 0;
-    padding: 0;
-}
-
-* {
-    box-sizing: border-box;
-}
-
-#compiling-screen {
-    position: absolute;
-    top: 0;
-    left: 0;
-    z-index: 10;
-    width: 100%;
-    height: 100vh;
-    background-color: red;
-    font-size: 8rem;
-    display: grid;
-    align-items: center;
-    text-align: center;
-}
-
-#canvas {
-    position: absolute;
-    top: 0vh;
-    left: 0;
-    width: 100%;
-    height: 100vh;
-    z-index: -1;
-    image-rendering: pixelated;
-}
-
-#canvas2 {
-    position: absolute;
-    top: 12vh;
-    left: 0;
-    width: 100%;
-    height: 10vh;
-    z-index: -2;
-    image-rendering: smooth;
-}
-
 @property --z {
     syntax: "<length>";
     inherits: false;
@@ -89,6 +44,24 @@ html,
     syntax: "x | y | z";
     inherits: false;
     initial-value: x;
+}
+
+@property --point-a {
+    syntax: "<length>+";
+    inherits: false;
+    initial-value: -100px 0px;
+}
+
+@property --point-b {
+    syntax: "<length>+";
+    inherits: false;
+    initial-value: 100px 0px;
+}
+
+@property --point-c {
+    syntax: "<length>+";
+    inherits: false;
+    initial-value: 0px 100px;
 }
 
 @property --diffuse-color {
@@ -170,164 +143,4 @@ html,
 .sdf-ui-text-base-class {
     font-family: metaballs;
     color: rgba(0, 0, 0, 0) !important;
-}
-
-/* @property --depth {
-    syntax: "<number>";
-    inherits: false;
-    initial-value: 0;
-}
-
-@property --depth {
-    syntax: "<number>";
-    inherits: false;
-    initial-value: 0;
-} */
-
-
-#test-div {
-    position: absolute;
-    width: 20rem;
-    height: 500px;
-    top: 50vh;
-    left: 50%;
-    transform: translate(-50%, -50%);
-
-    transform-origin: 0px 70px;
-
-    --diffuse-color: blue;
-    --z: 0rem;
-
-    --depth: 2.5rem;
-    --r: 10rem;
-
-    border-top-left-radius: 3rem;
-    border-top-right-radius: 1rem;
-    border-bottom-left-radius: 3rem;
-    border-bottom-right-radius: 7rem;
-
-    --border-radius-type: cosine;
-    --rotation-offset: 3;
-
-    --kd: 1;
-    --ks: 1;
-    --ka: 1;
-    --p: 20;
-
-    --specular-color: rgb(100, 100, 200);
-    transition: --diffuse-color 0.3s, --z .3s, --specular-color .3s, --kd .3s, transform 1s;
-    opacity: 0;
-
-    z-index: 1999;
-}
-
-/* #test-div:hover {
-    background-color: rgb(100, 100, 200);
-} */
-
-#test-div:active {
-    --diffuse-color: red;
-    --z: -5rem;
-}
-
-.test-class {
-    background-color: red;
-    opacity: 0.1;
-    position: absolute;
-    top: 0;
-    left: 0;
-    z-index: 100;
-}
-
-.cc {
-    top: 100px;
-    left: 100px;
-}
-
-#background {
-    width: 600px;
-    height: 600px;
-    position: absolute;
-    top: 150px;
-    left: 450px;
-
-    /*     transform: rotateX(20deg);
- */
-    opacity: 0.2;
-
-    --z: 0rem;
-    --depth: 10rem;
-}
-
-#rect-vis {
-    position: absolute;
-    background-color: yellow;
-    opacity: 0.2;
-}
-
-#fps-counter {
-    position: absolute;
-    top: 0;
-    left: 0;
-    color: white;
-    background-color: black;
-    padding: 0.2rem;
-}
-
-
-
-.sdf-text {
-    position: absolute;
-    top: 15rem;
-    left: 10rem;
-
-    text-align: center;
-    font-size: 30rem;
-    width: 20rem;
-    /*     letter-spacing: 10rem;
- */
-    /*     word-spacing: 10rem;
- */
-    color: rgba(255, 255, 255, 0.2) !important;
-
-    --letterSmoothness: 0.1rem;
-
-    /*     transform: rotateX(45deg) rotateY(30deg);
- */
-    /*     transform: translateZ(-1rme) rotateY(40deg) rotateX(30deg);
- */
-    /*     transform: translateZ(-10rem) rotate(100deg);
- */
-    word-break: break-all;
-
-    /*     background-color: rgba(255, 0, 255, 0.2);
- */
-    --diffuse-color: red;
-    --depth: 1rem;
-    --z: 0rem;
-}
-
-/* .sdf-text:hover{
-    font-size: 10rem;
-} */
-
-.ddd {
-    left: 30rem;
-    height: 26rem;
-    /*     transform: rotate3d(1, 1, 1, 45deg) translateX(40rem);
- */
-}
-
-#lkj {
-    transform: rotate(-100deg);
-}
-
-#target {
-    width: 5rem;
-    height: 5rem;
-    background-color: transparent;
-    z-index: 100;
-    width: 100%;
-    margin-top: 20rem;
-    --z: -5rem;
 }

@@ -9,8 +9,8 @@ sdfCanvas2.initWebgl(); */
 
 const testtext = document.querySelector("#test-sdf-text")
 
-document.getElementById("myInput").addEventListener("input", () => {
-    let text = document.getElementById("myInput").value;
+document.getElementById("my-input").addEventListener("input", () => {
+    let text = document.getElementById("my-input").value;
     testtext.innerHTML = text;
 });
 

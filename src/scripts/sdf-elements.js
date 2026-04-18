@@ -270,6 +270,14 @@ class SdfCylinder extends ASdfElement {
 
 customElements.define("sdf-cylinder", SdfCylinder);
 
+class SdfTriangle extends ASdfElement {
+    getElementType() {
+        return SdfCommands.TRIANGLE;
+    }
+}
+
+customElements.define("sdf-triangle", SdfTriangle);
+
 class SdfLight extends HTMLElement {
     constructor() {
         super();

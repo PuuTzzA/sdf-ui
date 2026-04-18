@@ -169,22 +169,29 @@ float sdRoundBox2d(in vec2 p, in vec2 b, in vec4 r, int type) {
     return d * r.x * sqrt(0.5f);
 }
 
-/* float sdCappedCylinder(vec3 p, vec3 a, vec3 b, float r) {
-    vec3 ba = b - a;
-    vec3 pa = p - a;
-    float baba = dot(ba, ba);
-    float paba = dot(pa, ba);
-    float x = length(pa * baba - ba * paba) - r * baba;
-    float y = abs(paba - baba * 0.5f) - baba * 0.5f;
-    float x2 = x * x;
-    float y2 = y * y * baba;
-    float d = (max(x, y) < 0.0f) ? -min(x2, y2) : (((x > 0.0f) ? x2 : 0.0f)+((y > 0.0f) ? y2 : 0.0f));
-    return sign(d) * sqrt(abs(d)) / baba;
-} */
-
 float sdCappedCylinder(vec3 p, float r, float h) {
     vec2 d = abs(vec2(length(p.xz), p.y)) - vec2(r, h);
     return min(max(d.x, d.y), 0.0f) + length(max(d, 0.0f));
+}
+
+float sdTriangle(in vec2 p, in vec2 p0, in vec2 p1, in vec2 p2) {
+    vec2 e0 = p1 - p0;
+    vec2 e1 = p2 - p1;
+    vec2 e2 = p0 - p2;
+
+    vec2 v0 = p - p0;
+    vec2 v1 = p - p1;
+    vec2 v2 = p - p2;
+
+    vec2 pq0 = v0 - e0 * clamp(dot(v0, e0) / dot(e0, e0), 0.0f, 1.0f);
+    vec2 pq1 = v1 - e1 * clamp(dot(v1, e1) / dot(e1, e1), 0.0f, 1.0f);
+    vec2 pq2 = v2 - e2 * clamp(dot(v2, e2) / dot(e2, e2), 0.0f, 1.0f);
+
+    float s = sign(e0.x * e2.y - e0.y * e2.x);
+    vec2 d = min(min(vec2(dot(pq0, pq0), s * (v0.x * e0.y - v0.y * e0.x)),
+                     vec2(dot(pq1, pq1), s * (v1.x * e1.y - v1.y * e1.x))),
+                     vec2(dot(pq2, pq2), s * (v2.x * e2.y - v2.y * e2.x)));
+    return -sqrt(d.x) * sign(d.y);
 }
 
 
@@ -483,7 +490,8 @@ Surface map(vec3 p) {
         }
         /* Triangle */
         else if (command == 5) {
-
+            float val = sdTriangle(pos.xy, geometryData[elementIdx].xy, geometryData[elementIdx].zw, geometryData[elementIdx + 1].xy);
+            current.distance = opExtrusion(pos, val, geometryData[elementIdx + 1].z) - geometryData[elementIdx + 1].w;
         }
         switch (layerOperation) {
             case 100: /* Union */
