@@ -7,8 +7,8 @@ The origin of the canvas is top left and goes to 1, height/width if fullscreen. 
 There are a few variables that can only be set at the very beginning **before** calling `initWebgl`. These are:
 
 * **useAA:** enables Anti-Aliasing. This program uses Multisample Anti-Aliasing with four samples. 
-  > [!Tip]
-  > Enabling Anti-Aliasing massively decreases performance because all calculations need to be performed four times. Additionally compile time increases when enabling it. Therefore it is suggested to only turn on Anti-Aliasing when using the 2d-mode, because there performance and compile time are massively reduced by default. 
+> [!Tip]
+> Enabling Anti-Aliasing massively decreases performance because all calculations need to be performed four times. Additionally compile time increases when enabling it. Therefore it is suggested to only turn on Anti-Aliasing when using the 2d-mode, because there performance and compile time are massively reduced by default. 
 * **twoDMode:** Enables a 2d mode, where instead of tracing a ray through the scene, the sdf is only evaluated once at a z-Depth of 0. 
 * **useCustomShadeFunction:** Enables the use of a custom `shade` function to control the exact look of the scene. Otherwise the scene is shaded as described below in the Shading section. If a custom shading function is used it has to be stored as a string in the `customShadeFunction` member of the sdfCanvas object. This custom shade function takes the traced position as an input and returns the color that should be rendered at that point. It has to be of the following format:
   
@@ -70,7 +70,7 @@ Where $\texttt{reflect}$ calculates the perfect reflection direction of $\vec{l}
 
 The position of each element is computed from its position on the page. The elements have additional properties to control their specific attributes
 
-The z-position (the more positive the higher on the page, like z-index, but as a float) is controlled by the css property **--z**. The z-value controlls the z-value of the center of the object. 
+The z-position (the more positive the higher on the page, like z-index, but as a float) is controled by the css property **--z**. The z-value controls the z-value of the center of the object. 
 
 All objects can be rotated, translated or skewed (in 2D or 3D) with the css `transform` property (e.g. `rotate`, `rotate3d`, `translate`, ...)
 
@@ -130,7 +130,7 @@ A cylinder.
 ```html
 <sdf-cylinder id="test-sdf-cylinder" data-layer-index="2">Cylinder</sdf-cylinder>
 ```
-* **--axis:** Controls along which axis the cylider is formed. Can be {`x`, `y`, `z`}. Depending on this value **width**, **height** and **--depth** controll the height and the radius of the cylinder.
+* **--axis:** Controls along which axis the cylider is formed. Can be {`x`, `y`, `z`}. Depending on this value **width**, **height** and **--depth** control the height and the radius of the cylinder.
 * **--extrude:** Extrudes all surfaces along their normal. Allows for rounded corners.
 
 ### 6. Trinagle
@@ -161,7 +161,7 @@ Arbitrary 2d polygons that are extruded along the local z-axis. You have to defi
 
 ## Layers
 
-The elements are placed in layers that control how the elements are blended to already existing elements in the scene. The layer an element is on can be controlled with the `data-layer-index` property of the html element. E.g.:
+The elements are placed in layers that control how the elements are blended to already existing elements in the scene. The layer an element is on can be controled with the `data-layer-index` property of the html element. E.g.:
 
 ```html
 <sdf-box-simple id="test-sdf-box-simple" data-layer-index="1">Simple Box</sdf-box-simple>
