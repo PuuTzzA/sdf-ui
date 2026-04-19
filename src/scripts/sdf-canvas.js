@@ -18,7 +18,7 @@ class SdfCanvas {
     static SHADING_BLOCK_UNIFORM_BUFFER_BINDING_INDEX = 2;
     static LIGHT_BLOCK_UNIFORM_BUFFER_BINDING_INDEX = 3;
 
-    static COMPILE_POLICY_ONLY_PARALELL = 0;
+    static COMPILE_POLICY_ONLY_PARALLEL = 0;
     static COMPILE_POLICY_ALSO_BLOCKING = 1;
 
     // ╔══════════════════════════════════════════════════════════╗
@@ -359,10 +359,11 @@ class SdfCanvas {
     }
 
     /**
-     * @param {If compilation should continue even if background compilation is not available. Shold be SdfCanvas.COMPILE_POLICY_ONLY_PARALELL or SdfCanvas.COMPILE_POLICY_ALSO_BLOCKING} compilePolicy 
-     * @returns Boolean if compilation was successful
+     * Initializes WebGL.
+     * @param {number} compilePolicy - If compilation should continue even if background compilation is not available. Should be SdfCanvas.COMPILE_POLICY_ONLY_PARALLEL or SdfCanvas.COMPILE_POLICY_ALSO_BLOCKING
+     * @returns {Promise<boolean>} Boolean if compilation was successful.
      */
-    async initWebgl(compilePolicy = SdfCanvas.COMPILE_POLICY_ONLY_PARALELL) {
+    async initWebgl(compilePolicy = SdfCanvas.COMPILE_POLICY_ONLY_PARALLEL) {
         this.#canvas = document.getElementById(this.#canvasName);
 
         // Initialize the GL context
@@ -375,7 +376,7 @@ class SdfCanvas {
         }
 
         const parallelCompileExt = this.#gl.getExtension("KHR_parallel_shader_compile");
-        if (compilePolicy == SdfCanvas.COMPILE_POLICY_ONLY_PARALELL && !parallelCompileExt) {
+        if (compilePolicy == SdfCanvas.COMPILE_POLICY_ONLY_PARALLEL && !parallelCompileExt) {
             return false;
         }
 
@@ -551,9 +552,9 @@ class SdfCanvas {
     }
 
     /**
-     * Add an overwriteLayer to the SdfCanvas. This canvas will then use this overwriteLayers properties instead of the global SdfLayer properties.
-     * @param {Index of the layer to overwrite} index 
-     * @param {SdfLayer object that overwrites that layer} overwriteLayer 
+     * Add an overwriteLayer to the SdfCanvas. This canvas will then use this overwriteLayer's properties instead of the global SdfLayer properties.
+     * @param {number} index - Index of the layer to overwrite.
+     * @param {SdfLayer} overwriteLayer - SdfLayer object that overwrites that layer.
      */
     addOverwriteLayer(index, overwriteLayer) {
         this.#overwriteLayers.set(index, overwriteLayer);
@@ -561,7 +562,7 @@ class SdfCanvas {
 
     /**
      * Removes an overwriteLayer from the SdfCanvas. 
-     * @param {index of the overwriteLayer to remove} index 
+     * @param {number} index - Index of the overwriteLayer to remove.
      */
     removeOverwriteLayer(index) {
         if (!this.#overwriteLayers.has(index)) {
