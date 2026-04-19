@@ -228,18 +228,33 @@ float opRound(in float primitive, in float rad) {
     return primitive - rad;
 }
 
-vec3 opTwist(vec3 p, vec3 axis, float k) {
+vec3 opTwist(vec3 p, vec3 axis, float k, float start, float end) {
     axis = normalize(axis);
     
     float distAlongAxis = dot(p, axis);
-    float angle = k * distAlongAxis;
+    float absDist = abs(distAlongAxis);
+    float delta = end - start;
     
+    float t = clamp((absDist - start) / delta, 0.0, 1.0); // 0 at start and 1 at end
+    
+    // C2 Continuous Polynomial: f(t) = t - t^3 + 0.5 * t^4
+    // This maintains f'(0)=1, f'(1)=0 and adds f''(0)=0, f''(1)=0
+    float t2 = t * t;
+    float t3 = t2 * t;
+    float t4 = t3 * t;
+    float smoothCap = t - t3 + 0.5 * t4;
+    
+    // Calculate the "effective" distance for twisting.
+    float effectiveDist = min(absDist, start) + delta * smoothCap;
+    effectiveDist *= sign(distAlongAxis);
+
+    float angle = k * effectiveDist;
+
     float c = cos(angle);
     float s = sin(angle);
     
     // Rotate the point around the arbitrary axis using Rodrigues' formula
-    vec3 twistedPos = p * c + cross(axis, p) * s + axis * distAlongAxis * (1.0f - c);
-    return twistedPos;
+    return p * c + cross(axis, p) * s + axis * distAlongAxis * (1.0 - c);
 }
 
 // ╔══════════════════════════════════════════════════════════╗
@@ -473,7 +488,7 @@ Surface map(vec3 p) {
             else if (command == 202) {
                 vec3 pivot = geometryData[elementIdx].xyz;
                 pos -= pivot;
-                pos = opTwist(pos, geometryData[elementIdx + 1].xyz, geometryData[elementIdx].w);
+                pos = opTwist(pos, geometryData[elementIdx + 1].xyz, geometryData[elementIdx].w, geometryData[elementIdx + 1].w, geometryData[elementIdx + 2].x);
                 pos += pivot;
             }
             continue;

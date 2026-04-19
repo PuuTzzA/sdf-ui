@@ -136,6 +136,32 @@
     initial-value: 0px;
 }
 
+@property --twist-axis {
+    syntax: "<number>+";
+    inherits: false;
+    initial-value: 0 1 0;
+}
+
+@property --twist-amount {
+    syntax: "<number>";
+    inherits: false;
+    initial-value: 0.1;
+}
+
+@property --twist-start {
+    syntax: "<length>";
+    inherits: false;
+    initial-value: 0px;
+}
+
+@property --twist-end {
+    syntax: "<length>";
+    inherits: false;
+    initial-value: 100px;
+}
+
+
+
 .sdf-ui-base-class {
     display: block;
     background-color: rgba(0, 0, 0, 0) !important;

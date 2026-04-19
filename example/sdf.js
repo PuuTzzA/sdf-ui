@@ -1,8 +1,5 @@
-import { SdfCanvas } from "./webgl/sdf-canvas.js";
-import { Twist } from "./modifiers.js";
-
-const sdfCanvas = new SdfCanvas("canvas");
-sdfCanvas.initWebgl();
+import { SdfCanvas } from "../src/scripts/sdf-canvas.js";
+import { Twist } from "../src/scripts/modifiers.js";
 
 /* const sdfCanvas2 = new SdfCanvas("canvas2", [1]);
 sdfCanvas2.initWebgl(); */
@@ -20,7 +17,7 @@ const fpsDiv = document.querySelector("#fps-counter");
 let lastFps = []
 
 const target = document.querySelector("#target");
-//testDiv.addModifier(new Twist(target, 0.1, [0, 1, 0]));
+testDiv.addModifier(new Twist(target, 0.1, [0, 1, 0]));
 //testtext.addModifier(new Twist(null, 0.1, [0, 1, 0]));
 
 const SIZE = 90;
@@ -37,9 +34,20 @@ window.addEventListener("mousemove", (e) => {
 });
 
 const loadStartTime = performance.now();
-let firstTime = true;
 let lastTime = performance.now();
 let fps = 0;
+
+
+const sdfCanvas = new SdfCanvas("canvas");
+sdfCanvas.onCompilationComplete = () => {
+    compilingScreen.remove();
+    const loadTime = performance.now() - loadStartTime;
+    console.log("Until everything setup: " + (loadTime / 60000).toFixed(4) + " minutes, (" + loadTime.toFixed(4) + "ms)")
+}
+sdfCanvas.customElements = [
+    [[-0.5, 0], [0.5, 0], [0.5, 0.5], [0.1, 0.2], [-1, 0.3]],
+];
+sdfCanvas.initWebgl();
 
 function gameLoop(now) {
 
@@ -58,12 +66,6 @@ function gameLoop(now) {
 
     // Draw Scene
     if (sdfCanvas.ready) {
-        if (firstTime) {
-            compilingScreen.remove();
-            const loadTime = performance.now() - loadStartTime;
-            console.log("Until everything setup: " + (loadTime / 60000).toFixed(4) + " minutes, (" + loadTime.toFixed(4) + "ms)")
-            firstTime = false;
-        }
         sdfCanvas.draw();
     }
 

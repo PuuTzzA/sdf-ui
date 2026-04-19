@@ -1,4 +1,4 @@
-import { SdfCommands } from "./webgl/sdf-commands.js";
+import { SdfCommands } from "./sdf-commands.js";
 
 class AModifier {
     constructor() { }
@@ -29,17 +29,17 @@ class Twist extends AModifier {
     #amount;
     #axis;
 
-    constructor(target = null, amount = 10, axis = [0, 1, 0]) {
+    constructor(target = null) {
         super();
         this.target = target;
-        this.amount = amount;
-        this.axis = axis;
     }
 
     // getters and setters 
     get amount() {
+        const computedStyle = getComputedStyle(this.target);
+        const amount = parseFloat(computedStyle.getPropertyValue("--twist-amount"));
         const rootFontSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
-        return 0.5 * Math.PI * this.#amount / rootFontSize;
+        return 0.5 * Math.PI * amount / rootFontSize;
     }
 
     set amount(val) { // in revolutions per rem
@@ -47,12 +47,19 @@ class Twist extends AModifier {
     }
 
     get axis() {
-        return this.#axis;
+        const computedStyle = getComputedStyle(this.target);
+        const axis = computedStyle.getPropertyValue('--twist-axis');
+        return axis.split(' ').map(val => parseFloat(val));
     }
 
-    set axis(val) {
-        AModifier.validateVec3(val);
-        this.#axis = val;
+    get start() {
+        const computedStyle = getComputedStyle(this.target);
+        return parseFloat(computedStyle.getPropertyValue('--twist-start'));
+    }
+
+    get end() {
+        const computedStyle = getComputedStyle(this.target);
+        return parseFloat(computedStyle.getPropertyValue('--twist-end'));
     }
 
     getModifierType() {
@@ -60,7 +67,7 @@ class Twist extends AModifier {
     }
 
     getModifierSize() {
-        return 2;
+        return 3;
     }
 }
 

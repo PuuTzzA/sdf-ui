@@ -1,4 +1,4 @@
-import { SdfCommands } from "./webgl/sdf-commands.js";
+import { SdfCommands } from "./sdf-commands.js";
 
 class SdfLayer {
     layerOperation;

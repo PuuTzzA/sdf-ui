@@ -1,4 +1,4 @@
-import { SdfCanvas } from "./sdf-canvas.js";
+import { SdfCanvas } from "../sdf-canvas.js";
 
 // Program Loading
 async function loadShadersFromDisk(vertexName, fragmentName, directory = "./src/shaders/") {

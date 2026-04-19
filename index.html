@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SDF-canvas sandbox</title>
     <link rel="stylesheet" href="src/style/style.css">
-    <link rel="stylesheet" href="src/style/style-all-elements.css">
+    <link rel="stylesheet" href="example/style-all-elements.css">
 </head>
 
 <body>
@@ -19,28 +19,29 @@
 
 
     <div id="all-types-container">
-        <sdf-sphere class="test-sdf-sphere" data-render-layers="0 1" data-layer-index="2">Sphere</sdf-sphere>
-        <sdf-box-simple id="test-sdf-box-simple" data-render-layers="0 1" data-layer-index="2">Simple
+        <sdf-sphere class="test-sdf-sphere" data-render-layers="0 1" data-layer-index="0">Sphere</sdf-sphere>
+        <sdf-box-simple id="test-sdf-box-simple" data-render-layers="0 1" data-layer-index="0">Simple
             Box</sdf-box-simple>
-        <sdf-box-simple id="test-sdf-box-simple" class="extrude" data-render-layers="0 1" data-layer-index="2">Simple
+        <sdf-box-simple id="test-sdf-box-simple" class="extrude" data-render-layers="0 1" data-layer-index="0">Simple
             Box with extrusion</sdf-box-simple>
-        <sdf-box id="test-sdf-box" data-render-layers="0" data-layer-index="2">Box with rounded corners</sdf-box>
-        <sdf-box id="test-sdf-box-2" data-render-layers="0 1" data-layer-index="2">Box with rounded corners</sdf-box>
-        <sdf-cylinder id="test-sdf-cylinder" data-render-layers="0 1" data-layer-index="2">Cylinder</sdf-cylinder>
-        <sdf-triangle id="test-sdf-triangle" data-render-layers="0 1" data-layer-index="2">Triangle</sdf-triangle>
-        <sdf-custom id="test-sdf-custom" data-custom-index="1" data-render-layers="0 1" data-layer-index="2"></sdf-custom>
+        <sdf-box id="test-sdf-box" data-render-layers="0" data-layer-index="0">Box with rounded corners</sdf-box>
+        <sdf-box id="test-sdf-box-2" data-render-layers="0 1" data-layer-index="0">Box with rounded corners</sdf-box>
+        <sdf-cylinder id="test-sdf-cylinder" data-render-layers="0 1" data-layer-index="0">Cylinder</sdf-cylinder>
+        <sdf-triangle id="test-sdf-triangle" data-render-layers="0 1" data-layer-index="0">Triangle</sdf-triangle>
+        <sdf-custom id="test-sdf-custom" data-custom-index="0" data-render-layers="0 1" data-layer-index="0">Custom
+            Element</sdf-custom>
     </div>
 
-    <sdf-text id="test-sdf-text" class="sdf-text" data-render-layers="0" data-layer-index="2">test </sdf-text>
+    <sdf-text id="test-sdf-text" class="sdf-text" data-render-layers="0" data-layer-index="0">test </sdf-text>
     <!--     <sdf-text class="sdf-text" data-layer-index="1">abcdefghijklmnopqrstuvwxyz</sdf-text>
  -->
     <sdf-light class="light" id="light-1">A</sdf-light>
     <sdf-light class="light" id="light-2">A</sdf-light>
 
-    <sdf-box id="test-div" data-render-layers="0 1" data-layer-index="2">
+    <sdf-box id="test-div" data-render-layers="0 1" data-layer-index="0">
+        <div id="target"></div>
     </sdf-box>
 
-    <div id="target"></div>
 
     <div id="my-input-container">
         <input type="text" id="my-input" name="name" />
@@ -53,7 +54,7 @@
     <div id="fps-counter">10fps</div>
 
     <script src="src/scripts/sdf-elements.js" type="module"></script>
-    <script src="src/scripts/sdf.js" type="module"></script>
+    <script src="example/sdf.js" type="module"></script>
 </body>
 
 </html>

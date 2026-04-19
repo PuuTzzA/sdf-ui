@@ -1,6 +1,6 @@
-import { SdfCanvas } from "./webgl/sdf-canvas.js";
+import { SdfCanvas } from "./sdf-canvas.js";
 import { TextMeter } from "./helper/text-meter.js"
-import { SdfCommands } from "./webgl/sdf-commands.js";
+import { SdfCommands } from "./sdf-commands.js";
 
 class ASdfElement extends HTMLElement {
     static observedAttributes = ["data-layer-index"];

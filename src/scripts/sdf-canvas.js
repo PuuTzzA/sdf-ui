@@ -1,7 +1,7 @@
-import { loadShadersFromDisk, initShaderProgram, initBuffers, injectGLSL, toGlslVec2Array } from "./webgl-helper-functions.js";
-import { Matrix } from "../helper/matrix.js";
+import { loadShadersFromDisk, initShaderProgram, initBuffers, injectGLSL, toGlslVec2Array } from "./helper/webgl-helper-functions.js";
+import { Matrix } from "./helper/matrix.js";
 import { SdfCommands } from "./sdf-commands.js";
-import { SdfLayer } from "../sdf-layer.js";
+import { SdfLayer } from "./sdf-layer.js";
 
 class SdfCanvas {
     // ╔══════════════════════════════════════════════════════════╗
@@ -17,6 +17,9 @@ class SdfCanvas {
     static GEOMETRY_BLOCK_UNIFORM_BUFFER_BINDING_INDEX = 1;
     static SHADING_BLOCK_UNIFORM_BUFFER_BINDING_INDEX = 2;
     static LIGHT_BLOCK_UNIFORM_BUFFER_BINDING_INDEX = 3;
+
+    static COMPILE_POLICY_ONLY_PARALELL = 0;
+    static COMPILE_POLICY_ALSO_BLOCKING = 1;
 
     // ╔══════════════════════════════════════════════════════════╗
     // ║                      Glyphs Texture                      ║
@@ -108,9 +111,7 @@ class SdfCanvas {
     static #trackedLights = [];
 
     static #layers = [
-        new SdfLayer(SdfCommands.UNION, 0),
         new SdfLayer(SdfCommands.SMOOTH_UNION, 30),
-        new SdfLayer(SdfCommands.SMOOTH_UNION, 30, SdfCommands.LAYER_TWIST)
     ]
 
     static get layers() {
@@ -267,6 +268,7 @@ class SdfCanvas {
     customShadeFunction;
 
     customElements;
+    onCompilationComplete;
 
     // Private Properties
     #canvasName;
@@ -288,43 +290,13 @@ class SdfCanvas {
         return this.#ready;
     }
 
-    constructor(canvasName, renderLayers = [0]) {
+    constructor(canvasName, options = {}) {
         SdfCanvas.#instantiatedCanvases.push(this);
 
+        // Required and private mebers
         this.#canvasName = canvasName;
-        this.renderLayers = renderLayers;
+        this.#overwriteLayers = new Map();
         this.#ready = false;
-        this.downscaleFactorX = 2;
-        this.downscaleFactorY = 2;
-        this.topFace = false;
-
-        this.cameraZ = 10;
-        this.useAA = false;
-        this.twoDMode = false;
-        this.customShadeFunction = "";
-        ` 
-        vec3 shade(Surface surface) {
-            float sdfValue = surface.distance * 80.0f;
-            
-            if (sdfValue < 0.0f){
-                return surface.colorDiffuse;
-            }
-            
-            ColorStop[] colors = ColorStop[](
-            //ColorStop(surface.colorDiffuse, 0.000000),
-            //ColorStop(vec3(0.000000f, 0.000000f, 0.015996f), 0.000000f), ColorStop(vec3(0.008023f, 0.002428f, 0.162029f), 0.300000f), ColorStop(vec3(0.590619f, 0.964686f, 0.428690f), 0.400000f), ColorStop(vec3(0.991102f, 0.031896f, 0.814847f), 0.600000f), ColorStop(vec3(1.000000f, 0.000000f, 0.001821f), 0.800000f), ColorStop(vec3(0.008023f, 0.002428f, 0.162029f), 0.900000f), ColorStop(vec3(0.000000f, 0.000000f, 0.015996f), 1.000000f));
-            ColorStop(surface.colorDiffuse, 0.000000f), ColorStop(vec3(0.008023f, 0.002428f, 0.162029f), 0.300000f), ColorStop(vec3(0.590619f, 0.964686f, 0.428690f), 0.400000f), ColorStop(vec3(0.991102f, 0.031896f, 0.814847f), 0.600000f), ColorStop(vec3(1.000000f, 0.000000f, 0.001821f), 0.800000f), ColorStop(vec3(0.008023f, 0.002428f, 0.162029f), 0.900000f), ColorStop(vec3(0.000000f, 0.000000f, 0.015996f), 1.000000f));
-            
-            vec3 finalColor;
-            COLOR_RAMP(colors, sdfValue, finalColor);
-            return vec3(finalColor);
-        }
-        `
-
-        this.customElements = [
-            [[-0.5, 0], [0.5, 0], [0.5, 0.5]],
-            [[-1.5, 0], [1.5, 0], [0.3, 2.5], [0.1, 0.5]],
-        ];
 
         this.#canvas;
         this.#gl;
@@ -336,11 +308,34 @@ class SdfCanvas {
         this.#shadingBuffer = new Float32Array(SdfCanvas.MAX_SIZE_ELEMENT_BUFFER * 4);
         this.#lightBuffer = new Float32Array(SdfCanvas.MAX_NUM_LIGHTS * SdfCanvas.VEC4_PER_LIGHT * 4);
 
-        this.#overwriteLayers = new Map();
-        // this.#overwriteLayers.set(1, new SdfLayer(SdfCommands.SMOOTH_UNION, 50));
+        // User parameters
+        const {
+            renderLayers = [0],
+            downscaleFactorX = 2,
+            downscaleFactorY = 2,
+            topFace = false,
+            cameraZ = 10,
+            useAA = false,
+            twoDMode = false,
+            customShadeFunction = "",
+            customElements = [],
+            onCompilationComplete = undefined,
+        } = options;
+
+        this.renderLayers = renderLayers;
+        this.downscaleFactorX = downscaleFactorX;
+        this.downscaleFactorY = downscaleFactorY;
+        this.topFace = topFace;
+
+        this.cameraZ = cameraZ;
+        this.useAA = useAA;
+        this.twoDMode = twoDMode;
+        this.customShadeFunction = customShadeFunction;
+        this.customElements = customElements;
+        this.onCompilationComplete = onCompilationComplete;
     }
 
-    async initWebgl() {
+    async initWebgl(compilePolicy = SdfCanvas.COMPILE_POLICY_ONLY_PARALELL) {
         this.#canvas = document.getElementById(this.#canvasName);
 
         // Initialize the GL context
@@ -348,10 +343,13 @@ class SdfCanvas {
 
         // Only continue if WebGL is available and working
         if (this.#gl === null) {
-            alert(
-                "Unable to initialize WebGL. Your browser or machine may not support it.",
-            );
-            return;
+            alert("Unable to initialize WebGL. Your browser or machine may not support it.");
+            return false;
+        }
+
+        const parallelCompileExt = this.#gl.getExtension("KHR_parallel_shader_compile");
+        if (compilePolicy == SdfCanvas.COMPILE_POLICY_ONLY_PARALELL && !parallelCompileExt) {
+            return false;
         }
 
         // Bake the Letter Sdfs
@@ -463,7 +461,11 @@ class SdfCanvas {
         });
 
         this.#updateUniforms();
+        if (this.onCompilationComplete != undefined) {
+            this.onCompilationComplete();
+        }
         this.#ready = true;
+        return true;
     }
 
     draw() {
@@ -746,7 +748,6 @@ class SdfCanvas {
 
                     switch (modifierType) {
                         case SdfCommands.TWIST:
-
                             this.#geometryBuffer[geometryBufferIdx + 0] = targetOffsetX; // ofset
                             this.#geometryBuffer[geometryBufferIdx + 1] = targetOffsetY; // ofset
                             this.#geometryBuffer[geometryBufferIdx + 2] = targetOffsetZ; // ofset
@@ -755,6 +756,9 @@ class SdfCanvas {
                             this.#geometryBuffer[geometryBufferIdx + 4] = modifier.axis[0]; // axis
                             this.#geometryBuffer[geometryBufferIdx + 5] = modifier.axis[1]; // axis
                             this.#geometryBuffer[geometryBufferIdx + 6] = modifier.axis[2]; // axis
+                            this.#geometryBuffer[geometryBufferIdx + 7] = modifier.start * oneOverX; // start
+
+                            this.#geometryBuffer[geometryBufferIdx + 8] = modifier.end * oneOverX; // end
                             break;
                     }
 

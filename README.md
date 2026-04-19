@@ -7,7 +7,7 @@ The origin of the canvas is top left and goes to 1, height/width if fullscreen. 
 There are a few variables that can only be set at the very beginning **before** calling `initWebgl`. These are:
 
 * **useAA:** enables Anti-Aliasing. This program uses Multisample Anti-Aliasing with four samples. 
-> [!Tip]
+> [!Note]
 > Enabling Anti-Aliasing massively decreases performance because all calculations need to be performed four times. Additionally compile time increases when enabling it. Therefore it is suggested to only turn on Anti-Aliasing when using the 2d-mode, because there performance and compile time are massively reduced by default. 
 * **twoDMode:** Enables a 2d mode, where instead of tracing a ray through the scene, the sdf is only evaluated once at a z-Depth of 0. 
 * **useCustomShadeFunction:** Enables the use of a custom `shade` function to control the exact look of the scene. Otherwise the scene is shaded as described below in the Shading section. If a custom shading function is used it has to be stored as a string in the `customShadeFunction` member of the sdfCanvas object. This custom shade function takes the traced position as an input and returns the color that should be rendered at that point. It has to be of the following format:
@@ -37,8 +37,8 @@ struct HitInfo {
 };
 ```
 * **customElements:** You can define custom elements by setting the `customElements` member variable of the `SdfCanvas` object. This is an array of arrays of two d points that define the vertices of custom elemets in object space. See below how to use the custom elements.
-  > [!Tip]
-  > The more custom elements you define, the longer compile times will be, because each custom element adds one branch to the map funciton. Therfore you should only add the minimum amount of custom elements.
+> [!Note]
+> The more custom elements you define, the longer compile times will be, because each custom element adds one branch to the map funciton. Therfore you should only add the minimum amount of custom elements.
 ```js
 sdfCanvas.customElements = [
     [[-0.5, 0], [0.5, 0], [0.5, 0.5]],
