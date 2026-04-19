@@ -1,9 +1,14 @@
 import { SdfCanvas } from "../sdf-canvas.js";
 
 // Program Loading
-async function loadShadersFromDisk(vertexName, fragmentName, directory = "./src/shaders/") {
-    const responseVertex = await fetch(directory + vertexName);
-    const responseFragment = await fetch(directory + fragmentName);
+async function loadShadersFromDisk(vertexName, fragmentName, directory = "../../shaders/") {
+    // Resolve the paths relative to the current JavaScript file's URL
+    const vertexPath = new URL(directory + vertexName, import.meta.url);
+    const fragmentPath = new URL(directory + fragmentName, import.meta.url);
+
+    // fetch accepts URL objects directly
+    const responseVertex = await fetch(vertexPath);
+    const responseFragment = await fetch(fragmentPath);
 
     return {
         vertexSource: await responseVertex.text(),
