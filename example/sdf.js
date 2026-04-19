@@ -1,10 +1,11 @@
-import { SdfCanvas } from "../src/scripts/sdf-canvas.js";
-import { Twist } from "../src/scripts/modifiers.js";
+import { SdfCanvas, SdfLayer, SdfCommands, Twist } from "../src/scripts/sdf-ui.js";
 
 /* const sdfCanvas2 = new SdfCanvas("canvas2", [1]);
 sdfCanvas2.initWebgl(); */
 
 const testtext = document.querySelector("#test-sdf-text")
+
+// SdfCanvas.layers = [new SdfLayer(SdfCommands.SMOOTH_UNION, 100)]
 
 document.getElementById("my-input").addEventListener("input", () => {
     let text = document.getElementById("my-input").value;
@@ -17,7 +18,7 @@ const fpsDiv = document.querySelector("#fps-counter");
 let lastFps = []
 
 const target = document.querySelector("#target");
-testDiv.addModifier(new Twist(target, 0.1, [0, 1, 0]));
+testDiv.addModifier(new Twist(target));
 //testtext.addModifier(new Twist(null, 0.1, [0, 1, 0]));
 
 const SIZE = 90;
@@ -47,7 +48,7 @@ sdfCanvas.onCompilationComplete = () => {
 sdfCanvas.customElements = [
     [[-0.5, 0], [0.5, 0], [0.5, 0.5], [0.1, 0.2], [-1, 0.3]],
 ];
-sdfCanvas.initWebgl();
+sdfCanvas.initWebgl(SdfCanvas.COMPILE_POLICY_ALSO_BLOCKING);
 
 function gameLoop(now) {
 
@@ -65,13 +66,7 @@ function gameLoop(now) {
     fpsDiv.innerHTML = avg.toFixed(1);  // show FPS with 1 decimal
 
     // Draw Scene
-    if (sdfCanvas.ready) {
-        sdfCanvas.draw();
-    }
-
-    /* if (sdfCanvas2.ready) {
-        sdfCanvas2.draw();
-    } */
+    sdfCanvas.draw();
 
     requestAnimationFrame(gameLoop);
 }

@@ -26,8 +26,6 @@ class Twist extends AModifier {
     });
 
     target;
-    #amount;
-    #axis;
 
     constructor(target = null) {
         super();
@@ -37,13 +35,9 @@ class Twist extends AModifier {
     // getters and setters 
     get amount() {
         const computedStyle = getComputedStyle(this.target);
-        const amount = parseFloat(computedStyle.getPropertyValue("--twist-amount"));
+        const amount = parseFloat(computedStyle.getPropertyValue("--twist-rate"));
         const rootFontSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
         return 0.5 * Math.PI * amount / rootFontSize;
-    }
-
-    set amount(val) { // in revolutions per rem
-        this.#amount = val;
     }
 
     get axis() {

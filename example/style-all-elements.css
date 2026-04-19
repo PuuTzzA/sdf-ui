@@ -175,35 +175,25 @@ html,
     --z: 0rem;
 }
 
-/* .sdf-text:hover{
-    font-size: 10rem;
-} */
-
-.ddd {
-    left: 30rem;
-    height: 26rem;
-    /*     transform: rotate3d(1, 1, 1, 45deg) translateX(40rem);
- */
-}
-
 #lkj {
     transform: rotate(-100deg);
 }
 
 #target {
     position: absolute;
-    top: 50vh;
+    top: 50%;
     width: 5rem;
     height: 10rem;
     background-color: rgba(255, 255, 255, 0.2);
+    z-index: 1000;
     z-index: 100;
     width: 100%;
     margin-top: 0rem;
 
     --twist-axis: 0 1 0;
-    --twist-amount: 0.1;
-    --twist-start: 10rem;
-    --twist-end: 30rem;
+    --twist-rate: 0.2;
+    --twist-start: 5rem;
+    --twist-end: 15rem;
 }
 
 #my-input-container {
@@ -260,8 +250,8 @@ html,
     width: 10rem;
     height: 5rem;
 
-    transform: rotateY(-45deg);
-
+/*     transform: rotateY(-45deg);
+ */
     border-radius: 2rem 1rem 2.5rem;
     --border-radius-type: cubic;
     --ks: 0.1;
@@ -312,14 +302,13 @@ html,
     width: 1rem;
     height: 1rem;
     border-radius: 0.5rem;
-    background-color: red !important;
     top: 0;
     left: 0;
     z-index: 10;
 }
 
 #light-1 {
-    background-color: yellow !important;
+    background-color: white !important;
     --diffuse-color: white;
     top: 30rem;
     left: 50%;
@@ -331,7 +320,8 @@ html,
 }
 
 #light-2 {
-    --diffuse-color: red;
+    background-color: red !important;
+    --diffuse-color: red !important;
     top: 10rem;
     left: 10rem;
     --z: 10rem;

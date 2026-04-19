@@ -2,6 +2,23 @@ import { SdfCanvas } from "./sdf-canvas.js";
 import { TextMeter } from "./helper/text-meter.js"
 import { SdfCommands } from "./sdf-commands.js";
 
+// Add styles to html element
+function addCss(fileName) {
+    var head = document.head;
+    var link = document.createElement("link");
+
+    link.type = "text/css";
+    link.rel = "stylesheet";
+    
+    // Resolves the relative path against the current JS file's URL
+    link.href = new URL(fileName, import.meta.url).href;
+
+    head.appendChild(link);
+}
+
+addCss('../style/style.css');
+
+// Sdf Elements
 class ASdfElement extends HTMLElement {
     static observedAttributes = ["data-layer-index"];
 
@@ -293,6 +310,8 @@ class SdfCustom extends ASdfElement {
 }
 customElements.define("sdf-custom", SdfCustom);
 
+
+// Lights
 class SdfLight extends HTMLElement {
     constructor() {
         super();

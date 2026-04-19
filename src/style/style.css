@@ -142,7 +142,7 @@
     initial-value: 0 1 0;
 }
 
-@property --twist-amount {
+@property --twist-rate {
     syntax: "<number>";
     inherits: false;
     initial-value: 0.1;

@@ -11,12 +11,11 @@
 
 <body>
     <div id="compiling-screen">
-        <div> Compiling... </div>
+        <div> Compiling... <p style="font-size: 5rem;">(this can take a while, ~10sec)</p>
+        </div>
     </div>
 
     <canvas id="canvas"></canvas>
-    <!--  <canvas id="canvas2"></canvas> -->
-
 
     <div id="all-types-container">
         <sdf-sphere class="test-sdf-sphere" data-render-layers="0 1" data-layer-index="0">Sphere</sdf-sphere>
@@ -25,7 +24,8 @@
         <sdf-box-simple id="test-sdf-box-simple" class="extrude" data-render-layers="0 1" data-layer-index="0">Simple
             Box with extrusion</sdf-box-simple>
         <sdf-box id="test-sdf-box" data-render-layers="0" data-layer-index="0">Box with rounded corners</sdf-box>
-        <sdf-box id="test-sdf-box-2" data-render-layers="0 1" data-layer-index="0">Box with rounded corners</sdf-box>
+        <sdf-box id="test-sdf-box-2" data-render-layers="0 1" data-layer-index="0">Box with rounded corners (with
+            rotation offset)</sdf-box>
         <sdf-cylinder id="test-sdf-cylinder" data-render-layers="0 1" data-layer-index="0">Cylinder</sdf-cylinder>
         <sdf-triangle id="test-sdf-triangle" data-render-layers="0 1" data-layer-index="0">Triangle</sdf-triangle>
         <sdf-custom id="test-sdf-custom" data-custom-index="0" data-render-layers="0 1" data-layer-index="0">Custom
@@ -33,10 +33,9 @@
     </div>
 
     <sdf-text id="test-sdf-text" class="sdf-text" data-render-layers="0" data-layer-index="0">test </sdf-text>
-    <!--     <sdf-text class="sdf-text" data-layer-index="1">abcdefghijklmnopqrstuvwxyz</sdf-text>
- -->
-    <sdf-light class="light" id="light-1">A</sdf-light>
-    <sdf-light class="light" id="light-2">A</sdf-light>
+
+    <sdf-light class="light" id="light-1" data-render-layers="0">Directional Light</sdf-light>
+    <sdf-light class="light" id="light-2">Point Light</sdf-light>
 
     <sdf-box id="test-div" data-render-layers="0 1" data-layer-index="0">
         <div id="target"></div>
@@ -47,9 +46,6 @@
         <input type="text" id="my-input" name="name" />
     </div>
 
-    <!--     <sdf-box-simple id="background" data-layer-index="0"></sdf-box-simple>
- -->
-    <div id="rect-vis"></div>
 
     <div id="fps-counter">10fps</div>
 

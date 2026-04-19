@@ -11,7 +11,7 @@ class SdfCanvas {
     static MAX_SIZE_ELEMENT_BUFFER = 1024; // number of vec4 in the buffer
     static MAX_NUM_LIGHTS = 128; // maximum number of lights per canvas 
 
-    static VEC4_PER_LIGHT = 3; // amount of vec4 used for each light
+    static VEC4_PER_LIGHT = 2; // amount of vec4 used for each light
 
     static COMMAND_BLOCK_UNIFORM_BUFFER_BINDING_INDEX = 0;
     static GEOMETRY_BLOCK_UNIFORM_BUFFER_BINDING_INDEX = 1;
@@ -116,6 +116,11 @@ class SdfCanvas {
 
     static get layers() {
         return this.#layers;
+    }
+
+    static set layers(val) {
+        this.#layers = val;
+        this.#updateLayers();
     }
 
     static addTrackedElement(element) {
@@ -258,8 +263,8 @@ class SdfCanvas {
     // Public members
     renderLayers;
     #ready; // no setter
-    downscaleFactorX;
-    downscaleFactorY;
+    #downscaleFactorX;
+    #downscaleFactorY;
     topFace;
 
     cameraZ;
@@ -288,6 +293,24 @@ class SdfCanvas {
     // Getters and Setters
     get ready() {
         return this.#ready;
+    }
+
+    get downscaleFactorX() {
+        return this.#downscaleFactorX;
+    }
+
+    set downscaleFactorX(val) {
+        this.#downscaleFactorX = val;
+        this.#resizeCanvasToDisplaySize();
+    }
+
+    get downscaleFactorY() {
+        return this.#downscaleFactorY;
+    }
+
+    set downscaleFactorY(val) {
+        this.#downscaleFactorY = val;
+        this.#resizeCanvasToDisplaySize();
     }
 
     constructor(canvasName, options = {}) {
@@ -323,8 +346,8 @@ class SdfCanvas {
         } = options;
 
         this.renderLayers = renderLayers;
-        this.downscaleFactorX = downscaleFactorX;
-        this.downscaleFactorY = downscaleFactorY;
+        this.#downscaleFactorX = downscaleFactorX;
+        this.#downscaleFactorY = downscaleFactorY;
         this.topFace = topFace;
 
         this.cameraZ = cameraZ;
@@ -335,6 +358,10 @@ class SdfCanvas {
         this.onCompilationComplete = onCompilationComplete;
     }
 
+    /**
+     * @param {If compilation should continue even if background compilation is not available. Shold be SdfCanvas.COMPILE_POLICY_ONLY_PARALELL or SdfCanvas.COMPILE_POLICY_ALSO_BLOCKING} compilePolicy 
+     * @returns Boolean if compilation was successful
+     */
     async initWebgl(compilePolicy = SdfCanvas.COMPILE_POLICY_ONLY_PARALELL) {
         this.#canvas = document.getElementById(this.#canvasName);
 
@@ -361,7 +388,7 @@ class SdfCanvas {
             SdfCanvas.bakedGlyphsTexture = true;
         }
 
-        this.resizeCanvasToDisplaySize();
+        this.#resizeCanvasToDisplaySize();
 
         // Set clear color to black, fully opaque
         this.#gl.clearColor(0.0, 0.0, 0.0, 1.0);
@@ -455,7 +482,7 @@ class SdfCanvas {
         console.log("max fragment blocks:", maxFragBlocks) */
 
         window.addEventListener("resize", () => {
-            this.resizeCanvasToDisplaySize();
+            this.#resizeCanvasToDisplaySize();
             this.#updateUniforms();
             this.draw();
         });
@@ -469,6 +496,9 @@ class SdfCanvas {
     }
 
     draw() {
+        if (!this.#ready) {
+            return;
+        }
         this.#gl.clearColor(1.0, 0.0, 1.0, 1.0); // Clear to black, fully opaque
         this.#gl.clearDepth(1.0); // Clear everything
         this.#gl.enable(this.#gl.DEPTH_TEST); // Enable depth testing
@@ -520,35 +550,19 @@ class SdfCanvas {
         }
     }
 
-    resizeCanvasToDisplaySize() {
-        // 1. Get the pixel density of the screen (e.g., Retina screens are often 2)
-        const dpr = window.devicePixelRatio || 1;
-
-        // 2. Calculate the actual physical pixels of the display area
-        const displayWidth = this.#canvas.clientWidth * dpr;
-        const displayHeight = this.#canvas.clientHeight * dpr;
-
-        // 3. Apply your downscale factor to determine the WebGL rendering resolution
-        // (Math.max is used to prevent the canvas from ever being 0x0 pixels)
-        const renderWidth = Math.max(1, Math.round(displayWidth / this.downscaleFactorX));
-        const renderHeight = Math.max(1, Math.round(displayHeight / this.downscaleFactorY));
-
-        // 4. If the rendering resolution changed, update the canvas and viewport
-        if (this.#canvas.width !== renderWidth || this.#canvas.height !== renderHeight) {
-
-            // This changes the internal rendering resolution (the WebGL buffer size)
-            this.#canvas.width = renderWidth;
-            this.#canvas.height = renderHeight;
-
-            // The WebGL viewport MUST match the internal buffer size, 
-            this.#gl.viewport(0, 0, renderWidth, renderHeight);
-        }
-    }
-
+    /**
+     * Add an overwriteLayer to the SdfCanvas. This canvas will then use this overwriteLayers properties instead of the global SdfLayer properties.
+     * @param {Index of the layer to overwrite} index 
+     * @param {SdfLayer object that overwrites that layer} overwriteLayer 
+     */
     addOverwriteLayer(index, overwriteLayer) {
         this.#overwriteLayers.set(index, overwriteLayer);
     }
 
+    /**
+     * Removes an overwriteLayer from the SdfCanvas. 
+     * @param {index of the overwriteLayer to remove} index 
+     */
     removeOverwriteLayer(index) {
         if (!this.#overwriteLayers.has(index)) {
             return;
@@ -1013,20 +1027,19 @@ class SdfCanvas {
                     break;
                 case "directional":
                     lightType = 1;
+                    const cssValues = computedStyle.getPropertyValue('--light-direction');
+                    const [dirX, dirY, dirZ] = cssValues.split(' ').map(val => parseFloat(val));
+
+                    this.#lightBuffer[lightBufferIdx + 0] = dirX;
+                    this.#lightBuffer[lightBufferIdx + 1] = dirY;
+                    this.#lightBuffer[lightBufferIdx + 2] = dirZ;
                     break;
             }
 
-            const cssValues = computedStyle.getPropertyValue('--light-direction');
-            const [dirX, dirY, dirZ] = cssValues.split(' ').map(val => parseFloat(val));
-
-            this.#lightBuffer[lightBufferIdx + 4] = dirX;
-            this.#lightBuffer[lightBufferIdx + 5] = dirY;
-            this.#lightBuffer[lightBufferIdx + 6] = dirZ;
-            this.#lightBuffer[lightBufferIdx + 7] = lightType;
-
-            this.#lightBuffer[lightBufferIdx + 8] = parseFloat(computedStyle.getPropertyValue("--light-intensity")); // intensity
-            this.#lightBuffer[lightBufferIdx + 9] = parseFloat(computedStyle.getPropertyValue("--light-radius")) * oneOverX; // radius
-            // this.#lightBuffer[lightBufferIdx + 10] = 1.5; // for now this is hardcoded in the shader
+            this.#lightBuffer[lightBufferIdx + 4] = parseFloat(computedStyle.getPropertyValue("--light-intensity")); // intensity;
+            this.#lightBuffer[lightBufferIdx + 5] = parseFloat(computedStyle.getPropertyValue("--light-radius")) * oneOverX; // radius;
+            this.#lightBuffer[lightBufferIdx + 6] = lightType;
+            // this.#lightBuffer[lightBufferIdx + 7] = 0;
 
             lightBufferIdx += SdfCanvas.VEC4_PER_LIGHT * 4;
         }
@@ -1037,6 +1050,31 @@ class SdfCanvas {
     #containedInRenderLayers(element) {
         const elementRenderLayers = element.dataset.renderLayers.split(" ").map((s) => parseInt(s));
         return this.renderLayers.some(item => elementRenderLayers.includes(item));
+    }
+
+    #resizeCanvasToDisplaySize() {
+        // 1. Get the pixel density of the screen (e.g., Retina screens are often 2)
+        const dpr = window.devicePixelRatio || 1;
+
+        // 2. Calculate the actual physical pixels of the display area
+        const displayWidth = this.#canvas.clientWidth * dpr;
+        const displayHeight = this.#canvas.clientHeight * dpr;
+
+        // 3. Apply your downscale factor to determine the WebGL rendering resolution
+        // (Math.max is used to prevent the canvas from ever being 0x0 pixels)
+        const renderWidth = Math.max(1, Math.round(displayWidth / this.#downscaleFactorX));
+        const renderHeight = Math.max(1, Math.round(displayHeight / this.#downscaleFactorY));
+
+        // 4. If the rendering resolution changed, update the canvas and viewport
+        if (this.#canvas.width !== renderWidth || this.#canvas.height !== renderHeight) {
+
+            // This changes the internal rendering resolution (the WebGL buffer size)
+            this.#canvas.width = renderWidth;
+            this.#canvas.height = renderHeight;
+
+            // The WebGL viewport MUST match the internal buffer size, 
+            this.#gl.viewport(0, 0, renderWidth, renderHeight);
+        }
     }
 }
 

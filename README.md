@@ -1,10 +1,99 @@
-use      transition: background-color 1s, --depth 1s;
-change some mapWithMaterial back to map (cache speedup and such)
+# Sdf Ui
+SdfUi is a framework to easily create 3d elements from normal html elements. The scene is constructed as a [signed distance field](https://iquilezles.org/articles/distfunctions/) (sdf) which allows for easy blending between objects.
 
-The origin of the canvas is top left and goes to 1, height/width if fullscreen. The z-Coordinate increases towards the viwer, with the camera at position SdfCanvas.cameraZ looking in (0, 0, -1) direction with a orthographic camera.
+Some of the capabilities are shown [here](https://puutzza.github.io/sdf-ui/).
 
-## Compile Time Constants
-There are a few variables that can only be set at the very beginning **before** calling `initWebgl`. These are:
+## Technology
+SdfUi uses only html, css, javascript and webgl to create and render the scene. It is fully self-contained and has no external dependencies. 
+
+## SdfCanvas
+SdfCanvas is the central class of this framework that controlls most of the things.
+
+### Coordinate System and Camera
+Each SdfCanvas is bound to a [canvas](https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API). The origin of the created space is at the top left. The x-axis increases to the left, y-axis to the bottom and z-axis towards the user (out of the screen). 
+
+The orthographic camera has the position (0, 0, cameraZ) and a view-direction of (0, 0, -1). 
+
+### Usage
+To use SdfUi you have to include the sdf-elments script in your html file like so:
+```html
+<script src="src/scripts/sdf-elements.js" type="module"></script>
+```
+You also have to create a canvas element and give it a unique Id:
+```html
+<canvas id="canvas"></canvas>
+```
+Then you create a script where you can create a sdf canvas out of the canvas you just created. To do that first import SdfCanvas and then create a new SdfCanvas object while passing the unique Id as a parameter.
+```js
+import { SdfCanvas } from "../src/scripts/sdf-ui.js";
+
+const sdfCanvas = new SdfCanvas("canvas");
+```
+The SdfCanvas can accept the followng optional parameters via an options object.
+
+```js
+options = {
+    renderLayers = [0],                // Which layers are rendered by this canvas (see section Render Layers)
+    downscaleFactorX = 2,              // Factor to downscale the horizontal resolution
+    downscaleFactorY = 2,              // Factor to downscale the vertical resolution
+    topFace = false,                   // Controls if the --z value of the elements is the depth of the top-face or the center of the object
+    cameraZ = 10,                      // Controls the z-coordinate of the camera
+    useAA = false,                     // Enables Anti-Aliasing
+    twoDMode = false,                  // Enables the 2d mode
+    customShadeFunction = "",          // Custom shading function
+    customElements = [],               // Definitions of custom elements
+    onCompilationComplete = undefined, // Callback function for when the compilation is complete
+}
+
+// For example:
+const sdfCanvas = new SdfCanvas("canvas", { downscaleFactorX: 10 });
+sdfCanvas.cameraZ = 15;
+```
+After creating the canvas you have to call `initWegbl()` before you can draw the scene with `draw()`. 
+
+### Public Members and Functions
+```js
+/**
+ * This static member controlls the global layers. See section Layers for more.
+ */
+static layers = [
+    new SdfLayer(SdfCommands.SMOOTH_UNION, 30),
+]
+
+/**
+ * Boolean to check if the canvas is ready (e.g. compilation complete)
+ */
+get ready();
+
+/**
+ * @param {If compilation should continue even if background compilation is not available. Shold be SdfCanvas.COMPILE_POLICY_ONLY_PARALELL or SdfCanvas.COMPILE_POLICY_ALSO_BLOCKING} compilePolicy 
+ * @returns Boolean if compilation was successful
+ */
+async initWebgl(compilePolicy = SdfCanvas.COMPILE_POLICY_ONLY_PARALELL); /
+
+/**
+ *  * Updates the elements and renderes the scene.
+ * 
+ */
+draw();
+
+/**
+ * Add an overwriteLayer to the SdfCanvas. This canvas will then use this overwriteLayers properties instead of the global SdfLayer properties.
+ * @param {Index of the layer to overwrite} index 
+ * @param {SdfLayer object that overwrites that layer} overwriteLayer 
+ */
+addOverwriteLayer(index, overwriteLayer);
+
+/**
+ * Removes an overwriteLayer from the SdfCanvas. 
+ * @param {index of the overwriteLayer to remove} index 
+ */
+removeOverwriteLayer(index);
+```
+
+
+### Compile Time Constants
+There are a few variables that can only be changesd **before** calling `initWebgl`. These are:
 
 * **useAA:** enables Anti-Aliasing. This program uses Multisample Anti-Aliasing with four samples. 
 > [!Note]
@@ -35,36 +124,91 @@ struct HitInfo {
     vec3 normal; // normal of the surface point
     Surface surface; // blended surface at the surface point
 };
+
+// To pass global values you can use (repurpose) the lights in the scene. These are stored in the array
+vec4 lightData[MAX_NUM_LIGHTS * VEC4_PER_LIGHT]; // VEC4_PER_LIGHT is 2
+uniform int uNumLights; // number of lights in the array
+
+// you can get the values of indivicual lights like so:
+int   lightIdx = 0;
+vec3 lightPos   = lightData[lightIdx].xyz; // this stores the light direction if the light is a directional light
+vec3 lightColor = unpackColor(lightData[dataIdx].w);
+float intensity = lightData[dataIdx + 1].x;
+float radius    = lightData[dataIdx + 1].y;
+float lightType = lightData[dataIdx + 1].z; // 0 for point light, 1 for directional light
 ```
 * **customElements:** You can define custom elements by setting the `customElements` member variable of the `SdfCanvas` object. This is an array of arrays of two d points that define the vertices of custom elemets in object space. See below how to use the custom elements.
-> [!Note]
-> The more custom elements you define, the longer compile times will be, because each custom element adds one branch to the map funciton. Therfore you should only add the minimum amount of custom elements.
 ```js
 sdfCanvas.customElements = [
     [[-0.5, 0], [0.5, 0], [0.5, 0.5]],
     [[-1.5, 0], [1.5, 0], [0.3, 2.5], [0.1, 0.5]],
 ];
 ```
+> [!Note]
+> The more custom elements you define, the longer compile times will be, because each custom element adds one branch to the map funciton. Therfore you should only add the minimum amount of custom elements.
 
-## Shading
 
-All sdf elements support the following extra css properties: 
+## Layers
 
-* **--diffuse-color:** controls the `diffuseColor` ($C_d$) of the object.
-* **--specular-color:** controls the `specularColor` ($C_s$) of the object.
-* **--ambient-color:** controls the `ambientColor` ($C_a$) of the object.
-* **--kd:** controls the diffuse parameter ($k_d$) of the object.
-* **--ks:** controls the specular parameter ($k_s$) of the object.
-* **--p:** controls the specular exponent ($p$) of the object.
-* **--ka:** controls the ambient parameter ($k_a$) of the object.
+The sdf elements are placed in layers that control how the elements are added to the scene / blended onto already existing elements in the scene. These layers are static to SdfCanvas and can be set via the static `layers` member like so:
+```js
+SdfCanvas.layers = [new SdfLayer(SdfCommands.SMOOTH_UNION, 100)];
+```
 
-The final color ($C$) of a point on the surface with normal $\vec{n}$, vector towards the light source $\vec{l}$ view vector towards the camera $\vec{v}$ is then calculated with the standart **Phong shading model:**
+The layer an element is on can be controled with the `data-layer-index` property of the html element. E.g.:
 
-$I_d = k_d \cdot \texttt{max}(\vec{n} \cdot \vec{l}, 0)\\
-I_s = k_s \cdot \texttt{max}(\texttt{reflect}(\vec{l}, \vec{n}) \cdot \vec{v}, 0)^{p}\\
-C = I_d \cdot C_d + I_s \cdot C_s + k_a \cdot C_a$
+```html
+<sdf-box-simple id="test-sdf-box-simple" data-layer-index="1">Simple Box</sdf-box-simple>
+```
 
-Where $\texttt{reflect}$ calculates the perfect reflection direction of $\vec{l}$ when reflected along $\vec{n}$.
+The layer is an index. First all elements in the lowest layer are added to the scene, then the ones from the next layer, ...
+
+The elements are always blended with the defined `LayerOperation`:
+
+```js
+export const SdfCommands = Object.freeze({
+    ...
+    // Layer Operations
+    UNION: 100,
+    SUBTRACTION: 101,
+    INTERSECTION: 102,
+    XOR: 103,
+    SMOOTH_UNION: 104,
+    SMOOTH_SUBTRACTION: 105,
+    SMOOTH_INTERSECTION: 106,
+    ...
+})
+```
+
+The smooth operations also have a corresponding `smoothingFactor` per layer to control the amount of smoothing.
+
+To control the layers on a per-canvas basis you can use the `addOverwriteLayer(index, overwriteLayer)` and `removeOverwriteLayer(index)` functions that define an "overwriteLayer" at index index that is used instead of the static layer at that index.
+
+## Render Layers
+
+To constrain certain elements to certain canvasses, each canvas has a list of render-layer-indeces (`renderLayers`) that are compared to the render-layers of the elements. You can define those `data-reder-layers` per element like so:
+
+```html
+<sdf-sphere class="test-sdf-sphere" data-render-layers="0" data-layer-index="1">Sphere</sdf-sphere>
+```
+
+An element can have multiple canvas-indices signaled by a space between the two.   
+
+```html
+<sdf-sphere class="test-sdf-sphere" data-render-layers="0 1" data-layer-index="1">Sphere</sdf-sphere>
+```
+
+While rendering they now only render elements that share a common render layer. E.g. if an element has the render layers [0, 4, 5] and a canvas renderes the layers [1, 2, 3] then that canvas will not render the element. But if the canvas rendered the layers [0, 2, 3] instead the element would be rendered. 
+
+**Lights** use the exact same principle. They also have a data-render-layers property and are only rendered by canvasses with whom they share at least one common render-layer.
+
+By default all elements and canvasses have their render-layers set to 0 (meaning all all canvasses render everything).
+
+## CSS Values
+Most of the properties (both of geometry and shading) of the sdf elements are controled by custom css properties. This was done because then properties can easily be shared with the use of classes and animated with the build in transition and animation capabilities. 
+>[!Note]
+>All the custom CSS values have inherit: false. 
+>To animate the custom properties you have to explicitly use `transition: --property 0.1s;` (`transition: all 0.1s;` does not work).
 
 ## Supported Elements
 
@@ -133,7 +277,7 @@ A cylinder.
 * **--axis:** Controls along which axis the cylider is formed. Can be {`x`, `y`, `z`}. Depending on this value **width**, **height** and **--depth** control the height and the radius of the cylinder.
 * **--extrude:** Extrudes all surfaces along their normal. Allows for rounded corners.
 
-### 6. Trinagle
+### 6. Triangle
 An arbitrary triangle.
 ```html
 <sdf-triangle id="test-sdf-triangle" data-layer-index="2">Triangle</sdf-triangle>
@@ -158,46 +302,52 @@ Arbitrary 2d polygons that are extruded along the local z-axis. You have to defi
 * **--depth:** Controls the depth of the polygon.
 * **--extrude:** Extrudes all surfaces along their normal. Allows for rounded corners.
 
-
-## Layers
-
-The elements are placed in layers that control how the elements are blended to already existing elements in the scene. The layer an element is on can be controled with the `data-layer-index` property of the html element. E.g.:
-
+## Lights
+Lights are controlled similar to elements. You have to create a html element that represents the light:
 ```html
-<sdf-box-simple id="test-sdf-box-simple" data-layer-index="1">Simple Box</sdf-box-simple>
+<sdf-light data-render-layers="0">Directional Light</sdf-light>
 ```
+The properties of the light are controlled by the following css properties:
+* **--diffuse-color:** Color of the light.
+* **--light-intensity:** Intensity of the light.
+* **--light-type:** Can be `point` or `directional`. This controls if the light behaves as a point light (with a position and radius) or as a directional light (with a direction and no light falloff).
+* **--light-direction:** Three component value that represents the direction of the light in case of directional lights (e.g. `--light-direction: 1 1 -1;`).
+* **--radius:** The represents the radius of the light in case of a point light. Things further away than this are not illuminated by that specific point light.
 
-The layer is an index. First all elements in the lowest layer are added to the scene, then the ones from the next layer, ...
-
-The elements are always blended with the defined `LayerOperation`:
+## Modifiers
+You can add modifiers to sdf elements to change things about them. As of now there is only one supported modifiers. You can add modifiers to elements like so:
 
 ```js
-static LayerOperation = Object.freeze({
-    UNION: 0,
-    SUBTRACTION: 1,
-    INTERSECTION: 2,
-    XOR: 3,
-    SMOOTH_UNION: 4,
-    SMOOTH_SUBTRACTION: 5,
-    SMOOTH_INTERSECTION: 6,
-})
+const sdfElement = document.querySelector("#element-name");
+const target = document.querySelector("#target");
+sdfElement.addModifier(new Twist(target));
 ```
 
-The smooth operations also have a corresponding `smoothingFactor` per layer to control the amount of smoothing.
+### Twist
+Add a twist to the selected element. The twist is controlled by a **target** element. This target element is a html-element that gets passed in the constructor. This element expects the following css properties:
+* **--twist-axis:** 3d vector that controls the axis around which the twist is applied (e.g. `--twist-axis: 0 1 0;`).
+* **--twist-rate:** The twist rate. This is measured in revolutions per rem. Meaning if the amount is set to 0.1 then a 10 rem big element would be twisted exactly once around --twist-axis.
+* **--twist-start:** This marks the up to which distance along the twist axis the twist is applied normally. From this distance up to `--twist-end` the twist tapers of and at ...
+* **--twist-end:** ... stopps entirely.
 
+## Shading
 
-## Render Layers
+All sdf elements should have the following css properties: 
 
-To constrain certain elements to certain canvasses, you can define a `data-reder-layers` per element like so:
+* **--diffuse-color:** controls the `diffuseColor` ($C_d$) of the object.
+* **--specular-color:** controls the `specularColor` ($C_s$) of the object.
+* **--ambient-color:** controls the `ambientColor` ($C_a$) of the object.
+* **--kd:** controls the diffuse parameter ($k_d$) of the object.
+* **--ks:** controls the specular parameter ($k_s$) of the object.
+* **--p:** controls the specular exponent ($p$) of the object.
+* **--ka:** controls the ambient parameter ($k_a$) of the object.
 
-```html
-<sdf-sphere class="test-sdf-sphere" data-render-layers="0" data-layer-index="1">Sphere</sdf-sphere>
-```
+These are used to calculate the final color ($C$) of a point on the surface with normal $\vec{n}$, vector towards the light source $\vec{l}$ view vector towards the camera $\vec{v}$. The default shading function uses the **Phong shading model** to calculate the final color:
 
-An element can have multiple canvas-indices signaled by a space ` ` between the two.   
+$I_d = k_d \cdot \texttt{max}(\vec{n} \cdot \vec{l}, 0)\\
+I_s = k_s \cdot \texttt{max}(\texttt{reflect}(\vec{l}, \vec{n}) \cdot \vec{v}, 0)^{p}\\
+C = I_d \cdot C_d + I_s \cdot C_s + k_a \cdot C_a$
 
-```html
-<sdf-sphere class="test-sdf-sphere" data-render-layers="0 1" data-layer-index="1">Sphere</sdf-sphere>
-```
+Where $\texttt{reflect}$ calculates the perfect reflection direction of $\vec{l}$ when reflected along $\vec{n}$.
 
-The SdfCanvases in js also have a renderLayers property. While rendering they now only render elements that share a common render layer. E.g. if an element has the render layers [0, 4, 5] and a canvas renderes the layers [1, 2, 3] then that canvas will not render the element. But if the canvas rendered the layers [0, 2, 3] instead the element would be rendered. 
+This behaviour can be overwritten by defining a custom shading function (see Section Compile Time Constants).

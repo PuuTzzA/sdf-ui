@@ -6,7 +6,7 @@ precision highp float;
 #define MAX_NUM_COMMANDS 1024
 #define MAX_SIZE_ELEMENT_BUFFER 1024
 #define MAX_NUM_LIGHTS 128
-#define VEC4_PER_LIGHT 3
+#define VEC4_PER_LIGHT 2
 #define EPSILON 1e-4
 #define MAX_FLOAT 3.402823466e+38f
 #define ZERO (min(uNumCommands,0)) // non-constant zero to avoid inlining of functions
@@ -789,19 +789,17 @@ vec3 shade(HitInfo hit) {
     for (int i = 0; i < uNumLights; ++i) {
         int dataIdx = i * VEC4_PER_LIGHT;
         
-        vec3 lightPos = lightData[dataIdx].xyz;
+        vec3 lightPos = lightData[dataIdx].xyz; // this stores the light direction if the light is a directional light
         vec3 lightColor = unpackColor(lightData[dataIdx].w);
         
-        float lightType = lightData[dataIdx + 1].w; // 0 for point light, 1 for directional light
-        vec3 lightDir = lightData[dataIdx + 1].xyz; // only used for directional lights
-
-        float intensity = lightData[dataIdx + 2].x;
-        float radius = lightData[dataIdx + 2].y;
+        float intensity = lightData[dataIdx + 1].x;
+        float radius = lightData[dataIdx + 1].y;
         float falloff = 1.5f; // lightData[dataIdx + 2].z;
 
+        float lightType = lightData[dataIdx + 1].z; // 0 for point light, 1 for directional light
+
         // light attenuation for point light (taken from https://lisyarus.github.io/blog/posts/point-light-attenuation.html)
-        vec3 pointVec = lightPos - hit.pos;
-        float dist = length(pointVec);
+        float dist = length(lightPos - hit.pos);
 
         float s = dist / radius;
         float attenuation = 0.0f;
@@ -814,7 +812,7 @@ vec3 shade(HitInfo hit) {
 
         // If type == 0.0 (Point), rawVec becomes (lightPos - hit.pos)
         // If type == 1.0 (Directional), rawVec becomes -lightDir 
-        vec3 rawVec = mix(lightPos - hit.pos, -lightDir, lightType);
+        vec3 rawVec = mix(lightPos - hit.pos, -lightPos, lightType);
         vec3 vecToLight = normalize(rawVec);
         vec3 vecFromLight = -vecToLight;
 
