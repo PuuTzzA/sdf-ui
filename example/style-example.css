@@ -236,6 +236,7 @@ html,
 }
 
 #test-sdf-box-simple {
+    --diffuse-color: oklch(53.046% 0.29324 293.942);
     width: 10rem;
     height: 5rem;
     --ks: 0.1;
@@ -250,7 +251,7 @@ html,
     width: 10rem;
     height: 5rem;
 
-/*     transform: rotateY(-45deg);
+    /*     transform: rotateY(-45deg);
  */
     border-radius: 2rem 1rem 2.5rem;
     --border-radius-type: cubic;

@@ -11,7 +11,7 @@ class SdfCanvas {
     static MAX_SIZE_ELEMENT_BUFFER = 1024; // number of vec4 in the buffer
     static MAX_NUM_LIGHTS = 128; // maximum number of lights per canvas 
 
-    static VEC4_PER_LIGHT = 2; // amount of vec4 used for each light
+    static VEC4_PER_LIGHT = 3; // amount of vec4 used for each light
 
     static COMMAND_BLOCK_UNIFORM_BUFFER_BINDING_INDEX = 0;
     static GEOMETRY_BLOCK_UNIFORM_BUFFER_BINDING_INDEX = 1;
@@ -113,6 +113,8 @@ class SdfCanvas {
     static #layers = [
         new SdfLayer(SdfCommands.SMOOTH_UNION, 30),
     ]
+
+    static #resolveColorCtx; // to convert hsl, oklch, ... to rgba
 
     static get layers() {
         return this.#layers;
@@ -229,32 +231,20 @@ class SdfCanvas {
     }
 
     static #parseCSSColor(css) {
-        const m = css.match(/rgba?\(([^)]+)\)/);
-        if (!m) return { r: 0, g: 0, b: 0, a: 0 };
+        // Create a persistent canvas for parsing
+        if (!this.#resolveColorCtx) {
+            const canvas = new OffscreenCanvas(1, 1);
+            this.#resolveColorCtx = canvas.getContext('2d', { willReadFrequently: true });
+        }
 
-        const parts = m[1].split(",").map(v => v.trim());
+        // Setting fillStyle handles oklch, hsl, hex, named colors, etc.
+        this.#resolveColorCtx.fillStyle = css;
+        this.#resolveColorCtx.clearRect(0, 0, 1, 1);
+        this.#resolveColorCtx.fillRect(0, 0, 1, 1);
 
-        const r = parseInt(parts[0]);
-        const g = parseInt(parts[1]);
-        const b = parseInt(parts[2]);
-        const a = parts[3] !== undefined ? parseFloat(parts[3]) : 1.0;
-
-        return { r, g, b, a };
-    }
-
-    static #packRGBA(r, g, b, a = 255) {
-        return (
-            (r & 0xFF) << 24 |
-            (g & 0xFF) << 16 |
-            (b & 0xFF) << 8 |
-            (a & 0xFF)
-        ) >>> 0; // force uint32
-    }
-
-    static #cssColorToUint32(css) {
-        const { r, g, b, a } = SdfCanvas.#parseCSSColor(css);
-        const A = Math.round(a * 255);
-        return SdfCanvas.#packRGBA(r, g, b, A);
+        // Grab the computed RGBA values
+        const [r, g, b, a] = this.#resolveColorCtx.getImageData(0, 0, 1, 1).data;
+        return { r: r / 255, g: g / 255, b: b / 255, a: a / 255 };
     }
 
     // ╔══════════════════════════════════════════════════════════╗
@@ -715,16 +705,27 @@ class SdfCanvas {
                 storeMat4InGeometryBuffer(mat, geometryBufferIdx)
 
                 // Shading Information
-                this.#shadingBuffer[geometryBufferIdx + 0] = SdfCanvas.#intToFloatBits(SdfCanvas.#cssColorToUint32(computedStyle.getPropertyValue("--diffuse-color"))); // diffuse color
-                this.#shadingBuffer[geometryBufferIdx + 1] = SdfCanvas.#intToFloatBits(SdfCanvas.#cssColorToUint32(computedStyle.getPropertyValue("--specular-color"))); // specular color
-                this.#shadingBuffer[geometryBufferIdx + 2] = SdfCanvas.#intToFloatBits(SdfCanvas.#cssColorToUint32(computedStyle.getPropertyValue("--ambient-color"))); // ambient color
+                const diffuse = SdfCanvas.#parseCSSColor(computedStyle.getPropertyValue("--diffuse-color"));
+                this.#shadingBuffer[geometryBufferIdx + 0] = diffuse.r;
+                this.#shadingBuffer[geometryBufferIdx + 1] = diffuse.g;
+                this.#shadingBuffer[geometryBufferIdx + 2] = diffuse.b;
                 this.#shadingBuffer[geometryBufferIdx + 3] = parseFloat(computedStyle.getPropertyValue("--kd")); // diffuse material property
 
-                this.#shadingBuffer[geometryBufferIdx + 4] = parseFloat(computedStyle.getPropertyValue("--ks")); // specular material property
-                this.#shadingBuffer[geometryBufferIdx + 5] = parseFloat(computedStyle.getPropertyValue("--p")); // specular exponent
-                this.#shadingBuffer[geometryBufferIdx + 6] = parseFloat(computedStyle.getPropertyValue("--ka")); // ambient material property
-                this.#shadingBuffer[geometryBufferIdx + 7] = 1.; // unused for now
-                geometryBufferIdx += 3 * 4;
+                const specular = SdfCanvas.#parseCSSColor(computedStyle.getPropertyValue("--specular-color"));
+                this.#shadingBuffer[geometryBufferIdx + 4] = specular.r;
+                this.#shadingBuffer[geometryBufferIdx + 5] = specular.g;
+                this.#shadingBuffer[geometryBufferIdx + 6] = specular.b;
+                this.#shadingBuffer[geometryBufferIdx + 7] = parseFloat(computedStyle.getPropertyValue("--ks")); // diffuse material property
+
+                this.#shadingBuffer[geometryBufferIdx + 8] = parseFloat(computedStyle.getPropertyValue("--p")); // specular exponent
+
+                const ambient = SdfCanvas.#parseCSSColor(computedStyle.getPropertyValue("--ambient-color"));
+                this.#shadingBuffer[geometryBufferIdx + 12] = ambient.r;
+                this.#shadingBuffer[geometryBufferIdx + 13] = ambient.g;
+                this.#shadingBuffer[geometryBufferIdx + 14] = ambient.b;
+                this.#shadingBuffer[geometryBufferIdx + 15] = parseFloat(computedStyle.getPropertyValue("--ka")); // diffuse material property
+
+                geometryBufferIdx += 4 * 4;
 
                 // Add modifiers
                 const modifiers = element.modifiers;
@@ -1019,7 +1020,6 @@ class SdfCanvas {
             this.#lightBuffer[lightBufferIdx + 0] = offsetX;
             this.#lightBuffer[lightBufferIdx + 1] = offsetY;
             this.#lightBuffer[lightBufferIdx + 2] = offsetZ;
-            this.#lightBuffer[lightBufferIdx + 3] = SdfCanvas.#intToFloatBits(SdfCanvas.#cssColorToUint32(computedStyle.getPropertyValue("--diffuse-color"))); // light color
 
             let lightType = 0;
             switch (computedStyle.getPropertyValue("--light-type")) {
@@ -1037,9 +1037,14 @@ class SdfCanvas {
                     break;
             }
 
-            this.#lightBuffer[lightBufferIdx + 4] = parseFloat(computedStyle.getPropertyValue("--light-intensity")); // intensity;
-            this.#lightBuffer[lightBufferIdx + 5] = parseFloat(computedStyle.getPropertyValue("--light-radius")) * oneOverX; // radius;
-            this.#lightBuffer[lightBufferIdx + 6] = lightType;
+            const color = SdfCanvas.#parseCSSColor(computedStyle.getPropertyValue("--diffuse-color")); // light color
+            this.#lightBuffer[lightBufferIdx + 4] = color.r;
+            this.#lightBuffer[lightBufferIdx + 5] = color.g;
+            this.#lightBuffer[lightBufferIdx + 6] = color.b;
+
+            this.#lightBuffer[lightBufferIdx + 8] = parseFloat(computedStyle.getPropertyValue("--light-intensity")); // intensity;
+            this.#lightBuffer[lightBufferIdx + 9] = parseFloat(computedStyle.getPropertyValue("--light-radius")) * oneOverX; // radius;
+            this.#lightBuffer[lightBufferIdx + 10] = lightType;
             // this.#lightBuffer[lightBufferIdx + 7] = 0;
 
             lightBufferIdx += SdfCanvas.VEC4_PER_LIGHT * 4;

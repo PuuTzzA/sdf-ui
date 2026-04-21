@@ -6,7 +6,7 @@ precision highp float;
 #define MAX_NUM_COMMANDS 1024
 #define MAX_SIZE_ELEMENT_BUFFER 1024
 #define MAX_NUM_LIGHTS 128
-#define VEC4_PER_LIGHT 2
+#define VEC4_PER_LIGHT 3
 #define EPSILON 1e-4
 #define MAX_FLOAT 3.402823466e+38f
 #define ZERO (min(uNumCommands,0)) // non-constant zero to avoid inlining of functions
@@ -390,15 +390,6 @@ Surface opSmoothIntersection(Surface a, Surface b, float smoothness) {
 // ╔══════════════════════════════════════════════════════════╗
 // ║                      RAYMARCHING                         ║
 // ╚══════════════════════════════════════════════════════════╝
-vec3 unpackColor(float f) {
-    uint u = floatBitsToUint(f);
-    return vec3(
-        float((u >> 24u) & 255u), 
-        float((u >> 16u) & 255u), 
-        float((u >> 8u) & 255u)
-    ) / 255.0f;
-}
-
 void initializeData(inout Surface data) {
     data.colorDiffuse = vec3(0.0f);
     data.colorSpecular = vec3(0.0f);
@@ -411,13 +402,13 @@ void initializeData(inout Surface data) {
 }
 
 void populateData(inout Surface data, int elementIdx) {
-    data.colorDiffuse = unpackColor(shadingData[elementIdx].x);
-    data.colorSpecular = unpackColor(shadingData[elementIdx].y);
-    data.colorAmbient = unpackColor(shadingData[elementIdx].z);
+    data.colorDiffuse = shadingData[elementIdx].xyz;
     data.kd = shadingData[elementIdx].w; // diffuse material property 
-    data.ks = shadingData[elementIdx + 1].x; // specular material property 
-    data.p = shadingData[elementIdx + 1].y; // specular exponent, fall of of specular light
-    data.ka = shadingData[elementIdx + 1].z; // ambient material property
+    data.colorSpecular = shadingData[elementIdx + 1].xyz;
+    data.ks = shadingData[elementIdx + 1].w; // specular material property
+    data.p = shadingData[elementIdx + 2].x; // specular exponent, fall of of specular light
+    data.colorAmbient = shadingData[elementIdx + 3].xyz;
+    data.ka = shadingData[elementIdx + 3].w; // ambient material property
 }
 
 float getBakedSDF(int charIndex, vec3 pos, float scale, float depth) {
@@ -790,13 +781,13 @@ vec3 shade(HitInfo hit) {
         int dataIdx = i * VEC4_PER_LIGHT;
         
         vec3 lightPos = lightData[dataIdx].xyz; // this stores the light direction if the light is a directional light
-        vec3 lightColor = unpackColor(lightData[dataIdx].w);
+        vec3 lightColor = lightData[dataIdx + 1].xyz;
         
-        float intensity = lightData[dataIdx + 1].x;
-        float radius = lightData[dataIdx + 1].y;
+        float intensity = lightData[dataIdx + 2].x;
+        float radius = lightData[dataIdx + 2].y;
         float falloff = 1.5f; // lightData[dataIdx + 2].z;
 
-        float lightType = lightData[dataIdx + 1].z; // 0 for point light, 1 for directional light
+        float lightType = lightData[dataIdx + 2].z; // 0 for point light, 1 for directional light
 
         // light attenuation for point light (taken from https://lisyarus.github.io/blog/posts/point-light-attenuation.html)
         float dist = length(lightPos - hit.pos);
@@ -842,9 +833,6 @@ vec3 shade(HitInfo hit) {
 // ║                          MAIN                            ║
 // ╚══════════════════════════════════════════════════════════╝
 void main(void) {
-/*     fragColor = vec4(lightData[0].xyz, 1.0);
-    return; */
-
     vec2 uv = vUv; // origin = top left
     uv *= vec2(uWindowWidth, uWindowHeight);
     uv += vec2(uLeftOffset, uTopOffset);
