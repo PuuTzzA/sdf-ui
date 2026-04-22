@@ -6,13 +6,15 @@ async function loadShadersFromDisk(vertexName, fragmentName, directory = "../../
     const vertexPath = new URL(directory + vertexName, import.meta.url);
     const fragmentPath = new URL(directory + fragmentName, import.meta.url);
 
-    // fetch accepts URL objects directly
-    const responseVertex = await fetch(vertexPath);
-    const responseFragment = await fetch(fragmentPath);
+    // Promise.all starts both fetch requests immediately and waits for both to finish
+    const [vertexSource, fragmentSource] = await Promise.all([
+        fetch(vertexPath).then(response => response.text()),
+        fetch(fragmentPath).then(response => response.text())
+    ]);
 
     return {
-        vertexSource: await responseVertex.text(),
-        fragmentSource: await responseFragment.text(),
+        vertexSource,
+        fragmentSource,
     };
 }
 

@@ -38,7 +38,7 @@ sdfCanvas.onCompilationComplete = () => {
     const loadTime = performance.now() - loadStartTime;
     console.log("Until everything setup: " + (loadTime / 60000).toFixed(4) + " minutes, (" + loadTime.toFixed(4) + "ms)")
 }
-sdfCanvas.customElements = [
+SdfCanvas.customElements = [
     [[-0.5, 0], [0.5, 0], [0.5, 0.5], [0.1, 0.2], [-1, 0.3]],
 ];
 sdfCanvas.initWebgl(SdfCanvas.COMPILE_POLICY_ALSO_BLOCKING);

@@ -28,8 +28,6 @@ class SdfCanvas {
     static NUM_GLYPHS_BUFFERED = 36;
     static GLYPHS_MAX_BOUNDING_BOX = [[-45, -200], [135, 700]]; // box which ALL glyphs fall into in the format [[left, bot], [right, top]]
     static GLYPHS_PADDING = 200; // padding that is applied to all sides of the max bounding box
-    static bakedGlyphsTexture = false;
-    static glyphsTexture; // holds the gl.TEXTURE_2D_ARRAY of the sdf for the letters
 
     static #computeGlyphTextureResolution() {
         const rangeX = this.GLYPHS_MAX_BOUNDING_BOX[1][0] - this.GLYPHS_MAX_BOUNDING_BOX[0][0];
@@ -48,12 +46,17 @@ class SdfCanvas {
     }
 
     static async #bakeLetterSdfs(gl) {
-        this.glyphsTexture = gl.createTexture();
-        gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.glyphsTexture);
-
-        // Allocate the 3d storage: texStorage3D(target, mip-levels, internalformat, width, height, depth)
+        // I tried to store the texture in RAM, but moving the texture from VRAM to RAM and then back to VRAM is slower than just doing it again 
         const { resolutionX, resolutionY } = SdfCanvas.#computeGlyphTextureResolution();
-        gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.R32F, resolutionX, resolutionY, SdfCanvas.NUM_GLYPHS_BUFFERED + 1);
+        const depth = SdfCanvas.NUM_GLYPHS_BUFFERED + 1;
+
+        const { vertexSource, fragmentSource } = await loadShadersFromDisk("letterBakingVertex.glsl", "letterBakingFragment.glsl");
+        const bakeProg = await initShaderProgram(gl, vertexSource, fragmentSource);
+
+        // There are no awaits below here, so initWebgl cannot interrupt it
+        const texture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D_ARRAY, texture);
+        gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.R32F, resolutionX, resolutionY, depth);
 
         gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.LINEAR); // Texture minification filter
         gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.LINEAR); // Texture magnification filter
@@ -62,9 +65,6 @@ class SdfCanvas {
 
         const fbo = gl.createFramebuffer();
         gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-
-        const { vertexSource, fragmentSource } = await loadShadersFromDisk("letterBakingVertex.glsl", "letterBakingFragment.glsl");
-        const bakeProg = await initShaderProgram(gl, vertexSource, fragmentSource);
 
         gl.useProgram(bakeProg);
         const boxMinLoc = gl.getUniformLocation(bakeProg, "uBoxMin");
@@ -83,10 +83,10 @@ class SdfCanvas {
         gl.uniform2f(boxMinLoc, SdfCanvas.GLYPHS_MAX_BOUNDING_BOX[0][0] - SdfCanvas.GLYPHS_PADDING, SdfCanvas.GLYPHS_MAX_BOUNDING_BOX[0][1] - SdfCanvas.GLYPHS_PADDING);
         gl.uniform2f(boxMaxLoc, SdfCanvas.GLYPHS_MAX_BOUNDING_BOX[1][0] + SdfCanvas.GLYPHS_PADDING, SdfCanvas.GLYPHS_MAX_BOUNDING_BOX[1][1] + SdfCanvas.GLYPHS_PADDING);
 
-        // Render EACH layer individually
-        for (let i = 0; i <= SdfCanvas.NUM_GLYPHS_BUFFERED; i++) {
+        // Render each layer
+        for (let i = 0; i < depth; i++) {
             // framebufferTextureLayer(target, attachment, texture, level, layer) attaches a single layer of a texture to a framebuffer
-            gl.framebufferTextureLayer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, this.glyphsTexture, 0, i);
+            gl.framebufferTextureLayer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, texture, 0, i);
 
             // Tell the shader which character to compute
             gl.uniform1i(charIndexLoc, i);
@@ -95,15 +95,22 @@ class SdfCanvas {
             gl.drawArrays(gl.TRIANGLES, 0, 6);
         }
 
+        // 3. CLEANUP STATE
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+        gl.bindTexture(gl.TEXTURE_2D_ARRAY, null);
         gl.deleteBuffer(quadBuffer);
         gl.deleteProgram(bakeProg);
         gl.deleteFramebuffer(fbo);
+
+        return texture;
     }
 
     // ╔══════════════════════════════════════════════════════════╗
     // ║             Static Properties and Methods                ║
     // ╚══════════════════════════════════════════════════════════╝
+    static customElements = [];
+
     static #instantiatedCanvases = [];
 
     static #trackedElements = [];
@@ -186,7 +193,6 @@ class SdfCanvas {
             } else {
                 this.#layers[currentIdx].elementsInLayer = currentNum;
 
-                // console.log(e.dataset.layerIndex)
                 for (let i = currentIdx + 1; i < parseInt(e.dataset.layerIndex); i++) {
                     this.#layers[i].elementsInLayer = 0;
                 }
@@ -261,8 +267,6 @@ class SdfCanvas {
     useAA;
     twoDMode;
     customShadeFunction;
-
-    customElements;
     onCompilationComplete;
 
     // Private Properties
@@ -279,6 +283,7 @@ class SdfCanvas {
     #lightBuffer;
     #overwriteLayers;
     #lastCustomIdx;
+    #glyphTexture;
 
     // Getters and Setters
     get ready() {
@@ -331,7 +336,6 @@ class SdfCanvas {
             useAA = false,
             twoDMode = false,
             customShadeFunction = "",
-            customElements = [],
             onCompilationComplete = undefined,
         } = options;
 
@@ -344,7 +348,6 @@ class SdfCanvas {
         this.useAA = useAA;
         this.twoDMode = twoDMode;
         this.customShadeFunction = customShadeFunction;
-        this.customElements = customElements;
         this.onCompilationComplete = onCompilationComplete;
     }
 
@@ -374,13 +377,11 @@ class SdfCanvas {
         this.#gl.getExtension('EXT_color_buffer_float');
         this.#gl.getExtension('OES_texture_float_linear');
 
-        if (!SdfCanvas.bakedGlyphsTexture) {
-            SdfCanvas.bakedGlyphsTexture = true;
-            await SdfCanvas.#bakeLetterSdfs(this.#gl);
-        }
+        const textureSetupPromise = (async () => {
+            this.#glyphTexture = await SdfCanvas.#bakeLetterSdfs(this.#gl);
+        })();
 
-        this.#resizeCanvasToDisplaySize();
-
+        // Continue with the rest of the setup
         // Set clear color to black, fully opaque
         this.#gl.clearColor(0.0, 0.0, 0.0, 1.0);
         // Clear the color buffer with specified clear color
@@ -407,8 +408,8 @@ class SdfCanvas {
         let functionString = "";
         let commandString = "";
 
-        for (let i = 0; i < Math.min(this.customElements.length, SdfCommands.CUSTOM_END - SdfCommands.CUSTOM_START); i++) {
-            const array = this.customElements[i];
+        for (let i = 0; i < Math.min(SdfCanvas.customElements.length, SdfCommands.CUSTOM_END - SdfCommands.CUSTOM_START); i++) {
+            const array = SdfCanvas.customElements[i];
 
             const functionName = `customElement${i}`;
             const glslArray = toGlslVec2Array(array);
@@ -416,7 +417,7 @@ class SdfCanvas {
             functionString += `CUSTOM_ELEMENT_FUNCTION(${functionName}, ${glslArray})`;
             commandString += `CUSTOM_ELEMENT_IF(${functionName}, ${SdfCommands.CUSTOM_START + i})`;
         }
-        this.#lastCustomIdx = Math.min(SdfCommands.CUSTOM_START + this.customElements.length - 1, SdfCommands.CUSTOM_END);
+        this.#lastCustomIdx = Math.min(SdfCommands.CUSTOM_START + SdfCanvas.customElements.length - 1, SdfCommands.CUSTOM_END);
 
         fragmentSource = injectGLSL(fragmentSource, "CUSTOM_ELEMENTS_FUNCTIONS", functionString);
         fragmentSource = injectGLSL(fragmentSource, "CUSTOM_ELEMENTS_COMMANDS", commandString);
@@ -478,6 +479,11 @@ class SdfCanvas {
             this.draw();
         });
 
+        // Wait for the texture baking before returning
+        await textureSetupPromise;
+        this.#resizeCanvasToDisplaySize();
+        this.#updateUniforms();
+
         this.#updateUniforms();
         if (this.onCompilationComplete != undefined) {
             this.onCompilationComplete();
@@ -511,7 +517,7 @@ class SdfCanvas {
 
         // Bind the baked SDF array to texture unit 0
         this.#gl.activeTexture(this.#gl.TEXTURE0);
-        this.#gl.bindTexture(this.#gl.TEXTURE_2D_ARRAY, SdfCanvas.glyphsTexture);
+        this.#gl.bindTexture(this.#gl.TEXTURE_2D_ARRAY, this.#glyphTexture);
 
         // Set uniform buffer values
         this.#updateUniforms();

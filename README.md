@@ -63,7 +63,6 @@ const options = {
     useAA: false,                     // Enables Anti-Aliasing
     twoDMode: false,                  // Enables the 2D mode
     customShadeFunction: "",          // Custom shading function
-    customElements: [],               // Definitions of custom elements
     onCompilationComplete: undefined  // Callback function for when the compilation is complete
 };
 
@@ -161,9 +160,9 @@ float intensity  = lightData[lightIdx + 1].x;
 float radius     = lightData[lightIdx + 1].y;
 float lightType  = lightData[lightIdx + 1].z; // 0 for point light, 1 for directional light
 ```
-* **customElements:** You can define custom elements by setting the `customElements` member variable of the `SdfCanvas` object. This is an array of arrays of 2D points that define the vertices of custom elements in object space. See below how to use the custom elements.
+* **customElements:** You can define custom elements by setting the **static** `customElements` member variable of the `SdfCanvas` object. This is an array of arrays of 2D points that define the vertices of custom elements in object space. See below how to use the custom elements.
 ```js
-sdfCanvas.customElements = [
+SdfCanvas.customElements = [
     [[-0.5, 0], [0.5, 0], [0.5, 0.5]],
     [[-1.5, 0], [1.5, 0], [0.3, 2.5], [0.1, 0.5]],
 ];
@@ -329,7 +328,7 @@ Arbitrary 2D polygons that are extruded along the local z-axis. You have to defi
 
 | Property / Attribute | Description |
 |---|---|
-| `data-custom-index` | HTML attribute that controls which of the previously defined polygons this element should be rendered as. E.g. a value of 1 would use the shape defined in `sdfCanvas.customElements[1]`. *This is NOT a CSS property, but a HTML Attribute. (see example above)* |
+| `data-custom-index` | HTML attribute that controls which of the previously defined polygons this element should be rendered as. E.g. a value of 1 would use the shape defined in `SdfCanvas.customElements[1]`. *This is NOT a CSS property, but a HTML Attribute. (see example above)* |
 | `--scale` | Controls the scale of the custom elements. E.g., if scale is set to `10rem`, then 1 unit of object space will appear to be `10rem` on the screen. |
 | `--depth` | Controls the depth of the polygon. |
 | `--extrude` | Extrudes all surfaces along their normal. Allows for rounded corners. |
