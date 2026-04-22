@@ -92,7 +92,7 @@ get ready();
  * @param {number} compilePolicy - If compilation should continue even if background compilation is not available. Should be SdfCanvas.COMPILE_POLICY_ONLY_PARALLEL or SdfCanvas.COMPILE_POLICY_ALSO_BLOCKING
  * @returns {Promise<boolean>} Boolean if compilation was successful.
  */
-async initWebgl(compilePolicy = SdfCanvas.COMPILE_POLICY_ONLY_PARALLEL);
+async initWebgl(compilePolicy = SdfCanvas.COMPILE_POLICY_ALSO_BLOCKING);
 
 /**
  * Updates the elements and renders the scene.
