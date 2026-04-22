@@ -483,8 +483,6 @@ class SdfCanvas {
         await textureSetupPromise;
         this.#resizeCanvasToDisplaySize();
         this.#updateUniforms();
-
-        this.#updateUniforms();
         if (this.onCompilationComplete != undefined) {
             this.onCompilationComplete();
         }
