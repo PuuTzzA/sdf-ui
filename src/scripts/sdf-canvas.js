@@ -375,8 +375,8 @@ class SdfCanvas {
         this.#gl.getExtension('OES_texture_float_linear');
 
         if (!SdfCanvas.bakedGlyphsTexture) {
-            await SdfCanvas.#bakeLetterSdfs(this.#gl);
             SdfCanvas.bakedGlyphsTexture = true;
+            await SdfCanvas.#bakeLetterSdfs(this.#gl);
         }
 
         this.#resizeCanvasToDisplaySize();
