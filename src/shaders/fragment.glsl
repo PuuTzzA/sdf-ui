@@ -733,7 +733,7 @@ struct ColorStop {
 #else // custom shade function
 
 #ifdef TWO_D_MODE
-vec3 shade(Surface surface) {
+vec4 shade(Surface surface) {
     float sdfValue = surface.distance * 80.0f;
 
     ColorStop[] colors = ColorStop[](
@@ -742,10 +742,10 @@ vec3 shade(Surface surface) {
     
     vec3 finalColor;
     COLOR_RAMP(colors, sdfValue, finalColor);
-    return vec3(finalColor);
+    return vec4(finalColor, 1.0f);
 }
-#else // 2d mode
-vec3 shade(HitInfo hit) {
+#else // 2d mode == false
+vec4 shade(HitInfo hit) {
     /* if (hit.id == -1) {
         return vec3(1., 0., 1.);
     }
@@ -761,9 +761,9 @@ vec3 shade(HitInfo hit) {
     }
     return vec3(1, 0., 0.); */
 
-    /* if (hit.id == -1) {
-        return vec3(0);
-    } */
+    if (hit.id == -1) {
+        return vec4(0.0f);
+    }
     // return hit.surface.colorDiffuse;
 
     //float mixFactor = gaussian(surface.mix, 0.5f, 0.07f); 
@@ -824,7 +824,7 @@ vec3 shade(HitInfo hit) {
         resultColor += (diffuse + specular) * finalLightEnergy;
     }
 
-    return resultColor;
+    return vec4(resultColor, 1.0f);
 }
 #endif // 2d mode
 #endif // custom shade function
@@ -840,7 +840,7 @@ void main(void) {
     vec3 pos = vec3(uv, uCameraZ);
     vec3 dir = vec3(0.0f, 0.0f, -1.0f);
 
-    vec3 color = vec3(0.0f);
+    vec4 color = vec4(0.0f);
 
 #ifdef AA // Anti aliasing
     const vec2 subPixleOffsets[] = vec2[](vec2(0.375f, 0.125f) - vec2(0.5f), vec2(0.875f, 0.375f) - vec2(0.5f), vec2(0.125f, 0.625f) - vec2(0.5f), vec2(0.625f, 0.875f) - vec2(0.5f));
@@ -871,5 +871,5 @@ void main(void) {
     color = shade(currentSurface);
 #endif // Anti-aliasing
 
-    fragColor = vec4(color, 1.0f);
+    fragColor = color;
 }

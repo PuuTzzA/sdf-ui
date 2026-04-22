@@ -9,6 +9,11 @@ html,
     box-sizing: border-box;
 }
 
+body {
+    background-color: black;
+    overflow: hidden;
+}
+
 #compiling-screen {
     position: absolute;
     top: 0;

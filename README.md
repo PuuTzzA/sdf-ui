@@ -126,8 +126,8 @@ There are a few variables that can only be changed **before** calling `initWebgl
 * **useCustomShadeFunction:** Enables the use of a custom `shade` function to control the exact look of the scene. Otherwise, the scene is shaded as described below in the Shading section. If a custom shading function is used, it has to be stored as a string in the `customShadeFunction` member of the `sdfCanvas` object. This custom shade function takes the traced position as an input and returns the color that should be rendered at that point. It has to be of the following format:
   
 ```glsl
-vec3 shade(Surface surface); // if twoDMode is used
-vec3 shade(HitInfo hit);     // if the normal 3D mode is used
+vec4 shade(Surface surface); // if twoDMode is used
+vec4 shade(HitInfo hit);     // if the normal 3D mode is used
 
 // The Structs are defined as follows:
 struct Surface {
