@@ -1,12 +1,6 @@
 import { SdfCanvas, SdfLayer, SdfCommands, Twist } from "../src/scripts/sdf-ui.js";
 
-/* const sdfCanvas2 = new SdfCanvas("canvas2", [1]);
-sdfCanvas2.initWebgl(); */
-
 const testtext = document.querySelector("#test-sdf-text")
-
-// SdfCanvas.layers = [new SdfLayer(SdfCommands.SMOOTH_UNION, 100)]
-
 document.getElementById("my-input").addEventListener("input", () => {
     let text = document.getElementById("my-input").value;
     testtext.innerHTML = text;
@@ -19,7 +13,6 @@ let lastFps = []
 
 const target = document.querySelector("#target");
 testDiv.addModifier(new Twist(target));
-//testtext.addModifier(new Twist(null, 0.1, [0, 1, 0]));
 
 const SIZE = 90;
 for (let i = 0; i < SIZE; i++) {
@@ -51,7 +44,6 @@ sdfCanvas.customElements = [
 sdfCanvas.initWebgl(SdfCanvas.COMPILE_POLICY_ALSO_BLOCKING);
 
 function gameLoop(now) {
-
     // FPS counter
     const delta = now - lastTime;
     fps = 1000 / delta;     // frames per second
