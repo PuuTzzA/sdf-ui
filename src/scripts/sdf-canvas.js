@@ -296,7 +296,9 @@ class SdfCanvas {
 
     set downscaleFactorX(val) {
         this.#downscaleFactorX = val;
-        this.#resizeCanvasToDisplaySize();
+        if (this.#ready) {
+            this.#resizeCanvasToDisplaySize();
+        }
     }
 
     get downscaleFactorY() {
@@ -305,7 +307,9 @@ class SdfCanvas {
 
     set downscaleFactorY(val) {
         this.#downscaleFactorY = val;
-        this.#resizeCanvasToDisplaySize();
+        if (this.#ready) {
+            this.#resizeCanvasToDisplaySize();
+        }
     }
 
     constructor(canvasName, options = {}) {
