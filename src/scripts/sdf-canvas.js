@@ -661,6 +661,10 @@ class SdfCanvas {
             for (let i = 0; i < layer.elementsInLayer; i++) {
                 const element = SdfCanvas.#trackedElements[elementIdx++];
 
+                if (!element.active) {
+                    continue;
+                }
+
                 // check if we even want to render that element
                 if (!this.#containedInRenderLayers(element)) {
                     continue;
@@ -1008,6 +1012,10 @@ class SdfCanvas {
         let lightBufferIdx = 0;
         for (let i = 0; i < SdfCanvas.#trackedLights.length; i++) {
             const light = SdfCanvas.#trackedLights[i];
+
+            if (!light.active) {
+                continue;
+            }
 
             if (!this.#containedInRenderLayers(light)) {
                 continue;

@@ -242,6 +242,20 @@ The z-position (the more positive the higher on the page, like z-index, but as a
 
 All objects can be rotated, translated, or skewed (in 2D or 3D) with the CSS `transform` property (e.g., `rotate`, `rotate3d`, `translate`, etc.).
 
+All elements also support the `active` dataset-value:
+
+```html
+<sdf-sphere id="shpere" data-active="false">Sphere</sdf-sphere>
+```
+
+If an element is marked as not active it is rendered in no canvas. The default value is `true`. The active property can be modified in javaScript like so:
+
+```js
+const s = document.getElementById("shere");
+s.active = false;
+console.log(s.active);
+```
+
 The supported primitive objects are:
 
 > [!IMPORTANT]
@@ -253,9 +267,9 @@ A normal sphere.
 <sdf-sphere id="test-sdf-sphere" data-layer-index="1">Sphere</sdf-sphere>
 ```
 
-| Property | Description |
-|---|---|
-| `--r` | Controls the radius of the sphere. |
+| Property | Description                        |
+| -------- | ---------------------------------- |
+| `--r`    | Controls the radius of the sphere. |
 
 ### 2. Simple Box
 A simple box with width, height, and depth.
@@ -263,11 +277,11 @@ A simple box with width, height, and depth.
 <sdf-box-simple id="test-sdf-box-simple" data-layer-index="1">Simple Box</sdf-box-simple>
 ```
 
-| Property | Description |
-|---|---|
-| `width`, `height` | Control the width and height of the box. |
-| `--depth` | Controls the depth of the box. |
-| `--extrude` | Extrudes all surfaces along their normal. Allows for rounded corners. |
+| Property          | Description                                                           |
+| ----------------- | --------------------------------------------------------------------- |
+| `width`, `height` | Control the width and height of the box.                              |
+| `--depth`         | Controls the depth of the box.                                        |
+| `--extrude`       | Extrudes all surfaces along their normal. Allows for rounded corners. |
 
 ### 3. Box
 A more general box that also supports `border-radius`.
@@ -275,13 +289,13 @@ A more general box that also supports `border-radius`.
 <sdf-box id="test-sdf-box" data-layer-index="1">Box with rounded corners</sdf-box>
 ```
 
-| Property | Description |
-|---|---|
-| `width`, `height`, `--depth` | Controlled in the same way as for the simple box. |
-| `border-radius` | Controls the border radius (same as normal CSS). May be different for each corner. |
-| `--border-radius-type` | Controls the type of the radius (see [this article](https://iquilezles.org/articles/roundedboxes/)). Available options: <br> • `circle`: Default.<br> • `parabola`: Smoother than circle.<br> • `cosine`: Uses Cosine similarity to fix second-derivative discontinuities. *More computationally expensive (uses binary search).*<br> • `cubic`: Also provides continuous second derivatives. *Also uses binary search.* |
-| `--rotation-offset` | Controls the initial rotation of the box (axis around which corners are rounded). Can be `z` (default), `x`, or `y`. |
-| `--extrude` | Extrudes all surfaces along their normal. Allows for rounded corners. |
+| Property                     | Description                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `width`, `height`, `--depth` | Controlled in the same way as for the simple box.                                                                                                                                                                                                                                                                                                                                                                        |
+| `border-radius`              | Controls the border radius (same as normal CSS). May be different for each corner.                                                                                                                                                                                                                                                                                                                                       |
+| `--border-radius-type`       | Controls the type of the radius (see [this article](https://iquilezles.org/articles/roundedboxes/)). Available options: <br> • `circle`: Default.<br> • `parabola`: Smoother than circle.<br> • `cosine`: Uses Cosine similarity to fix second-derivative discontinuities. *More computationally expensive (uses binary search).*<br> • `cubic`: Also provides continuous second derivatives. *Also uses binary search.* |
+| `--rotation-offset`          | Controls the initial rotation of the box (axis around which corners are rounded). Can be `z` (default), `x`, or `y`.                                                                                                                                                                                                                                                                                                     |
+| `--extrude`                  | Extrudes all surfaces along their normal. Allows for rounded corners.                                                                                                                                                                                                                                                                                                                                                    |
 
 ### 4. Text
 An element containing text which is rendered as SDF elements. As of now, there is one supported font, **metaballs** (only lower case letters and numbers for now). All the letters inside one `<sdf-text>` element will have the same material and size. Sdf-text elements support `letter-spacing`, `word-spacing`, and `word-break`.
@@ -290,11 +304,11 @@ An element containing text which is rendered as SDF elements. As of now, there i
 <sdf-text id="test-sdf-box-round" data-layer-index="1">Text</sdf-text>
 ```
 
-| Property | Description |
-|---|---|
-| `--depth` | Controls the depth of the letters. |
+| Property             | Description                                                                                                                                        |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--depth`            | Controls the depth of the letters.                                                                                                                 |
 | `--letterSmoothness` | Controls the smoothing between individual letters, which are internally combined using a `SMOOTH_UNION` function. A value of 0 means no smoothing. |
-| `--extrude` | Extrudes all surfaces along their normal. Allows for rounded corners. |
+| `--extrude`          | Extrudes all surfaces along their normal. Allows for rounded corners.                                                                              |
 
 ### 5. Cylinder
 A cylinder.
@@ -303,21 +317,21 @@ A cylinder.
 <sdf-cylinder id="test-sdf-cylinder" data-layer-index="2">Cylinder</sdf-cylinder>
 ```
 
-| Property | Description |
-|---|---|
-| `--axis` | Controls along which axis the cylinder is formed. Can be `x`, `y`, or `z`. Depending on this value, `width`, `height`, and `--depth` control the height and the radius of the cylinder. |
-| `--extrude` | Extrudes all surfaces along their normal. Allows for rounded corners. |
+| Property    | Description                                                                                                                                                                             |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--axis`    | Controls along which axis the cylinder is formed. Can be `x`, `y`, or `z`. Depending on this value, `width`, `height`, and `--depth` control the height and the radius of the cylinder. |
+| `--extrude` | Extrudes all surfaces along their normal. Allows for rounded corners.                                                                                                                   |
 
 ### 6. Triangle
 An arbitrary triangle.
 ```html
 <sdf-triangle id="test-sdf-triangle" data-layer-index="2">Triangle</sdf-triangle>
 ```
-| Property | Description |
-|---|---|
+| Property                              | Description                                                                                              |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | `--point-a`, `--point-b`, `--point-c` | The three vertices of the triangle. They are `vec2` values set in CSS (e.g., `--point-a: -5rem -5rem;`). |
-| `--depth` | Controls the depth of the triangle. |
-| `--extrude` | Extrudes all surfaces along their normal. Allows for rounded corners. |
+| `--depth`                             | Controls the depth of the triangle.                                                                      |
+| `--extrude`                           | Extrudes all surfaces along their normal. Allows for rounded corners.                                    |
 
 ### 7. Custom Elements
 Arbitrary 2D polygons that are extruded along the local z-axis. You have to define the shape before initializing the WebGL canvas (see [Compile Time Constants](#compile-time-constants)). 
@@ -326,26 +340,26 @@ Arbitrary 2D polygons that are extruded along the local z-axis. You have to defi
 <sdf-custom id="test-sdf-custom" data-custom-index="0" data-layer-index="2"></sdf-custom>
 ```
 
-| Property / Attribute | Description |
-|---|---|
-| `data-custom-index` | HTML attribute that controls which of the previously defined polygons this element should be rendered as. E.g. a value of 1 would use the shape defined in `SdfCanvas.customElements[1]`. *This is NOT a CSS property, but a HTML Attribute. (see example above)* |
-| `--scale` | Controls the scale of the custom elements. E.g., if scale is set to `10rem`, then 1 unit of object space will appear to be `10rem` on the screen. |
-| `--depth` | Controls the depth of the polygon. |
-| `--extrude` | Extrudes all surfaces along their normal. Allows for rounded corners. |
+| Property / Attribute | Description                                                                                                                                                                                                                                                       |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `data-custom-index`  | HTML attribute that controls which of the previously defined polygons this element should be rendered as. E.g. a value of 1 would use the shape defined in `SdfCanvas.customElements[1]`. *This is NOT a CSS property, but a HTML Attribute. (see example above)* |
+| `--scale`            | Controls the scale of the custom elements. E.g., if scale is set to `10rem`, then 1 unit of object space will appear to be `10rem` on the screen.                                                                                                                 |
+| `--depth`            | Controls the depth of the polygon.                                                                                                                                                                                                                                |
+| `--extrude`          | Extrudes all surfaces along their normal. Allows for rounded corners.                                                                                                                                                                                             |
 
 ## Lights
-Lights are controlled similar to elements. You have to create an HTML element that represents the light:
+Lights are controlled similar to elements (they also support the `data-render-layers` and `data-active` properties). You have to create an HTML element that represents the light:
 ```html
 <sdf-light data-render-layers="0">Directional Light</sdf-light>
 ```
 
-| CSS Property | Description |
-|---|---|
-| `--diffuse-color` | Color of the light. |
-| `--light-intensity` | Intensity of the light. |
-| `--light-type` | Can be `point` or `directional`. Controls if the light has a position and falloff, or just a direction without falloff. |
+| CSS Property        | Description                                                                                                                |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `--diffuse-color`   | Color of the light.                                                                                                        |
+| `--light-intensity` | Intensity of the light.                                                                                                    |
+| `--light-type`      | Can be `point` or `directional`. Controls if the light has a position and falloff, or just a direction without falloff.    |
 | `--light-direction` | Three-component value representing the direction of the light for directional lights (e.g., `--light-direction: 1 1 -1;`). |
-| `--radius` | Represents the radius of the light for point lights. Things further away than this are not illuminated by this light. |
+| `--radius`          | Represents the radius of the light for point lights. Things further away than this are not illuminated by this light.      |
 
 ## Modifiers
 You can add modifiers to SDF elements to alter their appearance. As of now, there is only one supported modifier. You can add modifiers to elements like so:
@@ -359,26 +373,26 @@ sdfElement.addModifier(new Twist(target));
 ### Twist
 Add a twist to the selected element. The twist is controlled by a **target** element, which is an HTML element passed into the constructor. This target element expects the following CSS properties:
 
-| CSS Property | Description |
-|---|---|
-| `--twist-axis` | 3D vector that controls the axis around which the twist is applied (e.g., `--twist-axis: 0 1 0;`). |
-| `--twist-rate` | The twist rate. Measured in revolutions per `rem`. A rate of `0.1` means a `10rem` element twists exactly once around `--twist-axis`. |
-| `--twist-start` | The distance along the twist axis up to which the twist is applied normally. From here to `--twist-end`, the twist tapers off. |
-| `--twist-end` | The distance where the twist tapers off and stops entirely. |
+| CSS Property    | Description                                                                                                                           |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `--twist-axis`  | 3D vector that controls the axis around which the twist is applied (e.g., `--twist-axis: 0 1 0;`).                                    |
+| `--twist-rate`  | The twist rate. Measured in revolutions per `rem`. A rate of `0.1` means a `10rem` element twists exactly once around `--twist-axis`. |
+| `--twist-start` | The distance along the twist axis up to which the twist is applied normally. From here to `--twist-end`, the twist tapers off.        |
+| `--twist-end`   | The distance where the twist tapers off and stops entirely.                                                                           |
 
 ## Shading
 
 All SDF elements should have the following CSS properties to control their material rendering:
 
-| CSS Property | Parameter | Description |
-|---|---|---|
-| `--diffuse-color` | $C_d$ | Controls the diffuse color of the object. |
-| `--specular-color`| $C_s$ | Controls the specular color of the object. |
-| `--ambient-color` | $C_a$ | Controls the ambient color of the object. |
-| `--kd` | $k_d$ | Controls the diffuse parameter (weight) of the object. |
-| `--ks` | $k_s$ | Controls the specular parameter (weight) of the object. |
-| `--p` | $p$ | Controls the specular exponent (shininess) of the object. |
-| `--ka` | $k_a$ | Controls the ambient parameter (weight) of the object. |
+| CSS Property       | Parameter | Description                                               |
+| ------------------ | --------- | --------------------------------------------------------- |
+| `--diffuse-color`  | $C_d$     | Controls the diffuse color of the object.                 |
+| `--specular-color` | $C_s$     | Controls the specular color of the object.                |
+| `--ambient-color`  | $C_a$     | Controls the ambient color of the object.                 |
+| `--kd`             | $k_d$     | Controls the diffuse parameter (weight) of the object.    |
+| `--ks`             | $k_s$     | Controls the specular parameter (weight) of the object.   |
+| `--p`              | $p$       | Controls the specular exponent (shininess) of the object. |
+| `--ka`             | $k_a$     | Controls the ambient parameter (weight) of the object.    |
 
 These are used to calculate the final color ($C$) of a point on the surface with normal $\vec{n}$, vector towards the light source $\vec{l}$, and the view vector towards the camera $\vec{v}$. The default shading function uses the **Phong shading model** to calculate the final color:
 

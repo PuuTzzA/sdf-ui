@@ -9,7 +9,7 @@ function addCss(fileName) {
 
     link.type = "text/css";
     link.rel = "stylesheet";
-    
+
     // Resolves the relative path against the current JS file's URL
     link.href = new URL(fileName, import.meta.url).href;
 
@@ -39,6 +39,10 @@ class ASdfElement extends HTMLElement {
 
         if (this.dataset.renderLayers == undefined) {
             this.dataset.renderLayers = 0;
+        }
+
+        if (this.dataset.active == undefined) {
+            this.dataset.active = true;
         }
 
         this.classList.add("sdf-ui-base-class");
@@ -79,6 +83,14 @@ class ASdfElement extends HTMLElement {
         if (index > -1) {
             this.#modifiers.splice(index, 1);
         }
+    }
+
+    get active() {
+        return this.dataset.active == "true";
+    }
+
+    set active(value) {
+        this.dataset.active = value;
     }
 }
 
@@ -322,12 +334,24 @@ class SdfLight extends HTMLElement {
             this.dataset.renderLayers = 0;
         }
 
+        if (this.dataset.active == undefined) {
+            this.dataset.active = true;
+        }
+
         this.classList.add("sdf-ui-base-class");
         SdfCanvas.addTrackedLight(this);
     }
 
     disconnectedCallback() {
         SdfCanvas.removeTrackedLight(this);
+    }
+
+    get active() {
+        return this.dataset.active == "true";
+    }
+
+    set active(value) {
+        this.dataset.active = value;
     }
 }
 
