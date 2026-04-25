@@ -130,6 +130,8 @@ addOverwriteLayer(index, overwriteLayer);
 removeOverwriteLayer(index);
 ```
 
+> [!NOTE]
+> If you want to change the area that the camera draws often (e.g., every frame), do not change the width and height of the canvas directly. Instead, use the `scissor` parameter of the `draw` function. If you change the width and height of the canvas directly, the canvas context is dropped and has to be rebuilt, which tanks performance.
 
 ### Compile Time Constants
 There are a few variables that can only be changed **before** calling `initWebgl()`. These are:
