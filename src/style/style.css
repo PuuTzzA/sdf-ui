@@ -162,7 +162,7 @@
 
 .sdf-ui-base-class {
     display: block;
-    background-color: rgba(0, 0, 0, 0) !important;
+    background-color: rgba(0, 0, 0, 0);
 }
 
 @font-face {
@@ -172,5 +172,5 @@
 
 .sdf-ui-text-base-class {
     font-family: metaballs;
-    color: rgba(0, 0, 0, 0) !important;
+    color: rgba(0, 0, 0, 0);
 }

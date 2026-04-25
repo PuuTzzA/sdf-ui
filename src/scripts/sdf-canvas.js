@@ -164,6 +164,17 @@ class SdfCanvas {
         this.#trackedLights.splice(index, 1);
     }
 
+    /**
+    * Performs the passed function for every tracked element.
+    * Usefull for e.g. adding or removing css classes.
+    * @param {Function} f - The callback function to execute for each element.
+    */
+    static performForEachElement(f) {
+        this.#trackedElements.forEach((e) => {
+            f(e);
+        })
+    }
+
     static #getElementSize(element) { // in amounts of vec4s
         switch (element.getElementType()) {
             case SdfCommands.SPHERE:
@@ -286,6 +297,10 @@ class SdfCanvas {
     #glyphTexture;
 
     // Getters and Setters
+    get canvas() {
+        return this.#canvas;
+    }
+
     get ready() {
         return this.#ready;
     }
@@ -360,8 +375,8 @@ class SdfCanvas {
      * @param {number} compilePolicy - If compilation should continue even if background compilation is not available. Should be SdfCanvas.COMPILE_POLICY_ONLY_PARALLEL or SdfCanvas.COMPILE_POLICY_ALSO_BLOCKING
      * @returns {Promise<boolean>} Boolean if compilation was successful.
      */
-    async initWebgl(compilePolicy = SdfCanvas.COMPILE_POLICY_ALSO_BLOCKING) {
-        this.#canvas = document.getElementById(this.#canvasName);
+    async initWebgl(compilePolicy = SdfCanvas.COMPILE_POLICY_ALSO_BLOCKING, alpha = true) {
+        this.#canvas = document.getElementById(this.#canvasName, { alpha: "false", powerPreference: "high-performance" });
 
         // Initialize the GL context
         this.#gl = this.#canvas.getContext("webgl2");
@@ -494,10 +509,50 @@ class SdfCanvas {
         return true;
     }
 
-    draw() {
+    /**
+     * Renders the WebGL scene.
+     * If a scissor bounding box is provided, the WebGL scissor test is enabled, 
+     * restricting fragment shader execution and clearing operations to that specific 
+     * rectangular area. The scissor coordinates are expected to be in standard DOM 
+     * space (top-down Y axis) and are automatically mapped to WebGL buffer space.
+     *  
+     * @param {{x: number, y: number, w: number, h: number} | null} [scissor=null] - The bounding box for the scissor test.
+     * For this function to work correctly, if `scissor` is not null, it MUST be an object containing the following numeric properties:
+     * - `x`: The X coordinate of the top-left corner in DOM pixels.
+     * - `y`: The Y coordinate of the top-left corner in DOM pixels.
+     * - `w`: The width of the scissor box in DOM pixels.
+     * - `h`: The height of the scissor box in DOM pixels.
+     */
+    draw(scissor = null) {
         if (!this.#ready) {
             return;
         }
+
+        this.#gl.disable(this.#gl.SCISSOR_TEST);
+        if (scissor) {
+            this.#gl.clearColor(0.0, 0.0, 0.0, 0.0);
+            this.#gl.clear(this.#gl.COLOR_BUFFER_BIT | this.#gl.DEPTH_BUFFER_BIT);
+        }
+
+        this.#gl.enable(this.#gl.DEPTH_TEST);
+        this.#gl.depthFunc(this.#gl.LEQUAL);
+
+        // Scissor Test: The GPU will ONLY run the fragment shader inside this box
+        if (scissor) {
+            this.#gl.enable(this.#gl.SCISSOR_TEST);
+
+            // Map DOM coordinates to WebGL buffer coordinates
+            const scaleX = this.#canvas.width / window.innerWidth;
+            const scaleY = this.#canvas.height / window.innerHeight;
+
+            const sx = scissor.x * scaleX;
+            const sy = this.#canvas.height - ((scissor.y + scissor.h) * scaleY); // WebGL Y is bottom-up
+            const sw = scissor.w * scaleX;
+            const sh = scissor.h * scaleY;
+
+            this.#gl.scissor(sx, sy, sw, sh);
+        }
+
         this.#gl.clearColor(1.0, 0.0, 1.0, 1.0); // Clear to black, fully opaque
         this.#gl.clearDepth(1.0); // Clear everything
         this.#gl.enable(this.#gl.DEPTH_TEST); // Enable depth testing
@@ -1074,13 +1129,16 @@ class SdfCanvas {
         return this.renderLayers.some(item => elementRenderLayers.includes(item));
     }
 
-    #resizeCanvasToDisplaySize() {
+    #resizeCanvasToDisplaySize(targetWidth, targetHeight) {
         // 1. Get the pixel density of the screen (e.g., Retina screens are often 2)
         const dpr = window.devicePixelRatio || 1;
 
         // 2. Calculate the actual physical pixels of the display area
-        const displayWidth = this.#canvas.clientWidth * dpr;
-        const displayHeight = this.#canvas.clientHeight * dpr;
+        const w = targetWidth !== undefined ? targetWidth : this.#canvas.clientWidth;
+        const h = targetHeight !== undefined ? targetHeight : this.#canvas.clientHeight;
+
+        const displayWidth = w * dpr;
+        const displayHeight = h * dpr;
 
         // 3. Apply your downscale factor to determine the WebGL rendering resolution
         // (Math.max is used to prevent the canvas from ever being 0x0 pixels)

@@ -82,6 +82,13 @@ static layers = [
 ]
 
 /**
+* Performs the passed function for every tracked element.
+* Usefull for e.g. adding or removing css classes.
+* @param {Function} f - The callback function to execute for each element.
+*/
+static performForEachElement(f);
+
+/**
  * Boolean to check if the canvas is ready (e.g., compilation complete).
  */
 get ready();
@@ -94,9 +101,20 @@ get ready();
 async initWebgl(compilePolicy = SdfCanvas.COMPILE_POLICY_ALSO_BLOCKING);
 
 /**
- * Updates the elements and renders the scene.
+ * Renders the WebGL scene.
+ * If a scissor bounding box is provided, the WebGL scissor test is enabled, 
+ * restricting fragment shader execution and clearing operations to that specific 
+ * rectangular area. The scissor coordinates are expected to be in standard DOM 
+ * space (top-down Y axis) and are automatically mapped to WebGL buffer space.
+ *  
+ * @param {{x: number, y: number, w: number, h: number} | null} [scissor=null] - The bounding box for the scissor test.
+ * For this function to work correctly, if `scissor` is not null, it MUST be an object containing the following numeric properties:
+ * - `x`: The X coordinate of the top-left corner in DOM pixels.
+ * - `y`: The Y coordinate of the top-left corner in DOM pixels.
+ * - `w`: The width of the scissor box in DOM pixels.
+ * - `h`: The height of the scissor box in DOM pixels.
  */
-draw();
+draw(scissor = null);
 
 /**
  * Add an overwriteLayer to the SdfCanvas. This canvas will then use this overwriteLayer's properties instead of the global SdfLayer properties.
