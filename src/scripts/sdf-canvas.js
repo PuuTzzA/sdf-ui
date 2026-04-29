@@ -541,9 +541,17 @@ class SdfCanvas {
         if (scissor) {
             this.#gl.enable(this.#gl.SCISSOR_TEST);
 
-            // Map DOM coordinates to WebGL buffer coordinates
-            const scaleX = this.#canvas.width / window.innerWidth;
-            const scaleY = this.#canvas.height / window.innerHeight;
+            // FIX: Use clientWidth/clientHeight instead of window.innerWidth/innerHeight
+            // This prevents mapping distortions caused by the browser's vertical scrollbar.
+            const scaleX = this.#canvas.width / this.#canvas.clientWidth;
+            const scaleY = this.#canvas.height / this.#canvas.clientHeight;
+
+            // Optional safeguard: If your scissor DOM coords come from getBoundingClientRect(), 
+            // and the canvas is NOT at exactly (0,0) of the window, you need to subtract the canvas offset:
+            // const rect = this.#canvas.getBoundingClientRect();
+            // const localX = scissor.x - rect.left;
+            // const localY = scissor.y - rect.top;
+            // Then use localX and localY below instead of scissor.x and scissor.y
 
             const sx = scissor.x * scaleX;
             const sy = this.#canvas.height - ((scissor.y + scissor.h) * scaleY); // WebGL Y is bottom-up
@@ -916,7 +924,6 @@ class SdfCanvas {
                                 break;
                         }
 
-
                         this.#geometryBuffer[geometryBufferIdx + 8] = SdfCanvas.#intToFloatBits(borderType); // border radius
                         this.#geometryBuffer[geometryBufferIdx + 9] = parseFloat(computedStyle.getPropertyValue("--extrude")) * oneOverX; // rounding
                         break;
@@ -936,6 +943,7 @@ class SdfCanvas {
                         let referenceX, referenceY, referenceZ = 0;
 
                         let letterIdx = 0;
+                        let globalWordTOffset = 0;
                         textOuterLoop:
                         for (const [currentText, currentRect] of rects) {
                             // Get the screen/world space X and Y for the word's center
@@ -962,12 +970,18 @@ class SdfCanvas {
 
                             // In local space, the word is unrotated and its own center is at (0,0).
                             const wordLeftEdgeLocalX = -element.measure(currentText) * 0.5 * oneOverX; // currentHalfWidth
+                            const wordTOffset = currentText.charAt(0) == "t" ? -22.5 * glpyhSpaceScale : 0;
 
                             for (let currentLetterIdx = 0; currentLetterIdx < currentText.length; currentLetterIdx++) {
                                 let currentSubstringWidth = element.measure(currentText.substring(0, currentLetterIdx)) * oneOverX;
                                 const currentLetter = currentText.charAt(currentLetterIdx);
                                 if (currentLetter == "t") {
                                     currentSubstringWidth += 22.5 * glpyhSpaceScale;// * oneOverX;
+                                }
+                                if (letterIdx == 0) {
+                                    globalWordTOffset = currentText.charAt(0) == "t" ? -22.5 * glpyhSpaceScale : 0;
+                                } else {
+                                    currentSubstringWidth += globalWordTOffset;
                                 }
 
                                 if (letterIdx == 0) {
@@ -1086,7 +1100,7 @@ class SdfCanvas {
 
             const offsetX = (rect.left + rect.width * 0.5) * oneOverX;
             const offsetY = (rect.top + rect.height * 0.5) * oneOverX;
-            const offsetZ = this.twoDMode ? 0 : (parseFloat(computedStyle.getPropertyValue("--z")) + mat[14]) * oneOverX;
+            const offsetZ = (parseFloat(computedStyle.getPropertyValue("--z")) + mat[14]) * oneOverX;
 
             this.#lightBuffer[lightBufferIdx + 0] = offsetX;
             this.#lightBuffer[lightBufferIdx + 1] = offsetY;
@@ -1142,8 +1156,8 @@ class SdfCanvas {
 
         // 3. Apply your downscale factor to determine the WebGL rendering resolution
         // (Math.max is used to prevent the canvas from ever being 0x0 pixels)
-        const renderWidth = Math.max(1, Math.round(displayWidth / this.#downscaleFactorX));
-        const renderHeight = Math.max(1, Math.round(displayHeight / this.#downscaleFactorY));
+        const renderWidth = Math.max(1, Math.round(displayWidth / (this.#downscaleFactorX * dpr)));
+        const renderHeight = Math.max(1, Math.round(displayHeight / (this.#downscaleFactorY * dpr)));
 
         // 4. If the rendering resolution changed, update the canvas and viewport
         if (this.#canvas.width !== renderWidth || this.#canvas.height !== renderHeight) {
