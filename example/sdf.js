@@ -58,6 +58,7 @@ function gameLoop(now) {
     fpsDiv.innerHTML = avg.toFixed(1);  // show FPS with 1 decimal
 
     // Draw Scene
+    SdfCanvas.updateElements();
     sdfCanvas.draw();
 
     requestAnimationFrame(gameLoop);
