@@ -9,9 +9,10 @@ Some of the capabilities are shown [here](https://puutzza.github.io/sdf-ui/).
   - [Table of Contents](#table-of-contents)
   - [Technology](#technology)
   - [SdfCanvas](#sdfcanvas)
-    - [Example](#example)
+    - [Foreground and Background Canvases](#foreground-and-background-canvases)
     - [Coordinate System and Camera](#coordinate-system-and-camera)
-    - [Usage](#usage)
+    - [Usage \& Initialization](#usage--initialization)
+    - [Examples](#examples)
     - [Public Members and Functions](#public-members-and-functions)
     - [Compile Time Constants](#compile-time-constants)
   - [Layers](#layers)
@@ -36,15 +37,19 @@ SdfUi uses only HTML, CSS, JavaScript, and WebGL to create and render the scene.
 ## SdfCanvas
 `SdfCanvas` is the central class of this framework that controls most of the functionality.
 
-### Example 
-To see how this framework can be used, look [here](./example/sdf.js) under the sections **Sdf Canvas** and **Loop**.
+### Foreground and Background Canvases
+
+To maximize performance, a single `SdfCanvas` context can manage two separate internal rendering layers: a **Foreground** and a **Background**. This is useful if you want to stack the effect and increase performance, e.g., by limiting the resolution of the background. If you have, for example, two fullscreen canvases, you should always use this feature instead of two separate instances of `SdfCanvas`, because this way the canvases can share a WebGL context and, for example, the texture buffer of the letters (this also reduces compile time).
+
+> [!Note]
+> You can change the downscale factors of the foreground and background canvases independently, but the maximum resolution will always be determined by the values of the **foreground**. That means that if you want a high-resolution background and a low-resolution foreground, you have to use two separate `SdfCanvas` instances instead of one with a foreground and a background.
 
 ### Coordinate System and Camera
 Each `SdfCanvas` is bound to a [canvas](https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API). The origin of the created space is at the top left. The x-axis increases to the left, the y-axis to the bottom, and the z-axis towards the user (out of the screen). 
 
 The orthographic camera has the position `(0, 0, cameraZ)` and a view direction of `(0, 0, -1)`. 
 
-### Usage
+### Usage & Initialization
 To use SDF UI, you must include the sdf-elements script in your HTML file:
 ```html
 <script src="src/scripts/sdf-elements.js" type="module"></script>
@@ -53,27 +58,46 @@ You also have to create a canvas element and give it a unique ID:
 ```html
 <canvas id="canvas"></canvas>
 ```
-Next, create a script to instantiate an SDF canvas from the HTML canvas you just created. First, import `SdfCanvas`, and then create a new `SdfCanvas` object while passing the unique ID as a parameter.
+
+Next, create a script to instantiate an SDF canvas from the HTML canvas you just created. The `SdfCanvas` accepts an `options` object where you define the configurations for the `canvas` (Foreground) and optionally the `backgroundCanvas`.
 ```js
 import { SdfCanvas } from "../src/scripts/sdf-ui.js";
 
-// SdfCanvas accepts an options object with the following properties (showing default values):
-const options = {
-    renderLayers: [0],                // Which layers are rendered by this canvas (see section Render Layers)
-    downscaleFactorX: 2,              // Factor to downscale the horizontal resolution
-    downscaleFactorY: 2,              // Factor to downscale the vertical resolution
-    cameraZ: 10,                      // Controls the z-coordinate of the camera
-    useAA: false,                     // Enables Anti-Aliasing
-    twoDMode: false,                  // Enables the 2D mode
-    customShadeFunction: "",          // Custom shading function
-    onCompilationComplete: undefined  // Callback function for when the compilation is complete
-};
-
 // Example Initialization:
-const sdfCanvas = new SdfCanvas("canvas", { downscaleFactorX: 10 });
-sdfCanvas.cameraZ = 15;
+const sdfCanvas = new SdfCanvas("canvas", {
+    // Function that is executed after initWebgl has successfully finished, default = no funciton
+    onCompilationComplete: () => { 
+        console.log("Compilation complete!");
+    },
+    // Configuration for the Foreground Canvas (default values are shown)
+    canvas: {
+        renderLayers: [0],                // Which layers are rendered by this canvas
+        downscaleFactorX: 2,              // Factor to downscale the horizontal resolution
+        downscaleFactorY: 2,              // Factor to downscale the vertical resolution
+        cameraZ: 10,                      // Controls the z-coordinate of the camera
+        useAA: false,                     // Enables Anti-Aliasing
+        twoDMode: false,                  // Enables 2D mode
+        customShadeFunction: "",          // Custom shading function
+    },
+    // Optional configuration for the Background Canvas (default = no background canvas)
+    backgroundCanvas: {
+        renderLayers: [0],
+        downscaleFactorX: 4,              // Render background at lower resolution for performance
+        downscaleFactorY: 4,
+        cameraZ: 10,
+        useAA: false,
+        twoDMode: true,                   // Background could be evaluated in fast 2D mode
+        customShadeFunction: "", 
+    },
+    // Controls if the background should be interpolated smoothly (true) or pixelated (false, default) when stretched
+    backgroundSmoothScaling: false, 
+});
 ```
 After creating the canvas, you must call `initWebgl()` before you can draw the scene with `draw()`. 
+
+### Examples
+
+To see how this framework can be used, look [here](./example/sdf.js) under the sections **Sdf Canvas** and **Loop**.
 
 ### Public Members and Functions
 ```js
@@ -136,17 +160,99 @@ async initWebgl(compilePolicy = SdfCanvas.COMPILE_POLICY_ALSO_BLOCKING);
 draw(scissor = null);
 
 /**
- * Add an overwriteLayer to the SdfCanvas. This canvas will then use this overwriteLayer's properties instead of the global SdfLayer properties.
+ * @param {boolean} background - (default = false) Specifies if to apply it to the foreground or background canvas.
+ */
+getDownscaleFactorX(background = false);
+
+/**
+ * @param {number} val - new downscaleFactorX
+ * @param {boolean} background - (default = false) Specifies if to apply it to the foreground or background canvas.
+ */
+setDownscaleFactorX(val, background = false);
+
+/**
+ * @param {boolean} background - (default = false) Specifies if to apply it to the foreground or background canvas.
+ */
+getDownscaleFactorY(background = false);
+
+/**
+ * @param {number} val - new downscaleFactorY
+ * @param {boolean} background - (default = false) Specifies if to apply it to the foreground or background canvas.
+ */
+setDownscaleFactorY(val, background = false);
+
+/**
+ * @param {boolean} background - (default = false) Specifies if to apply it to the foreground or background canvas.
+ */
+getCameraZ(background = false);
+
+/**
+ * @param {number} val - new cameraZ
+ * @param {boolean} background - (default = false) Specifies if to apply it to the foreground or background canvas.
+ */
+setCameraZ(val, background = false);
+
+/**
+ * @param {boolean} background - (default = false) Specifies if to apply it to the foreground or background canvas.
+ */
+getUseAA(background = false);
+
+/**
+ * @param {boolean} val - new useAA
+ * @param {boolean} background - (default = false) Specifies if to apply it to the foreground or background canvas.
+ */
+setUseAA(val, background = false);
+
+/**
+ * @param {boolean} background - (default = false) Specifies if to apply it to the foreground or background canvas.
+ */
+getTwoDMode(background = false);
+
+/**
+ * @param {boolean} val - new twoDMode
+ * @param {boolean} background - (default = false) Specifies if to apply it to the foreground or background canvas.
+ */
+setTwoDMode(val, background = false);
+
+/**
+ * @param {boolean} background - (default = false) Specifies if to apply it to the foreground or background canvas.
+ */
+getCustomShadeFunction(background = false);
+
+/**
+ * @param {Function|null} val - new customShadeFunction
+ * @param {boolean} background - (default = false) Specifies if to apply it to the foreground or background canvas.
+ */
+setCustomShadeFunction(val, background = false);
+
+/**
+ * Add an overwriteLayer to the SdfCanvas. This canvas will then use this overwriteLayer's
+ * properties instead of the global SdfLayer properties.
  * @param {number} index - Index of the layer to overwrite.
  * @param {SdfLayer} overwriteLayer - SdfLayer object that overwrites that layer.
+ * @param {boolean} background - (default = false) Specifies if to apply it to the foreground or background canvas. 
  */
-addOverwriteLayer(index, overwriteLayer);
+addOverwriteLayer(index, overwriteLayer, background = false) {
+    if (background) {
+        this.backgroundCanvas.addOverwriteLayer(index, overwriteLayer);
+    } else {
+        this.foregroundCanvas.addOverwriteLayer(index, overwriteLayer);
+    }
+}
 
 /**
  * Removes an overwriteLayer from the SdfCanvas. 
  * @param {number} index - Index of the overwriteLayer to remove.
+ * @param {boolean} background - (default = false) Specifies if to apply it to the 
+ * foreground or background canvas. 
  */
-removeOverwriteLayer(index);
+removeOverwriteLayer(index, background = false) {
+    if (background) {
+        this.backgroundCanvas.removeOverwriteLayer(index);
+    } else {
+        this.foregroundCanvas.removeOverwriteLayer(index);
+    }
+}
 ```
 
 > [!NOTE]
@@ -161,7 +267,7 @@ There are a few variables that can only be changed **before** calling `initWebgl
 
 * **twoDMode:** Enables a 2D mode, where instead of tracing a ray through the scene, the SDF is only evaluated once at a z-depth of 0. The `--z` property of elements is disregarded in this mode. 
 
-* **useCustomShadeFunction:** Enables the use of a custom `shade` function to control the exact look of the scene. Otherwise, the scene is shaded as described below in the Shading section. If a custom shading function is used, it has to be stored as a string in the `customShadeFunction` member of the `sdfCanvas` object. This custom shade function takes the traced position as an input and returns the color that should be rendered at that point. It has to be of the following format:
+* **customShadeFunction:** Enables the use of a custom `shade` function to control the exact look of the scene. Otherwise, the scene is shaded as described below in the Shading section. If a custom shading function is used, it has to be stored as a string in the `customShadeFunction` member of the `sdfCanvas` object. This custom shade function takes the traced position as an input and returns the color that should be rendered at that point. It has to be of the following format:
   
 ```glsl
 vec4 shade(Surface surface); // if twoDMode is used

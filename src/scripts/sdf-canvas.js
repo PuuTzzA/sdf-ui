@@ -2,7 +2,7 @@ import { loadShadersFromDisk, initShaderProgram, initBuffers, injectGLSL, toGlsl
 import { Matrix } from "./helper/matrix.js";
 import { SdfCommands } from "./sdf-commands.js";
 import { SdfLayer } from "./sdf-layer.js";
-import { BitMask } from "./helper/bitmask.js";
+import { PseudoSdfCanvas } from "./pseudo-sdf-canavs.js";
 
 class SdfCanvas {
     // ╔══════════════════════════════════════════════════════════╗
@@ -253,11 +253,11 @@ class SdfCanvas {
 
                 const halfWidth = element.offsetWidth * oneOverX * 0.5;
                 const halfHeight = element.offsetHeight * oneOverX * 0.5; //parseInt(computedStyle.getPropertyValue("font-size")) * oneOverX * 0.5 
-                const halfDepth = this.twoDMode ? 100 : parseFloat(computedStyle.getPropertyValue("--depth")) * oneOverX * 0.5;
+                const halfDepth = parseFloat(computedStyle.getPropertyValue("--depth")) * oneOverX * 0.5;
 
                 const offsetX = (rect.left + rect.width * 0.5) * oneOverX;
                 const offsetY = (rect.top + rect.height * 0.5) * oneOverX;
-                const offsetZ = this.twoDMode ? 0 : parseFloat(computedStyle.getPropertyValue("--z")) * oneOverX;
+                const offsetZ = parseFloat(computedStyle.getPropertyValue("--z")) * oneOverX;
 
                 // calculate computedStyle.transform @ T(offsetX, offsetY, offsetZ)
                 mat[12] = offsetX; // + mat[12] * oneOverX;
@@ -347,7 +347,7 @@ class SdfCanvas {
         }
     }
 
-    static #getElementSize(element) { // in amounts of vec4s
+    static getElementSize(element) { // in amounts of vec4s
         switch (element.getElementType()) {
             case SdfCommands.SPHERE:
                 return 1;
@@ -396,7 +396,7 @@ class SdfCanvas {
         }
     }
 
-    static #getCharIndex(char) {
+    static getCharIndex(char) {
         // The dot is handled differently
         if (char == ".") {
             return this.NUM_GLYPHS_BUFFERED + 1;
@@ -418,7 +418,7 @@ class SdfCanvas {
         return this.NUM_GLYPHS_BUFFERED;
     }
 
-    static #intToFloatBits(i) {
+    static intToFloatBits(i) {
         this.#intToFloatBitsUint32View[0] = i;      // This uses a typed array view over buf; it does not copy memory; modifying the typed array directly modifies the underlying buffer
         return this.#intToFloatBitsFloat32View[0];  // reinterpret as float
     }
@@ -450,76 +450,203 @@ class SdfCanvas {
     // ╔══════════════════════════════════════════════════════════╗
     // ║                        SdfCanvas                         ║
     // ╚══════════════════════════════════════════════════════════╝
-    // Public members
-    #renderLayers;
-    #ready; // no setter
-    #downscaleFactorX;
-    #downscaleFactorY;
-    topFace;
-
-    cameraZ;
-    useAA;
-    twoDMode;
-    customShadeFunction;
+    #ready;
+    #useBackground;
     onCompilationComplete;
+    backgroundSmoothScaling;
 
-    // Private Properties
     #canvasName;
     #canvas;
     #gl;
-    #bitmask;
-    #programInfo;
-    #buffers;
-    #numCommands;
-    #numLights;
-    #commandBuffer;
-    #geometryBuffer;
-    #shadingBuffer;
-    #lightBuffer;
-    #overwriteLayers;
-    #lastCustomIdx;
+
+    // Pseudo canvases
+    backgroundCanvas;
+    foregroundCanvas;
+
+    // Shared Resources
     #glyphTexture;
-    #commandBufferIdx;
-    #geometryBufferIdx;
-    #lightBufferIdx;
+    #overwriteLayers;
+
+    // FBO Resources for Background Downscaling
+    #bgFramebuffer;
+    #bgTexture;
+    #bgWidth = 0;
+    #bgHeight = 0;
+
+    // Simple Texture Copy Shader
+    #copyProgramInfo;
 
     // Getters and Setters
     get canvas() {
         return this.#canvas;
     }
 
-    get renderLayers() {
-        return this.#renderLayers;
-    }
-
-    set renderLayers(val) {
-        this.#bitmask.updateArray(val);
-        this.#renderLayers = val;
-    }
-
     get ready() {
         return this.#ready;
     }
 
-    get downscaleFactorX() {
-        return this.#downscaleFactorX;
+    /**
+      * @param {boolean} background - (default = false) Specifies if to apply it to the foreground or background canvas. 
+     */
+    getDownscaleFactorX(background = false) {
+        if (background) {
+            return this.backgroundCanvas.downscaleFactorX;
+        }
+        return this.foregroundCanvas.downscaleFactorX;
     }
 
-    set downscaleFactorX(val) {
-        this.#downscaleFactorX = val;
+    /**
+      * @param {number} val - new downscaleFactorX 
+      * @param {boolean} background - (default = false) Specifies if to apply it to the foreground or background canvas. 
+     */
+    setDownscaleFactorX(val, background = false) {
+        if (background) {
+            this.backgroundCanvas.downscaleFactorX = val;
+        } else {
+            this.foregroundCanvas.downscaleFactorX = val;
+        }
         if (this.#ready) {
             this.#resizeCanvasToDisplaySize();
         }
     }
 
-    get downscaleFactorY() {
-        return this.#downscaleFactorY;
+    /**
+     * @param {boolean} background - (default = false) Specifies if to apply it to the foreground or background canvas.
+     */
+    getDownscaleFactorY(background = false) {
+        if (background) {
+            return this.backgroundCanvas.downscaleFactorY;
+        }
+        return this.foregroundCanvas.downscaleFactorY;
     }
 
-    set downscaleFactorY(val) {
-        this.#downscaleFactorY = val;
+    /**
+     * @param {number} val - new downscaleFactorY
+     * @param {boolean} background - (default = false) Specifies if to apply it to the foreground or background canvas.
+     */
+    setDownscaleFactorY(val, background = false) {
+        if (background) {
+            this.backgroundCanvas.downscaleFactorY = val;
+        } else {
+            this.foregroundCanvas.downscaleFactorY = val;
+        }
         if (this.#ready) {
             this.#resizeCanvasToDisplaySize();
+        }
+    }
+
+    /**
+     * @param {boolean} background - (default = false) Specifies if to apply it to the foreground or background canvas.
+     */
+    getCameraZ(background = false) {
+        if (background) {
+            return this.backgroundCanvas.cameraZ;
+        }
+        return this.foregroundCanvas.cameraZ;
+    }
+
+    /**
+     * @param {number} val - new cameraZ
+     * @param {boolean} background - (default = false) Specifies if to apply it to the foreground or background canvas.
+     */
+    setCameraZ(val, background = false) {
+        if (background) {
+            this.backgroundCanvas.cameraZ = val;
+        } else {
+            this.foregroundCanvas.cameraZ = val;
+        }
+    }
+
+    /**
+     * @param {boolean} background - (default = false) Specifies if to apply it to the foreground or background canvas.
+     */
+    getUseAA(background = false) {
+        if (background) {
+            return this.backgroundCanvas.useAA;
+        }
+        return this.foregroundCanvas.useAA;
+    }
+
+    /**
+     * @param {boolean} val - new useAA
+     * @param {boolean} background - (default = false) Specifies if to apply it to the foreground or background canvas.
+     */
+    setUseAA(val, background = false) {
+        if (background) {
+            this.backgroundCanvas.useAA = val;
+        } else {
+            this.foregroundCanvas.useAA = val;
+        }
+    }
+
+    /**
+     * @param {boolean} background - (default = false) Specifies if to apply it to the foreground or background canvas.
+     */
+    getTwoDMode(background = false) {
+        if (background) {
+            return this.backgroundCanvas.twoDMode;
+        }
+        return this.foregroundCanvas.twoDMode;
+    }
+
+    /**
+     * @param {boolean} val - new twoDMode
+     * @param {boolean} background - (default = false) Specifies if to apply it to the foreground or background canvas.
+     */
+    setTwoDMode(val, background = false) {
+        if (background) {
+            this.backgroundCanvas.twoDMode = val;
+        } else {
+            this.foregroundCanvas.twoDMode = val;
+        }
+    }
+
+    /**
+     * @param {boolean} background - (default = false) Specifies if to apply it to the foreground or background canvas.
+     */
+    getCustomShadeFunction(background = false) {
+        if (background) {
+            return this.backgroundCanvas.customShadeFunction;
+        }
+        return this.foregroundCanvas.customShadeFunction;
+    }
+
+    /**
+     * @param {Function|null} val - new customShadeFunction
+     * @param {boolean} background - (default = false) Specifies if to apply it to the foreground or background canvas.
+     */
+    setCustomShadeFunction(val, background = false) {
+        if (background) {
+            this.backgroundCanvas.customShadeFunction = val;
+        } else {
+            this.foregroundCanvas.customShadeFunction = val;
+        }
+    }
+
+    /**
+     * Add an overwriteLayer to the SdfCanvas. This canvas will then use this overwriteLayer's properties instead of the global SdfLayer properties.
+     * @param {number} index - Index of the layer to overwrite.
+     * @param {SdfLayer} overwriteLayer - SdfLayer object that overwrites that layer.
+     * @param {boolean} background - (default = false) Specifies if to apply it to the foreground or background canvas. 
+     */
+    addOverwriteLayer(index, overwriteLayer, background = false) {
+        if (background) {
+            this.backgroundCanvas.addOverwriteLayer(index, overwriteLayer);
+        } else {
+            this.foregroundCanvas.addOverwriteLayer(index, overwriteLayer);
+        }
+    }
+
+    /**
+     * Removes an overwriteLayer from the SdfCanvas. 
+     * @param {number} index - Index of the overwriteLayer to remove.
+     * @param {boolean} background - (default = false) Specifies if to apply it to the foreground or background canvas. 
+     */
+    removeOverwriteLayer(index, background = false) {
+        if (background) {
+            this.backgroundCanvas.removeOverwriteLayer(index);
+        } else {
+            this.foregroundCanvas.removeOverwriteLayer(index);
         }
     }
 
@@ -528,43 +655,28 @@ class SdfCanvas {
 
         // Required and private mebers
         this.#canvasName = canvasName;
-        this.#overwriteLayers = new Map();
         this.#ready = false;
 
         this.#canvas;
         this.#gl;
-        this.#programInfo;
-        this.#buffers;
-        this.#numCommands = 0;
-        this.#commandBuffer = new Int32Array(SdfCanvas.MAX_NUM_COMMANDS * 4);
-        this.#geometryBuffer = new Float32Array(SdfCanvas.MAX_SIZE_ELEMENT_BUFFER * 4);
-        this.#shadingBuffer = new Float32Array(SdfCanvas.MAX_SIZE_ELEMENT_BUFFER * 4);
-        this.#lightBuffer = new Float32Array(SdfCanvas.MAX_NUM_LIGHTS * SdfCanvas.VEC4_PER_LIGHT * 4);
 
         // User parameters
         const {
-            renderLayers = [0],
-            downscaleFactorX = 2,
-            downscaleFactorY = 2,
-            topFace = false,
-            cameraZ = 10,
-            useAA = false,
-            twoDMode = false,
-            customShadeFunction = "",
             onCompilationComplete = undefined,
+            canvas = {},
+            backgroundCanvas = undefined,
+            backgroundSmoothScaling = false,
         } = options;
 
-        this.#renderLayers = renderLayers;
-        this.#bitmask = new BitMask(this.#renderLayers);
-        this.#downscaleFactorX = downscaleFactorX;
-        this.#downscaleFactorY = downscaleFactorY;
-        this.topFace = topFace;
-
-        this.cameraZ = cameraZ;
-        this.useAA = useAA;
-        this.twoDMode = twoDMode;
-        this.customShadeFunction = customShadeFunction;
         this.onCompilationComplete = onCompilationComplete;
+        this.foregroundCanvas = new PseudoSdfCanvas(canvas);
+        if (backgroundCanvas) {
+            this.#useBackground = true;
+            this.backgroundCanvas = new PseudoSdfCanvas(backgroundCanvas);
+        } else {
+            this.#useBackground = false;
+        }
+        this.backgroundSmoothScaling = backgroundSmoothScaling;
     }
 
     /**
@@ -589,7 +701,7 @@ class SdfCanvas {
             return false;
         }
 
-        // Bake the Letter Sdfs
+        // Bake Glyphs
         this.#gl.getExtension('EXT_color_buffer_float');
         this.#gl.getExtension('OES_texture_float_linear');
 
@@ -598,27 +710,110 @@ class SdfCanvas {
         })();
 
         // Continue with the rest of the setup
-        // Set clear color to black, fully opaque
-        this.#gl.clearColor(0.0, 0.0, 0.0, 1.0);
-        // Clear the color buffer with specified clear color
-        this.#gl.clear(this.#gl.COLOR_BUFFER_BIT);
-
         let { vertexSource, fragmentSource } = await loadShadersFromDisk("vertex.glsl", "fragment.glsl");
+        let fgProgramInfo;
 
-        // Initialize a shader program; this is where all the lighting
-        // Change the vertex according to the canvas settings
+        if (this.#useBackground) {
+            // Setup Framebuffer for Background
+            this.#bgTexture = this.#gl.createTexture();
+            this.#gl.bindTexture(this.#gl.TEXTURE_2D, this.#bgTexture);
+
+            const filterMode = this.backgroundSmoothScaling ? this.#gl.LINEAR : this.#gl.NEAREST;
+
+            this.#gl.texParameteri(this.#gl.TEXTURE_2D, this.#gl.TEXTURE_MIN_FILTER, filterMode);
+            this.#gl.texParameteri(this.#gl.TEXTURE_2D, this.#gl.TEXTURE_MAG_FILTER, filterMode);
+
+            this.#gl.texParameteri(this.#gl.TEXTURE_2D, this.#gl.TEXTURE_WRAP_S, this.#gl.CLAMP_TO_EDGE);
+            this.#gl.texParameteri(this.#gl.TEXTURE_2D, this.#gl.TEXTURE_WRAP_T, this.#gl.CLAMP_TO_EDGE);
+
+            this.#bgFramebuffer = this.#gl.createFramebuffer();
+            this.#gl.bindFramebuffer(this.#gl.FRAMEBUFFER, this.#bgFramebuffer);
+            this.#gl.framebufferTexture2D(this.#gl.FRAMEBUFFER, this.#gl.COLOR_ATTACHMENT0, this.#gl.TEXTURE_2D, this.#bgTexture, 0);
+            this.#gl.bindFramebuffer(this.#gl.FRAMEBUFFER, null);
+
+            // Compile Main Shaders
+            let bgProgramInfo;
+            if (this.backgroundCanvas.sameShaders(this.foregroundCanvas)) {
+                // Compile ONCE
+                const program = await this.#compileMainShader(vertexSource, fragmentSource, this.backgroundCanvas);
+                bgProgramInfo = this.#createProgramInfo(program);
+                fgProgramInfo = bgProgramInfo;
+            } else {
+                // Compile TWICE
+                const bgProgram = await this.#compileMainShader(vertexSource, fragmentSource, this.backgroundCanvas);
+                const fgProgram = await this.#compileMainShader(vertexSource, fragmentSource, this.foregroundCanvas);
+                bgProgramInfo = this.#createProgramInfo(bgProgram);
+                fgProgramInfo = this.#createProgramInfo(fgProgram);
+            }
+
+            // Initialize Background WebGL objects
+            this.backgroundCanvas.initLayerWebgl(this.#gl, bgProgramInfo);
+
+            // 4. Compile Simple Copy Shader (For rendering FBO to screen)
+            const copyVert = `#version 300 es
+                in vec2 aVertexPosition; 
+                in vec2 aVertexUv; 
+                out vec2 vUv;
+                void main() { 
+                    vUv = vec2(aVertexUv.x, 1.0 - aVertexUv.y); 
+                    gl_Position = vec4(aVertexPosition, 0.0, 1.0); 
+                }`;
+            const copyFrag = `#version 300 es
+                precision mediump float; 
+                in vec2 vUv; 
+                out vec4 fragColor; 
+                uniform sampler2D uTex;
+                void main() { 
+                    fragColor = texture(uTex, vUv); 
+                }`;
+
+            const copyProgram = await initShaderProgram(this.#gl, copyVert, copyFrag);
+            this.#copyProgramInfo = {
+                program: copyProgram,
+                attribLocations: {
+                    vertexPosition: this.#gl.getAttribLocation(copyProgram, "aVertexPosition"),
+                    vertexUv: this.#gl.getAttribLocation(copyProgram, "aVertexUv"),
+                },
+                uniformLocations: { uTex: this.#gl.getUniformLocation(copyProgram, "uTex") }
+            };
+        } else {
+            // ONLY Compile Foreground Shader
+            const fgProgram = await this.#compileMainShader(vertexSource, fragmentSource, this.foregroundCanvas);
+            fgProgramInfo = this.#createProgramInfo(fgProgram);
+        }
+
+        // Initialize Foreground WebGL
+        this.foregroundCanvas.initLayerWebgl(this.#gl, fgProgramInfo);
+
+        // Window resize
+        window.addEventListener("resize", () => {
+            this.#resizeCanvasToDisplaySize();
+            this.draw();
+        });
+
+        await textureSetupPromise;
+        this.#resizeCanvasToDisplaySize();
+
+        if (this.onCompilationComplete) {
+            this.onCompilationComplete();
+        }
+        this.#ready = true;
+        return true;
+    }
+
+    async #compileMainShader(baseVertex, baseFragment, layerObj) {
         let defines = "";
-        if (this.twoDMode) {
+        if (layerObj.twoDMode) {
             defines += "#define TWO_D_MODE\n";
         }
-        if (this.useAA) {
+        if (layerObj.useAA) {
             defines += "#define AA\n";
         }
-        if (this.customShadeFunction != "") {
-            defines += "#define CUSTOM_SHADE_FUNCTION"
-            fragmentSource = injectGLSL(fragmentSource, "SHADE_FUNCTION", this.customShadeFunction);
+        if (layerObj.customShadeFunction != "") {
+            defines += "#define CUSTOM_SHADE_FUNCTION\n";
+            baseFragment = injectGLSL(baseFragment, "SHADE_FUNCTION", layerObj.customShadeFunction);
         }
-        fragmentSource = injectGLSL(fragmentSource, "DEFINES", defines)
+        baseFragment = injectGLSL(baseFragment, "DEFINES", defines);
 
         // Custom elements
         let functionString = "";
@@ -633,81 +828,49 @@ class SdfCanvas {
             functionString += `CUSTOM_ELEMENT_FUNCTION(${functionName}, ${glslArray})`;
             commandString += `CUSTOM_ELEMENT_IF(${functionName}, ${SdfCommands.CUSTOM_START + i})`;
         }
-        this.#lastCustomIdx = Math.min(SdfCommands.CUSTOM_START + SdfCanvas.customElements.length - 1, SdfCommands.CUSTOM_END);
+        layerObj.lastCustomIdx = Math.min(SdfCommands.CUSTOM_START + SdfCanvas.customElements.length - 1, SdfCommands.CUSTOM_END);
 
-        fragmentSource = injectGLSL(fragmentSource, "CUSTOM_ELEMENTS_FUNCTIONS", functionString);
-        fragmentSource = injectGLSL(fragmentSource, "CUSTOM_ELEMENTS_COMMANDS", commandString);
+        baseFragment = injectGLSL(baseFragment, "CUSTOM_ELEMENTS_FUNCTIONS", functionString);
+        baseFragment = injectGLSL(baseFragment, "CUSTOM_ELEMENTS_COMMANDS", commandString);
 
-        const shaderProgram = await initShaderProgram(this.#gl, vertexSource, fragmentSource);
+        return await initShaderProgram(this.#gl, baseVertex, baseFragment);
+    }
 
-        // Collect all the info needed to use the shader program.
-        // Look up which attribute our shader program is using
-        // for aVertexPosition and look up uniform locations.
-        this.#programInfo = {
-            canvas: this.#canvas,
-            program: shaderProgram,
+    #createProgramInfo(program) {
+        return {
+            program: program,
             attribLocations: {
                 vertexPosition: 0,
-                vertexUv: this.#gl.getAttribLocation(shaderProgram, "aVertexUv"),
+                vertexUv: this.#gl.getAttribLocation(program, "aVertexUv"),
             },
             uniformLocations: {
-                resolution: this.#gl.getUniformLocation(shaderProgram, "uResolution"),
-
-                top: this.#gl.getUniformLocation(shaderProgram, "uTopOffset"),
-                left: this.#gl.getUniformLocation(shaderProgram, "uLeftOffset"),
-                width: this.#gl.getUniformLocation(shaderProgram, "uWindowWidth"),
-                height: this.#gl.getUniformLocation(shaderProgram, "uWindowHeight"),
-
-                cameraZ: this.#gl.getUniformLocation(shaderProgram, "uCameraZ"),
-                twoDMode: this.#gl.getUniformLocation(shaderProgram, "uTwoDMode"),
-
-                numCommands: this.#gl.getUniformLocation(shaderProgram, "uNumCommands"),
-                numLights: this.#gl.getUniformLocation(shaderProgram, "uNumLights"),
+                resolution: this.#gl.getUniformLocation(program, "uResolution"),
+                top: this.#gl.getUniformLocation(program, "uTopOffset"),
+                left: this.#gl.getUniformLocation(program, "uLeftOffset"),
+                width: this.#gl.getUniformLocation(program, "uWindowWidth"),
+                height: this.#gl.getUniformLocation(program, "uWindowHeight"),
+                cameraZ: this.#gl.getUniformLocation(program, "uCameraZ"),
+                twoDMode: this.#gl.getUniformLocation(program, "uTwoDMode"),
+                numCommands: this.#gl.getUniformLocation(program, "uNumCommands"),
+                numLights: this.#gl.getUniformLocation(program, "uNumLights"),
+                commandBlock: this.#gl.getUniformBlockIndex(program, "CommandBlock"),
+                geometryBlock: this.#gl.getUniformBlockIndex(program, "GeometryBlock"),
+                shadingBlock: this.#gl.getUniformBlockIndex(program, "ShadingBlock"),
+                lightBlock: this.#gl.getUniformBlockIndex(program, "LightBlock"),
 
                 // Uniforms for the Glyph Texture
-                sdfArray: this.#gl.getUniformLocation(shaderProgram, 'uSdfArray'),
-                boxMin: this.#gl.getUniformLocation(shaderProgram, "uBoxMin"),
-                boxMax: this.#gl.getUniformLocation(shaderProgram, "uBoxMax"),
-
-                commandBlock: this.#gl.getUniformBlockIndex(shaderProgram, "CommandBlock"),
-                geometryBlock: this.#gl.getUniformBlockIndex(shaderProgram, "GeometryBlock"),
-                shadingBlock: this.#gl.getUniformBlockIndex(shaderProgram, "ShadingBlock"),
-                lightBlock: this.#gl.getUniformBlockIndex(shaderProgram, "LightBlock"),
+                sdfArray: this.#gl.getUniformLocation(program, 'uSdfArray'),
+                boxMin: this.#gl.getUniformLocation(program, "uBoxMin"),
+                boxMax: this.#gl.getUniformLocation(program, "uBoxMax"),
             },
         };
-
-        // Here's where we call the routine that builds all the
-        // objects we'll be drawing.
-        this.#buffers = initBuffers(this.#gl, this.#programInfo);
-
-        /* const maxBytes = this.#gl.getParameter(this.#gl.MAX_UNIFORM_BLOCK_SIZE);
-        console.log("Max UBO Size:", maxBytes, "bytes");
-     
-        const maxBindings = this.#gl.getParameter(this.#gl.MAX_UNIFORM_BUFFER_BINDINGS);
-        console.log("max bindings:", maxBindings); // Usually 24, 36, or higher
-     
-        const maxFragBlocks = this.#gl.getParameter(this.#gl.MAX_FRAGMENT_UNIFORM_BLOCKS);
-        console.log("max fragment blocks:", maxFragBlocks) */
-
-        window.addEventListener("resize", () => {
-            this.#resizeCanvasToDisplaySize();
-            this.#updateUniforms();
-            this.draw();
-        });
-
-        // Wait for the texture baking before returning
-        await textureSetupPromise;
-        this.#resizeCanvasToDisplaySize();
-        this.#updateUniforms();
-        if (this.onCompilationComplete != undefined) {
-            this.onCompilationComplete();
-        }
-        this.#ready = true;
-        return true;
     }
 
     /**
-     * Renders the WebGL scene.
+     * Renders the WebGL scene by first drawing the background (if one was defined)
+     * and then the foreground. If a background was defined, you should also define the
+     * scissor method of this method, since otherwise the whole background will be 
+     * overwritten.
      * If a scissor bounding box is provided, the WebGL scissor test is enabled, 
      * restricting fragment shader execution and clearing operations to that specific 
      * rectangular area. The scissor coordinates are expected to be in standard DOM 
@@ -721,577 +884,200 @@ class SdfCanvas {
      * - `h`: The height of the scissor box in DOM pixels.
      */
     draw(scissor = null) {
-        if (!this.#ready) {
-            return;
+        if (!this.#ready) return;
+
+        const gl = this.#gl;
+
+        // Setup Global State
+        gl.disable(gl.SCISSOR_TEST);
+        gl.enable(gl.DEPTH_TEST);
+        gl.depthFunc(gl.LEQUAL);
+
+        // Bind Shared Texture
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.#glyphTexture);
+
+        if (this.#useBackground) {
+            // render background to offscreen FBO
+            gl.bindFramebuffer(gl.FRAMEBUFFER, this.#bgFramebuffer);
+            gl.viewport(0, 0, this.#bgWidth, this.#bgHeight);
+
+            gl.clearColor(0.0, 0.0, 0.0, 1.0);
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+            this.#drawLayer(this.backgroundCanvas);
+
+            // copy to main canvas 
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null); // Draw to Screen
+            gl.viewport(0, 0, this.#canvas.width, this.#canvas.height);
+
+            gl.clearColor(0.0, 0.0, 0.0, 1.0);
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+            gl.useProgram(this.#copyProgramInfo.program);
+            gl.bindVertexArray(this.backgroundCanvas.buffers.vao); // Reuse a VAO for quad positions
+
+            gl.activeTexture(gl.TEXTURE1);
+            gl.bindTexture(gl.TEXTURE_2D, this.#bgTexture);
+            gl.uniform1i(this.#copyProgramInfo.uniformLocations.uTex, 1);
+
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        } else {
+            // just clear the screen
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+            gl.viewport(0, 0, this.#canvas.width, this.#canvas.height);
+            gl.clearColor(0.0, 0.0, 0.0, 1.0);
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         }
 
-        this.#gl.disable(this.#gl.SCISSOR_TEST);
+        // foreground 
         if (scissor) {
-            this.#gl.clearColor(0.0, 0.0, 0.0, 0.0);
-            this.#gl.clear(this.#gl.COLOR_BUFFER_BIT | this.#gl.DEPTH_BUFFER_BIT);
-        }
+            gl.enable(gl.SCISSOR_TEST);
 
-        this.#gl.enable(this.#gl.DEPTH_TEST);
-        this.#gl.depthFunc(this.#gl.LEQUAL);
-
-        // Scissor Test: The GPU will ONLY run the fragment shader inside this box
-        if (scissor) {
-            this.#gl.enable(this.#gl.SCISSOR_TEST);
-
-            // FIX: Use clientWidth/clientHeight instead of window.innerWidth/innerHeight
-            // This prevents mapping distortions caused by the browser's vertical scrollbar.
             const scaleX = this.#canvas.width / this.#canvas.clientWidth;
             const scaleY = this.#canvas.height / this.#canvas.clientHeight;
 
-            // Optional safeguard: If your scissor DOM coords come from getBoundingClientRect(), 
-            // and the canvas is NOT at exactly (0,0) of the window, you need to subtract the canvas offset:
-            // const rect = this.#canvas.getBoundingClientRect();
-            // const localX = scissor.x - rect.left;
-            // const localY = scissor.y - rect.top;
-            // Then use localX and localY below instead of scissor.x and scissor.y
+            const rect = this.#canvas.getBoundingClientRect();
+            const localX = scissor.x - rect.left;
+            const localY = scissor.y - rect.top;
 
-            const sx = scissor.x * scaleX;
-            const sy = this.#canvas.height - ((scissor.y + scissor.h) * scaleY); // WebGL Y is bottom-up
+            const sx = localX * scaleX;
+            const sy = this.#canvas.height - ((localY + scissor.h) * scaleY); // webgl Y is bottom-up
             const sw = scissor.w * scaleX;
             const sh = scissor.h * scaleY;
 
-            this.#gl.scissor(sx, sy, sw, sh);
+
+            gl.scissor(sx, sy, sw, sh);
         }
 
-        this.#gl.clearColor(1.0, 0.0, 1.0, 1.0); // Clear to black, fully opaque
-        this.#gl.clearDepth(1.0); // Clear everything
-        this.#gl.enable(this.#gl.DEPTH_TEST); // Enable depth testing
-        this.#gl.depthFunc(this.#gl.LEQUAL); // Near things obscure far things
+        // Reactivate SDF texture for foreground on TEXTURE0 (in case background used TEXTURE1 for copy)
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.#glyphTexture);
 
-        // Clear the canvas before we start drawing on it.
-        this.#gl.clear(this.#gl.COLOR_BUFFER_BIT | this.#gl.DEPTH_BUFFER_BIT);
+        this.#drawLayer(this.foregroundCanvas);
 
-        // Tell WebGL how to pull out the positions from the position
-        // buffer into the vertexPosition attribute.
-        // setPositionAttribute(gl, buffers, programInfo);
-        // setColorAttribute(gl, buffers, programInfo);
-        // setUvAttribute(gl, buffers, programInfo);
-        // Tell WebGL which indices to use to index the vertices
-        this.#gl.bindVertexArray(this.#buffers.vao);
-
-        // Tell WebGL to use our program when drawing
-        this.#gl.useProgram(this.#programInfo.program);
-
-        // Bind the baked SDF array to texture unit 0
-        this.#gl.activeTexture(this.#gl.TEXTURE0);
-        this.#gl.bindTexture(this.#gl.TEXTURE_2D_ARRAY, this.#glyphTexture);
-
-        // Set uniform buffer values
-        this.#updateUniforms();
-
-        this.#gl.uniform1i(this.#programInfo.uniformLocations.numCommands, this.#numCommands);
-        this.#gl.uniform1i(this.#programInfo.uniformLocations.numLights, this.#numLights);
-
-        this.#gl.bindBuffer(this.#gl.UNIFORM_BUFFER, this.#buffers.commandBuffer);
-        this.#gl.bufferSubData(this.#gl.UNIFORM_BUFFER, 0, this.#commandBuffer);
-
-        this.#gl.bindBuffer(this.#gl.UNIFORM_BUFFER, this.#buffers.geometryBuffer);
-        this.#gl.bufferSubData(this.#gl.UNIFORM_BUFFER, 0, this.#geometryBuffer);
-
-        this.#gl.bindBuffer(this.#gl.UNIFORM_BUFFER, this.#buffers.shadingBuffer);
-        this.#gl.bufferSubData(this.#gl.UNIFORM_BUFFER, 0, this.#shadingBuffer);
-
-        this.#gl.bindBuffer(this.#gl.UNIFORM_BUFFER, this.#buffers.lightBuffer);
-        this.#gl.bufferSubData(this.#gl.UNIFORM_BUFFER, 0, this.#lightBuffer);
-
-        // Draw Scene
-        {
-            const offset = 0;
-            const vertexCount = 4;
-            this.#gl.drawArrays(this.#gl.TRIANGLE_STRIP, offset, vertexCount);
+        if (scissor) {
+            gl.disable(gl.SCISSOR_TEST);
         }
     }
 
-    /**
-     * Add an overwriteLayer to the SdfCanvas. This canvas will then use this overwriteLayer's properties instead of the global SdfLayer properties.
-     * @param {number} index - Index of the layer to overwrite.
-     * @param {SdfLayer} overwriteLayer - SdfLayer object that overwrites that layer.
-     */
-    addOverwriteLayer(index, overwriteLayer) {
-        this.#overwriteLayers.set(index, overwriteLayer);
-    }
+    #drawLayer(layer) {
+        const gl = this.#gl;
+        const progInfo = layer.programInfo;
+        const bufs = layer.buffers;
 
-    /**
-     * Removes an overwriteLayer from the SdfCanvas. 
-     * @param {number} index - Index of the overwriteLayer to remove.
-     */
-    removeOverwriteLayer(index) {
-        if (!this.#overwriteLayers.has(index)) {
-            return;
-        }
-        this.#overwriteLayers.delete(index);
-    }
+        gl.useProgram(progInfo.program);
+        gl.bindVertexArray(bufs.vao);
 
-    #updateUniforms() {
-        this.#gl.useProgram(this.#programInfo.program);
+        // Update Uniforms
+        gl.uniform1i(progInfo.uniformLocations.sdfArray, 0);
+        gl.uniform2f(progInfo.uniformLocations.boxMin, SdfCanvas.GLYPHS_MAX_BOUNDING_BOX[0][0] - SdfCanvas.GLYPHS_PADDING, SdfCanvas.GLYPHS_MAX_BOUNDING_BOX[0][1] - SdfCanvas.GLYPHS_PADDING);
+        gl.uniform2f(progInfo.uniformLocations.boxMax, SdfCanvas.GLYPHS_MAX_BOUNDING_BOX[1][0] + SdfCanvas.GLYPHS_PADDING, SdfCanvas.GLYPHS_MAX_BOUNDING_BOX[1][1] + SdfCanvas.GLYPHS_PADDING);
 
-        // Tells the uSdfArray uniform to look at gl.TEXTURE0
-        this.#gl.uniform1i(this.#programInfo.uniformLocations.sdfArray, 0);
-        this.#gl.uniform2f(this.#programInfo.uniformLocations.boxMin, SdfCanvas.GLYPHS_MAX_BOUNDING_BOX[0][0] - SdfCanvas.GLYPHS_PADDING, SdfCanvas.GLYPHS_MAX_BOUNDING_BOX[0][1] - SdfCanvas.GLYPHS_PADDING);
-        this.#gl.uniform2f(this.#programInfo.uniformLocations.boxMax, SdfCanvas.GLYPHS_MAX_BOUNDING_BOX[1][0] + SdfCanvas.GLYPHS_PADDING, SdfCanvas.GLYPHS_MAX_BOUNDING_BOX[1][1] + SdfCanvas.GLYPHS_PADDING);
-
-        this.#gl.uniform2f(this.#programInfo.uniformLocations.resolution, window.innerWidth, window.innerHeight);
+        gl.uniform2f(progInfo.uniformLocations.resolution, window.innerWidth, window.innerHeight);
 
         const rect = this.#canvas.getBoundingClientRect();
-        this.#gl.uniform1f(this.#programInfo.uniformLocations.top, rect.top / window.innerWidth);
-        this.#gl.uniform1f(this.#programInfo.uniformLocations.left, rect.left / window.innerWidth);
-        this.#gl.uniform1f(this.#programInfo.uniformLocations.width, (rect.right - rect.left) / window.innerWidth);
-        this.#gl.uniform1f(this.#programInfo.uniformLocations.height, (rect.bottom - rect.top) / window.innerWidth);
+        gl.uniform1f(progInfo.uniformLocations.top, rect.top / window.innerWidth);
+        gl.uniform1f(progInfo.uniformLocations.left, rect.left / window.innerWidth);
+        gl.uniform1f(progInfo.uniformLocations.width, (rect.right - rect.left) / window.innerWidth);
+        gl.uniform1f(progInfo.uniformLocations.height, (rect.bottom - rect.top) / window.innerWidth);
 
-        this.#gl.uniform1f(this.#programInfo.uniformLocations.cameraZ, this.cameraZ);
-        this.#gl.uniform1i(this.#programInfo.uniformLocations.twoDMode, this.twoDMode);
+        gl.uniform1f(progInfo.uniformLocations.cameraZ, layer.cameraZ);
+
+        gl.uniform1i(progInfo.uniformLocations.numCommands, layer.numCommands);
+        gl.uniform1i(progInfo.uniformLocations.numLights, layer.numLights);
+
+        // Upload Data Buffers
+        gl.bindBufferBase(gl.UNIFORM_BUFFER, SdfCanvas.COMMAND_BLOCK_UNIFORM_BUFFER_BINDING_INDEX, bufs.commandBuffer);
+        gl.bufferSubData(gl.UNIFORM_BUFFER, 0, layer.commandBuffer);
+
+        gl.bindBufferBase(gl.UNIFORM_BUFFER, SdfCanvas.GEOMETRY_BLOCK_UNIFORM_BUFFER_BINDING_INDEX, bufs.geometryBuffer);
+        gl.bufferSubData(gl.UNIFORM_BUFFER, 0, layer.geometryBuffer);
+
+        gl.bindBufferBase(gl.UNIFORM_BUFFER, SdfCanvas.SHADING_BLOCK_UNIFORM_BUFFER_BINDING_INDEX, bufs.shadingBuffer);
+        gl.bufferSubData(gl.UNIFORM_BUFFER, 0, layer.shadingBuffer);
+
+        gl.bindBufferBase(gl.UNIFORM_BUFFER, SdfCanvas.LIGHT_BLOCK_UNIFORM_BUFFER_BINDING_INDEX, bufs.lightBuffer);
+        gl.bufferSubData(gl.UNIFORM_BUFFER, 0, layer.lightBuffer);
+
+        // Draw quad
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    }
+
+    #resizeCanvasToDisplaySize() {
+        const dpr = window.devicePixelRatio || 1; // Pixel density of the screen (e.g., Retina screens are often 2)
+        const displayWidth = this.#canvas.clientWidth * dpr;
+        const displayHeight = this.#canvas.clientHeight * dpr;
+
+        // Main Canvas (Foreground Resolution)
+        const renderWidth = Math.max(1, Math.round(displayWidth / (this.foregroundCanvas.downscaleFactorX * dpr)));
+        const renderHeight = Math.max(1, Math.round(displayHeight / (this.foregroundCanvas.downscaleFactorY * dpr)));
+
+        if (this.#canvas.width !== renderWidth || this.#canvas.height !== renderHeight) {
+            this.#canvas.width = renderWidth;
+            this.#canvas.height = renderHeight;
+        }
+
+        // Background FBO Texture (Background Resolution)
+        if (this.#useBackground) {
+            const bgWidth = Math.max(1, Math.round(displayWidth / (this.backgroundCanvas.downscaleFactorX * dpr)));
+            const bgHeight = Math.max(1, Math.round(displayHeight / (this.backgroundCanvas.downscaleFactorY * dpr)));
+
+            if (this.#bgWidth !== bgWidth || this.#bgHeight !== bgHeight) {
+                this.#bgWidth = bgWidth;
+                this.#bgHeight = bgHeight;
+
+                // Reallocate texture memory at new resolution
+                this.#gl.bindTexture(this.#gl.TEXTURE_2D, this.#bgTexture);
+                this.#gl.texImage2D(this.#gl.TEXTURE_2D, 0, this.#gl.RGBA, bgWidth, bgHeight, 0, this.#gl.RGBA, this.#gl.UNSIGNED_BYTE, null);
+            }
+        }
     }
 
     #startUpdate() {
-        this.#commandBufferIdx = 0;
-        this.#geometryBufferIdx = 0;
-        this.#lightBufferIdx = 0;
+        this.foregroundCanvas.startUpdate();
+        if (this.#useBackground) {
+            this.backgroundCanvas.startUpdate();
+        }
     }
 
     #processLayer(layerIdx, layerOperation, smoothingFactor) {
         if (!this.#ready) {
             return false;
         }
-
-        const oneOverX = 1 / window.innerWidth;
-
-        if (this.#overwriteLayers.has(layerIdx)) {
-            const overwriteLayer = this.#overwriteLayers.get(layerIdx);
-            layerOperation = overwriteLayer.layerOperation;
-            smoothingFactor = overwriteLayer.smoothingFactor;
+        let success = this.foregroundCanvas.processLayer(layerIdx, layerOperation, smoothingFactor);
+        if (this.#useBackground) {
+            success |= this.backgroundCanvas.processLayer(layerIdx, layerOperation, smoothingFactor);
         }
-
-        if (!this.#addToCommandBufferIfSize(SdfCommands.SET_LAYER_DATA, 1)) {
-            return false;
-        };
-
-        this.#geometryBuffer[this.#geometryBufferIdx] = SdfCanvas.#intToFloatBits(layerOperation);
-        this.#geometryBuffer[this.#geometryBufferIdx + 1] = smoothingFactor * oneOverX;
-        this.#geometryBufferIdx += 4;
-        return true;
+        return success;
     }
 
     #processElement(element, rect, computedStyle, mat, halfWidth, halfHeight, halfDepth, extrude, offsetX, offsetY, offsetZ, diffuseColor, specularColor, ambientColor, kd, ks, p, ka, textRects, originalTz) {
         if (!this.#ready) {
             return false;
         }
-
-        if (!this.#containedInRenderLayers(element)) {
-            return true;
+        let success = this.foregroundCanvas.processElement(element, rect, computedStyle, mat, halfWidth, halfHeight, halfDepth, extrude, offsetX, offsetY, offsetZ, diffuseColor, specularColor, ambientColor, kd, ks, p, ka, textRects, originalTz);
+        if (this.#useBackground) {
+            success |= this.backgroundCanvas.processElement(element, rect, computedStyle, mat, halfWidth, halfHeight, halfDepth, extrude, offsetX, offsetY, offsetZ, diffuseColor, specularColor, ambientColor, kd, ks, p, ka, textRects, originalTz);
         }
-
-        if (!this.#addToCommandBufferIfSize(SdfCommands.LOAD_ELEMENT_MATRIX_AND_MATERIAL, 3)) {
-            return false;
-        };
-
-        const oneOverX = 1 / window.innerWidth;
-        const elementType = element.getElementType();
-        const savedGeometryBufferIdx = this.#geometryBufferIdx;
-
-        // Inverse affine modelview matrix = computedStyle.transform @ T(offsetX, offsetY, offsetZ), computedStyle.transform used without translation since that is already in boundingclientrect
-        this.#storeMat4InGeometryBuffer(mat, this.#geometryBufferIdx)
-
-        // Shading Information
-        this.#shadingBuffer[this.#geometryBufferIdx + 0] = diffuseColor.r;
-        this.#shadingBuffer[this.#geometryBufferIdx + 1] = diffuseColor.g;
-        this.#shadingBuffer[this.#geometryBufferIdx + 2] = diffuseColor.b;
-        this.#shadingBuffer[this.#geometryBufferIdx + 3] = kd; // diffuse material property
-
-        this.#shadingBuffer[this.#geometryBufferIdx + 4] = specularColor.r;
-        this.#shadingBuffer[this.#geometryBufferIdx + 5] = specularColor.g;
-        this.#shadingBuffer[this.#geometryBufferIdx + 6] = specularColor.b;
-        this.#shadingBuffer[this.#geometryBufferIdx + 7] = ks; // specular material property
-
-        this.#shadingBuffer[this.#geometryBufferIdx + 8] = p; // specular exponent
-
-        this.#shadingBuffer[this.#geometryBufferIdx + 12] = ambientColor.r;
-        this.#shadingBuffer[this.#geometryBufferIdx + 13] = ambientColor.g;
-        this.#shadingBuffer[this.#geometryBufferIdx + 14] = ambientColor.b;
-        this.#shadingBuffer[this.#geometryBufferIdx + 15] = ka; // ambient material property
-
-        this.#geometryBufferIdx += 4 * 4;
-
-        // Add modifiers
-        if (!this.#processModifiers(element, elementType, computedStyle, savedGeometryBufferIdx)) {
-            return false;
-        };
-
-        const savedCommandBufferIdx = this.#commandBufferIdx;
-        if (!this.#addToCommandBufferIfSize(elementType, SdfCanvas.#getElementSize(element))) {
-            return false;
-        };
-
-        // Element specific data
-        switch (elementType) {
-            case SdfCommands.SPHERE:
-                this.#geometryBuffer[this.#geometryBufferIdx + 0] = parseFloat(computedStyle.getPropertyValue("--r")) * oneOverX * 0.5; // radius 
-                break;
-            case SdfCommands.BOX_SIMPLE:
-                this.#geometryBuffer[this.#geometryBufferIdx + 0] = halfWidth; // width 
-                this.#geometryBuffer[this.#geometryBufferIdx + 1] = halfHeight; // height 
-                this.#geometryBuffer[this.#geometryBufferIdx + 2] = halfDepth; // depth
-                this.#geometryBuffer[this.#geometryBufferIdx + 3] = extrude; // rounding
-                break;
-            case SdfCommands.BOX:
-                let w = halfWidth;
-                let h = halfHeight;
-                let d = halfDepth;
-
-                switch (computedStyle.getPropertyValue("--rotation-offset")) {
-                    case "z":
-                        break;
-                    case "x":
-                        Matrix.mat4TimesMat4InPlace(Matrix.rotation90DegY, mat);
-                        this.#storeMat4InGeometryBuffer(mat, savedGeometryBufferIdx);
-
-                        const temp = w;
-                        w = d;
-                        d = temp;
-                        break;
-                    case "y":
-                        Matrix.mat4TimesMat4InPlace(Matrix.rotation90DegX, mat);
-                        this.#storeMat4InGeometryBuffer(mat, savedGeometryBufferIdx);
-
-                        const temp2 = h;
-                        h = d;
-                        d = temp2;
-                        break;
-                }
-
-                this.#geometryBuffer[this.#geometryBufferIdx + 0] = w; // width 
-                this.#geometryBuffer[this.#geometryBufferIdx + 1] = h; // height 
-                this.#geometryBuffer[this.#geometryBufferIdx + 2] = d; // depth
-                this.#geometryBuffer[this.#geometryBufferIdx + 3] = 0; // still unused
-
-                this.#geometryBuffer[this.#geometryBufferIdx + 4] = parseFloat(computedStyle.borderBottomRightRadius) * oneOverX;
-                this.#geometryBuffer[this.#geometryBufferIdx + 5] = parseFloat(computedStyle.borderTopRightRadius) * oneOverX;
-                this.#geometryBuffer[this.#geometryBufferIdx + 6] = parseFloat(computedStyle.borderBottomLeftRadius) * oneOverX;
-                this.#geometryBuffer[this.#geometryBufferIdx + 7] = parseFloat(computedStyle.borderTopLeftRadius) * oneOverX;
-
-                let borderType = 0;
-                switch (computedStyle.getPropertyValue("--border-radius-type")) {
-                    case "circle":
-                        borderType = 0;
-                        break;
-                    case "parabola":
-                        borderType = 1;
-                        break;
-                    case "cosine":
-                        borderType = 2;
-                        break;
-                    case "cubic":
-                        borderType = 3;
-                        break;
-                }
-
-                this.#geometryBuffer[this.#geometryBufferIdx + 8] = SdfCanvas.#intToFloatBits(borderType); // border radius
-                this.#geometryBuffer[this.#geometryBufferIdx + 9] = extrude; // rounding
-                break;
-            case SdfCommands.TEXT:
-                // The text expects an array of letters where the x,y,z position is at the same place as the origin of the letters in "glyph-space"
-                // The scale is how big the texture is in world space (including padding), send inverse scale so that we can multiply by it to get to glyph-space 
-                const letterHeight = element.measureHeight(textRects[0][0]) * oneOverX;
-                const glpyhSpaceScale = letterHeight / SdfCanvas.glyphsUnpaddedHeight; // how much one unit of "glyph-space" is in world-space 
-                this.#geometryBuffer[this.#geometryBufferIdx + 0] = SdfCanvas.#intToFloatBits(element.numLetters); // amount of letters
-                this.#geometryBuffer[this.#geometryBufferIdx + 1] = 1 / (SdfCanvas.glyphsPaddedWidth * glpyhSpaceScale); // inverse letter scale 
-                this.#geometryBuffer[this.#geometryBufferIdx + 2] = halfDepth; // depth 
-                this.#geometryBuffer[this.#geometryBufferIdx + 3] = Math.max(parseFloat(computedStyle.getPropertyValue("--letterSmoothness")) * oneOverX, 0.0001); // smoothness between letters
-
-                let inverseMat3 = Matrix.extractMat3FromMat4(mat);
-                let wordCenterLocal = new Float32Array(3);
-                let referenceX, referenceY, referenceZ = 0;
-
-                let letterIdx = 0;
-                let globalWordTOffset = 0;
-                textOuterLoop:
-                for (const [currentText, currentRect] of textRects) {
-                    // Get the screen/world space X and Y for the word's center
-                    const currentOffsetX = (currentRect.left + currentRect.width * 0.5) * oneOverX;
-                    const currentOffsetY = (currentRect.top + currentRect.height * 0.5) * oneOverX;
-
-                    const offsetX = (rect.left + rect.width * 0.5) * oneOverX;
-                    const offsetY = (rect.top + rect.height * 0.5) * oneOverX;
-
-                    // Solve for the exact World Z-depth of this specific word
-                    let offsetZ = originalTz; // Fallback in case the element is viewed perfectly edge-on
-                    const dx = currentOffsetX - offsetX;
-                    const dy = currentOffsetY - offsetY;
-
-                    if (Math.abs(mat[10]) > 1e-6) {
-                        offsetZ = originalTz + (-(inverseMat3[2] * dx + inverseMat3[5] * dy)) / inverseMat3[8];
-                    }
-
-                    // center the current word in world space and transform them into local space
-                    wordCenterLocal[0] = currentOffsetX;
-                    wordCenterLocal[1] = currentOffsetY;
-                    wordCenterLocal[2] = offsetZ;
-                    Matrix.mat3TimesVec3InPlace(inverseMat3, wordCenterLocal);
-
-                    // In local space, the word is unrotated and its own center is at (0,0).
-                    const wordLeftEdgeLocalX = -element.measure(currentText) * 0.5 * oneOverX; // currentHalfWidth
-                    const wordTOffset = currentText.charAt(0) == "t" ? -22.5 * glpyhSpaceScale : 0;
-
-                    for (let currentLetterIdx = 0; currentLetterIdx < currentText.length; currentLetterIdx++) {
-                        let currentSubstringWidth = element.measure(currentText.substring(0, currentLetterIdx)) * oneOverX;
-                        const currentLetter = currentText.charAt(currentLetterIdx);
-                        if (currentLetter == "t") {
-                            currentSubstringWidth += 22.5 * glpyhSpaceScale;// * oneOverX;
-                        }
-                        if (letterIdx == 0) {
-                            globalWordTOffset = currentText.charAt(0) == "t" ? -22.5 * glpyhSpaceScale : 0;
-                        } else {
-                            currentSubstringWidth += globalWordTOffset;
-                        }
-
-                        if (letterIdx == 0) {
-                            // the first letter is the reference point and for all the other letters an offset to the first one is stored
-                            this.#geometryBuffer[savedGeometryBufferIdx + 9] = -wordCenterLocal[0] - (wordLeftEdgeLocalX + currentSubstringWidth);; // tx, column 4 [tx, ty, tz, 1]^T
-                            this.#geometryBuffer[savedGeometryBufferIdx + 10] = -wordCenterLocal[1] - letterHeight * 0.5 - SdfCanvas.GLYPHS_MAX_BOUNDING_BOX[0][1] * glpyhSpaceScale;// ty
-                            this.#geometryBuffer[savedGeometryBufferIdx + 11] = -wordCenterLocal[2]; // tz
-
-                            this.#geometryBuffer[this.#geometryBufferIdx + 4 + letterIdx * 4 + 0] = extrude; // rounding
-                            this.#geometryBuffer[this.#geometryBufferIdx + 4 + letterIdx * 4 + 1] = 0; // still unused
-                            this.#geometryBuffer[this.#geometryBufferIdx + 4 + letterIdx * 4 + 2] = 0; // still unused
-
-                            referenceX = wordCenterLocal[0] + wordLeftEdgeLocalX;
-                            referenceY = wordCenterLocal[1];
-                            referenceZ = wordCenterLocal[2];
-                        } else {
-                            const difx = wordCenterLocal[0] + wordLeftEdgeLocalX - referenceX;
-                            const dify = wordCenterLocal[1] - referenceY;
-                            const difz = wordCenterLocal[2] - referenceZ; // should be 0
-
-                            this.#geometryBuffer[this.#geometryBufferIdx + 4 + letterIdx * 4 + 0] = - (difx + currentSubstringWidth); // offsetX
-                            this.#geometryBuffer[this.#geometryBufferIdx + 4 + letterIdx * 4 + 1] = - dify; // offsetY
-                            this.#geometryBuffer[this.#geometryBufferIdx + 4 + letterIdx * 4 + 2] = - difz; // offsetZ
-                        }
-                        this.#geometryBuffer[this.#geometryBufferIdx + 4 + letterIdx * 4 + 3] = SdfCanvas.#intToFloatBits(SdfCanvas.#getCharIndex(currentLetter)); // letterCode
-                        letterIdx++;
-                        if (letterIdx >= element.numLetters) {
-                            break textOuterLoop;
-                        }
-                    }
-                }
-                break;
-            case SdfCommands.CYLINDER:
-                let height, radius;
-                switch (computedStyle.getPropertyValue("--axis")) {
-                    case "x":
-                        Matrix.mat4TimesMat4InPlace(Matrix.rotation90DegZ, mat);
-                        storeMat4InGeometryBuffer(mat, savedGeometryBufferIdx);
-                        height = halfWidth;
-                        radius = halfHeight;
-                        break;
-                    case "y":
-                        height = halfHeight;
-                        radius = halfWidth;
-                        break;
-                    case "z":
-                        Matrix.mat4TimesMat4InPlace(Matrix.rotation90DegX, mat);
-                        storeMat4InGeometryBuffer(mat, savedGeometryBufferIdx);
-                        radius = halfWidth;
-                        height = halfDepth;
-                        break;
-                }
-                this.#geometryBuffer[this.#geometryBufferIdx + 0] = radius;
-                this.#geometryBuffer[this.#geometryBufferIdx + 1] = height;
-                this.#geometryBuffer[this.#geometryBufferIdx + 2] = extrude; // rounding
-                this.#geometryBuffer[this.#geometryBufferIdx + 3] = 0;
-                break;
-            case SdfCommands.TRIANGLE:
-                const aValues = computedStyle.getPropertyValue('--point-a');
-                const [aX, aY] = aValues.split(' ').map(val => parseFloat(val));
-
-                const bValues = computedStyle.getPropertyValue('--point-b');
-                const [bX, bY] = bValues.split(' ').map(val => parseFloat(val));
-
-                const cValues = computedStyle.getPropertyValue('--point-c');
-                const [cX, cY] = cValues.split(' ').map(val => parseFloat(val));
-
-                this.#geometryBuffer[this.#geometryBufferIdx + 0] = aX * oneOverX;
-                this.#geometryBuffer[this.#geometryBufferIdx + 1] = aY * oneOverX;
-                this.#geometryBuffer[this.#geometryBufferIdx + 2] = bX * oneOverX;
-                this.#geometryBuffer[this.#geometryBufferIdx + 3] = bY * oneOverX;
-
-                this.#geometryBuffer[this.#geometryBufferIdx + 4] = cX * oneOverX;
-                this.#geometryBuffer[this.#geometryBufferIdx + 5] = cY * oneOverX;
-                this.#geometryBuffer[this.#geometryBufferIdx + 6] = halfDepth;
-                this.#geometryBuffer[this.#geometryBufferIdx + 7] = extrude; // rounding
-                break;
-            case SdfCommands.CUSTOM:
-                const elementIdx = Math.max(Math.min(SdfCommands.CUSTOM_START + element.customIndex, this.#lastCustomIdx), SdfCommands.CUSTOM_START);
-                this.#commandBuffer[savedCommandBufferIdx] = elementIdx; // clamped to the appropriate range
-
-                this.#geometryBuffer[this.#geometryBufferIdx + 0] = 1 / (parseFloat(computedStyle.getPropertyValue("--scale")) * oneOverX);
-                this.#geometryBuffer[this.#geometryBufferIdx + 1] = halfDepth;
-                this.#geometryBuffer[this.#geometryBufferIdx + 2] = extrude; // rounding
-                break;
-        }
-        this.#geometryBufferIdx += SdfCanvas.#getElementSize(element) * 4;
-        return true;
-    }
-
-    #processModifiers(element, elementType, computedStyle, savedGeometryBufferIdx) {
-        const modifiers = element.modifiers;
-        const oneOverX = 1 / window.innerWidth;
-        for (let modifierIdx = 0; modifierIdx < modifiers.length; modifierIdx++) {
-            const modifier = modifiers[modifierIdx];
-            const modifierType = modifier.getModifierType();
-
-            if (!this.#addToCommandBufferIfSize(modifierType, modifier.getModifierSize())) {
-                return false;
-            };
-
-            let targetOffsetX = 0;
-            let targetOffsetY = 0;
-            let targetOffsetZ = 0;
-
-            if (modifier.target != null) {
-                targetOffsetX = this.#geometryBuffer[savedGeometryBufferIdx + 9];
-                targetOffsetY = this.#geometryBuffer[savedGeometryBufferIdx + 10];
-                targetOffsetZ = this.#geometryBuffer[savedGeometryBufferIdx + 11];
-
-                const targetRect = modifier.target.getBoundingClientRect();
-                targetOffsetX += (targetRect.left + targetRect.width * 0.5) * oneOverX;
-                targetOffsetY += (targetRect.top + targetRect.height * 0.5) * oneOverX;
-                targetOffsetZ += this.twoDMode ? 0 : parseFloat(getComputedStyle(modifier.target).getPropertyValue("--z")) * oneOverX;
-
-                let targetMat = Matrix.parseMatrix(computedStyle.transform);
-                targetOffsetZ += targetMat[14] * oneOverX;
-            }
-
-            if (elementType == SdfCommands.TEXT) { // text has the origin at the bottom-left not in the center like the other elements
-                const { x, y } = element.getOffsetToCenter();
-                targetOffsetX += x * oneOverX;
-                targetOffsetY += y * oneOverX; // height * 0.5 * oneOverX;
-            }
-
-            switch (modifierType) {
-                case SdfCommands.TWIST:
-                    this.#geometryBuffer[this.#geometryBufferIdx + 0] = targetOffsetX; // ofset
-                    this.#geometryBuffer[this.#geometryBufferIdx + 1] = targetOffsetY; // ofset
-                    this.#geometryBuffer[this.#geometryBufferIdx + 2] = targetOffsetZ; // ofset
-                    this.#geometryBuffer[this.#geometryBufferIdx + 3] = modifier.amount / oneOverX; // amount
-
-                    this.#geometryBuffer[this.#geometryBufferIdx + 4] = modifier.axis[0]; // axis
-                    this.#geometryBuffer[this.#geometryBufferIdx + 5] = modifier.axis[1]; // axis
-                    this.#geometryBuffer[this.#geometryBufferIdx + 6] = modifier.axis[2]; // axis
-                    this.#geometryBuffer[this.#geometryBufferIdx + 7] = modifier.start * oneOverX; // start
-
-                    this.#geometryBuffer[this.#geometryBufferIdx + 8] = modifier.end * oneOverX; // end
-                    break;
-            }
-
-            this.#geometryBufferIdx += modifier.getModifierSize() * 4;
-        }
-        return true;
+        return success;
     }
 
     #processLight(light, offsetX, offsetY, offsetZ, lightColor, lightIntensity, lightRadius, lightType) {
         if (!this.#ready) {
             return false;
         }
-
-        if (!this.#containedInRenderLayers(light)) {
-            return true;
+        let success = this.foregroundCanvas.processLight(light, offsetX, offsetY, offsetZ, lightColor, lightIntensity, lightRadius, lightType);
+        if (this.#useBackground) {
+            success |= this.backgroundCanvas.processLight(light, offsetX, offsetY, offsetZ, lightColor, lightIntensity, lightRadius, lightType);
         }
-
-        if (this.#lightBufferIdx / (SdfCanvas.VEC4_PER_LIGHT * 4) >= SdfCanvas.MAX_NUM_LIGHTS) {
-            return false;
-        }
-
-        this.#lightBuffer[this.#lightBufferIdx + 0] = offsetX;
-        this.#lightBuffer[this.#lightBufferIdx + 1] = offsetY;
-        this.#lightBuffer[this.#lightBufferIdx + 2] = offsetZ;
-
-        this.#lightBuffer[this.#lightBufferIdx + 4] = lightColor.r;
-        this.#lightBuffer[this.#lightBufferIdx + 5] = lightColor.g;
-        this.#lightBuffer[this.#lightBufferIdx + 6] = lightColor.b;
-
-        this.#lightBuffer[this.#lightBufferIdx + 8] = lightIntensity;
-        this.#lightBuffer[this.#lightBufferIdx + 9] = lightRadius;
-        this.#lightBuffer[this.#lightBufferIdx + 10] = lightType;
-        // this.#lightBuffer[lightBufferIdx + 7] = 0;
-
-        this.#lightBufferIdx += SdfCanvas.VEC4_PER_LIGHT * 4;
-        return true;
+        return success;
     }
 
     #endUpdate() {
-        this.#numCommands = this.#commandBufferIdx / 4;
-        this.#numLights = this.#lightBufferIdx / (SdfCanvas.VEC4_PER_LIGHT * 4);
-    }
-
-    #sizeInBuffers(numGeomentryToAdd) {
-        return this.#commandBufferIdx + 1 < SdfCanvas.MAX_NUM_COMMANDS || (this.#geometryBufferIdx / 4 + numGeomentryToAdd) < SdfCanvas.MAX_SIZE_ELEMENT_BUFFER;
-    }
-
-    #addToCommandBuffer(command) {
-        this.#commandBuffer[this.#commandBufferIdx] = command;
-        this.#commandBuffer[this.#commandBufferIdx + 1] = this.#geometryBufferIdx / 4;
-        this.#commandBufferIdx += 4;
-    }
-
-    #addToCommandBufferIfSize(command, numGeomentryToAdd) {
-        if (!this.#sizeInBuffers(numGeomentryToAdd)) {
-            return false;
-        }
-        this.#addToCommandBuffer(command);
-        return true;
-    }
-
-    #storeMat4InGeometryBuffer(mat, index) {
-        this.#geometryBuffer[index + 0] = mat[0]; // column 1 [mat[0], mat[1], mat[2], 0]^T
-        this.#geometryBuffer[index + 1] = mat[1];
-        this.#geometryBuffer[index + 2] = mat[2];
-
-        this.#geometryBuffer[index + 3] = mat[4]; // column 2 [mat[4], mat[5], mat[6], 0]^T
-        this.#geometryBuffer[index + 4] = mat[5];
-        this.#geometryBuffer[index + 5] = mat[6];
-
-        this.#geometryBuffer[index + 6] = mat[8]; // column 3 [mat[8], mat[9], mat[10], 0]^T
-        this.#geometryBuffer[index + 7] = mat[9];
-        this.#geometryBuffer[index + 8] = mat[10];
-
-        this.#geometryBuffer[index + 9] = mat[12]; // tx, column 4 [tx, ty, tz, 1]^T
-        this.#geometryBuffer[index + 10] = mat[13]; // ty
-        this.#geometryBuffer[index + 11] = mat[14]; // tz
-    }
-
-    #containedInRenderLayers(element) {
-        return (element.bitmask.value & this.#bitmask.value) !== 0;
-    }
-
-    #resizeCanvasToDisplaySize(targetWidth, targetHeight) {
-        // 1. Get the pixel density of the screen (e.g., Retina screens are often 2)
-        const dpr = window.devicePixelRatio || 1;
-
-        // 2. Calculate the actual physical pixels of the display area
-        const w = targetWidth !== undefined ? targetWidth : this.#canvas.clientWidth;
-        const h = targetHeight !== undefined ? targetHeight : this.#canvas.clientHeight;
-
-        const displayWidth = w * dpr;
-        const displayHeight = h * dpr;
-
-        // 3. Apply your downscale factor to determine the WebGL rendering resolution
-        // (Math.max is used to prevent the canvas from ever being 0x0 pixels)
-        const renderWidth = Math.max(1, Math.round(displayWidth / (this.#downscaleFactorX * dpr)));
-        const renderHeight = Math.max(1, Math.round(displayHeight / (this.#downscaleFactorY * dpr)));
-
-        // 4. If the rendering resolution changed, update the canvas and viewport
-        if (this.#canvas.width !== renderWidth || this.#canvas.height !== renderHeight) {
-
-            // This changes the internal rendering resolution (the WebGL buffer size)
-            this.#canvas.width = renderWidth;
-            this.#canvas.height = renderHeight;
-
-            // The WebGL viewport MUST match the internal buffer size, 
-            this.#gl.viewport(0, 0, renderWidth, renderHeight);
+        this.foregroundCanvas.endUpdate();
+        if (this.#useBackground) {
+            this.backgroundCanvas.endUpdate();
         }
     }
 }

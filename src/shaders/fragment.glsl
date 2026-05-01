@@ -533,7 +533,7 @@ Surface map(vec3 p) {
                 accumulatedResult = opUnion(current, accumulatedResult);
                 break;
             case 101: /* Subtraction */
-                accumulatedResult = opSubtraction(current, accumulatedResult);
+                accumulatedResult = opSubtraction(accumulatedResult, current);
                 break;
             case 102: /* Intersection */
                 accumulatedResult = opIntersection(current, accumulatedResult);
@@ -545,7 +545,7 @@ Surface map(vec3 p) {
                 accumulatedResult = opSmoothUnion(current, accumulatedResult, smoothness);
                 break;
             case 105: /* Smooth subtraction */
-                accumulatedResult = opSmoothSubtraction(current, accumulatedResult, smoothness);
+                accumulatedResult = opSmoothSubtraction(accumulatedResult, current, smoothness);
                 break;
             case 106: /* Smooth intersection */
                 accumulatedResult = opSmoothIntersection(current, accumulatedResult, smoothness);
@@ -870,6 +870,9 @@ void main(void) {
 
     color = shade(currentSurface);
 #endif // Anti-aliasing
+
+    // A gamma value of 2.2 is used for screens.
+    // color.rgb = pow(color.rgb, vec3(1.0 / 2.2));
 
     fragColor = color;
 }

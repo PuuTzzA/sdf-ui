@@ -6,7 +6,6 @@ import { SdfCanvas, SdfLayer, SdfCommands, Twist } from "../src/scripts/sdf-ui.j
 const loadStartTime = performance.now();
 
 const sdfCanvas = new SdfCanvas("canvas", {
-    renderLayers: [0],
     onCompilationComplete: () => {
         compilingScreen.remove();
         const loadTime = performance.now() - loadStartTime;
