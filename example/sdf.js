@@ -40,8 +40,10 @@ sdfCanvas.onCompilationComplete = () => {
 }
 SdfCanvas.customElements = [
     [[-0.5, 0], [0.5, 0], [0.5, 0.5], [0.1, 0.2], [-1, 0.3]],
+    [[-0.5, 0], [0.5, 0], [0.5, 0.5]],
 ];
 sdfCanvas.initWebgl(SdfCanvas.COMPILE_POLICY_ALSO_BLOCKING);
+sdfCanvas.renderLayers = [0];
 
 function gameLoop(now) {
     // FPS counter
@@ -58,7 +60,7 @@ function gameLoop(now) {
     fpsDiv.innerHTML = avg.toFixed(1);  // show FPS with 1 decimal
 
     // Draw Scene
-    SdfCanvas.updateElements();
+    SdfCanvas.update();
     sdfCanvas.draw();
 
     requestAnimationFrame(gameLoop);

@@ -1,6 +1,7 @@
 import { SdfCanvas } from "./sdf-canvas.js";
 import { TextMeter } from "./helper/text-meter.js"
 import { SdfCommands } from "./sdf-commands.js";
+import { BitMask } from "./helper/bitmask.js";
 
 // Add styles to html element
 function addCss(fileName) {
@@ -18,9 +19,68 @@ function addCss(fileName) {
 
 addCss('../style/style.css');
 
+class ASdfBaseElement extends HTMLElement {
+    static observedAttributes = ["active", "render-layers"];
+
+    #active;
+
+    #bitMask;
+
+    get bitmask() {
+        return this.#bitMask;
+    }
+
+    connectedCallback() {
+        if (this.dataset.renderLayers == undefined) {
+            this.dataset.renderLayers = "0";
+        }
+        this.#bitMask = new BitMask(this.dataset.renderLayers);
+
+        if (this.dataset.active == undefined) {
+            this.dataset.active = true;
+        }
+        this.#active = this.dataset.active == "true";
+
+        this.classList.add("sdf-ui-base-class");
+    }
+
+    getElementType() {
+        throw "Cannot get element type on abstract base class.";
+    }
+
+    connectedMoveCallback() {
+        // console.log("Custom element moved with moveBefore()");
+    }
+
+    adoptedCallback() {
+        // console.log("Custom element moved to new page.");
+    }
+
+    attributeChangedCallback(name, oldValue, newValue) {
+        if (name == "active") {
+            this.#active = this.dataset.layerIndex == "true";
+        }
+        else if (name == "render-layers") {
+            this.#bitMask.updateString(this.dataset.renderLayers);
+        }
+
+        // console.log(`Attribute ${name} has changed from ${oldValue} to ${newValue}.`);
+    }
+
+    get active() {
+        return this.#active;
+    }
+
+    set active(value) {
+        this.dataset.active = value;
+        this.#active = value;
+    }
+
+}
+
 // Sdf Elements
-class ASdfElement extends HTMLElement {
-    static observedAttributes = ["data-layer-index"];
+class ASdfGeometryElement extends ASdfBaseElement {
+    static observedAttributes = ["data-layer-index", "render-layers", "active"];
 
     #modifiers;
     get modifiers() {
@@ -33,19 +93,11 @@ class ASdfElement extends HTMLElement {
     }
 
     connectedCallback() {
+        super.connectedCallback();
         if (this.dataset.layerIndex == undefined) {
             this.dataset.layerIndex = 0;
         }
-
-        if (this.dataset.renderLayers == undefined) {
-            this.dataset.renderLayers = 0;
-        }
-
-        if (this.dataset.active == undefined) {
-            this.dataset.active = true;
-        }
-
-        this.classList.add("sdf-ui-base-class");
+        this.layerIndex = parseInt(this.dataset.layerIndex);
 
         SdfCanvas.addTrackedElement(this);
     }
@@ -58,19 +110,12 @@ class ASdfElement extends HTMLElement {
         SdfCanvas.removeTrackedElement(this);
     }
 
-    connectedMoveCallback() {
-        // console.log("Custom element moved with moveBefore()");
-    }
-
-    adoptedCallback() {
-        // console.log("Custom element moved to new page.");
-    }
-
     attributeChangedCallback(name, oldValue, newValue) {
+        super.attributeChangedCallback(name, oldValue, newValue);
         if (name == "data-layer-index") {
+            this.layerIndex = parseInt(this.dataset.layerIndex);
             SdfCanvas.sortTrackedElements();
         }
-
         // console.log(`Attribute ${name} has changed from ${oldValue} to ${newValue}.`);
     }
 
@@ -84,17 +129,9 @@ class ASdfElement extends HTMLElement {
             this.#modifiers.splice(index, 1);
         }
     }
-
-    get active() {
-        return this.dataset.active == "true";
-    }
-
-    set active(value) {
-        this.dataset.active = value;
-    }
 }
 
-class SdfSphere extends ASdfElement {
+class SdfSphere extends ASdfGeometryElement {
     getElementType() {
         return SdfCommands.SPHERE;
     }
@@ -102,7 +139,7 @@ class SdfSphere extends ASdfElement {
 
 customElements.define("sdf-sphere", SdfSphere);
 
-class SdfBoxSimple extends ASdfElement {
+class SdfBoxSimple extends ASdfGeometryElement {
     getElementType() {
         return SdfCommands.BOX_SIMPLE;
     }
@@ -110,7 +147,7 @@ class SdfBoxSimple extends ASdfElement {
 
 customElements.define("sdf-box-simple", SdfBoxSimple);
 
-class SdfBox extends ASdfElement {
+class SdfBox extends ASdfGeometryElement {
     getElementType() {
         return SdfCommands.BOX;
     }
@@ -118,7 +155,7 @@ class SdfBox extends ASdfElement {
 
 customElements.define("sdf-box", SdfBox);
 
-class SdfText extends ASdfElement {
+class SdfText extends ASdfGeometryElement {
     #textMeter;
     #numLetters;
     #size; // in amounts of vec4s
@@ -291,7 +328,7 @@ class SdfText extends ASdfElement {
 
 customElements.define("sdf-text", SdfText);
 
-class SdfCylinder extends ASdfElement {
+class SdfCylinder extends ASdfGeometryElement {
     getElementType() {
         return SdfCommands.CYLINDER;
     }
@@ -299,7 +336,7 @@ class SdfCylinder extends ASdfElement {
 
 customElements.define("sdf-cylinder", SdfCylinder);
 
-class SdfTriangle extends ASdfElement {
+class SdfTriangle extends ASdfGeometryElement {
     getElementType() {
         return SdfCommands.TRIANGLE;
     }
@@ -307,51 +344,46 @@ class SdfTriangle extends ASdfElement {
 
 customElements.define("sdf-triangle", SdfTriangle);
 
-class SdfCustom extends ASdfElement {
+class SdfCustom extends ASdfGeometryElement {
+    static observedAttributes = ["data-layer-index", "render-layers", "active", "custom-index"];
+
     connectedCallback() {
         super.connectedCallback();
 
         if (this.dataset.customIndex == undefined) {
             this.dataset.customIndex = 0;
         }
+        this.customIndex = parseInt(this.dataset.customIndex);
     }
 
     getElementType() {
         return SdfCommands.CUSTOM;
     }
+
+    attributeChangedCallback(name, oldValue, newValue) {
+        super.attributeChangedCallback(name, oldValue, newValue);
+        if (name == "data-custom-index") {
+            this.customIndex = parseInt(this.dataset.customIndex);
+        }
+    }
+
 }
 customElements.define("sdf-custom", SdfCustom);
 
 
 // Lights
-class SdfLight extends HTMLElement {
+class SdfLight extends ASdfBaseElement {
     constructor() {
         super();
     }
 
     connectedCallback() {
-        if (this.dataset.renderLayers == undefined) {
-            this.dataset.renderLayers = 0;
-        }
-
-        if (this.dataset.active == undefined) {
-            this.dataset.active = true;
-        }
-
-        this.classList.add("sdf-ui-base-class");
+        super.connectedCallback();
         SdfCanvas.addTrackedLight(this);
     }
 
     disconnectedCallback() {
         SdfCanvas.removeTrackedLight(this);
-    }
-
-    get active() {
-        return this.dataset.active == "true";
-    }
-
-    set active(value) {
-        this.dataset.active = value;
     }
 }
 

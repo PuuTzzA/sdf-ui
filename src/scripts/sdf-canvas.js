@@ -2,6 +2,7 @@ import { loadShadersFromDisk, initShaderProgram, initBuffers, injectGLSL, toGlsl
 import { Matrix } from "./helper/matrix.js";
 import { SdfCommands } from "./sdf-commands.js";
 import { SdfLayer } from "./sdf-layer.js";
+import { BitMask } from "./helper/bitmask.js";
 
 class SdfCanvas {
     // ╔══════════════════════════════════════════════════════════╗
@@ -129,6 +130,12 @@ class SdfCanvas {
 
     static #resolveColorCtx; // to convert hsl, oklch, ... to rgba
 
+    static #cssColorCache = new Map();
+
+    static #intToFloatBitsBuffer = new ArrayBuffer(4);
+    static #intToFloatBitsUint32View = new Uint32Array(this.#intToFloatBitsBuffer);
+    static #intToFloatBitsFloat32View = new Float32Array(this.#intToFloatBitsBuffer);
+
     static get layers() {
         return this.#layers;
     }
@@ -140,7 +147,7 @@ class SdfCanvas {
 
     static addTrackedElement(element) {
         this.#trackedElements.push(element);
-        this.#trackedElements.sort((a, b) => (a.dataset.layerIndex - b.dataset.layerIndex));
+        this.#trackedElements.sort((a, b) => (a.layerIndex - b.layerIndex));
         this.#updateLayers();
     }
 
@@ -154,7 +161,7 @@ class SdfCanvas {
     }
 
     static sortTrackedElements() {
-        this.#trackedElements.sort((a, b) => (a.dataset.layerIndex - b.dataset.layerIndex));
+        this.#trackedElements.sort((a, b) => (a.layerIndex - b.layerIndex));
         this.#updateLayers();
     }
 
@@ -181,7 +188,7 @@ class SdfCanvas {
         })
     }
 
-    static updateElements() {
+    static update() {
         this.#instantiatedCanvases.forEach(canvas => {
             canvas.#startUpdate();
         });
@@ -225,12 +232,14 @@ class SdfCanvas {
                 }
 
                 const elementType = element.getElementType();
+                let textRects = null;
 
                 if (elementType == SdfCommands.TEXT) {
                     element.update();
                     if (element.numLetters <= 0) { // skip empty strings
                         continue;
                     }
+                    textRects = element.getWordRects();
                 }
 
                 const rect = element.getBoundingClientRect();
@@ -262,6 +271,12 @@ class SdfCanvas {
                 const diffuseColor = SdfCanvas.#parseCSSColor(computedStyle.getPropertyValue("--diffuse-color"));
                 const specularColor = SdfCanvas.#parseCSSColor(computedStyle.getPropertyValue("--specular-color"));
                 const ambientColor = SdfCanvas.#parseCSSColor(computedStyle.getPropertyValue("--ambient-color"));
+                const kd = parseFloat(computedStyle.getPropertyValue("--kd"));
+                const ks = parseFloat(computedStyle.getPropertyValue("--ks"));
+                const p = parseFloat(computedStyle.getPropertyValue("--p"));
+                const ka = parseFloat(computedStyle.getPropertyValue("--ka"));
+
+                const extrude = parseFloat(computedStyle.getPropertyValue("--extrude")) * oneOverX;
 
                 // invert the matrix
                 Matrix.invertAffineMat4InPlace(mat);
@@ -269,8 +284,8 @@ class SdfCanvas {
                 anySuccess = false;
                 this.#instantiatedCanvases.forEach(canvas => {
                     anySuccess |= canvas.#processElement(
-                        element, rect, computedStyle, mat, halfWidth, halfHeight, halfDepth,
-                        offsetX, offsetY, offsetZ, diffuseColor, specularColor, ambientColor, originalTz);
+                        element, rect, computedStyle, mat, halfWidth, halfHeight, halfDepth, extrude,
+                        offsetX, offsetY, offsetZ, diffuseColor, specularColor, ambientColor, kd, ks, p, ka, textRects, originalTz);
                 });
                 if (!anySuccess) {
                     break allElementsLoop;
@@ -351,16 +366,16 @@ class SdfCanvas {
         let currentNum = 0;
 
         this.#trackedElements.forEach((e) => {
-            if (parseInt(e.dataset.layerIndex) == currentIdx) {
+            if (parseInt(e.layerIndex) == currentIdx) {
                 currentNum++;
             } else {
                 this.#layers[currentIdx].elementsInLayer = currentNum;
 
-                for (let i = currentIdx + 1; i < parseInt(e.dataset.layerIndex); i++) {
+                for (let i = currentIdx + 1; i < parseInt(e.layerIndex); i++) {
                     this.#layers[i].elementsInLayer = 0;
                 }
 
-                currentIdx = parseInt(e.dataset.layerIndex);
+                currentIdx = parseInt(e.layerIndex);
                 currentNum = 1;
             }
         });
@@ -394,12 +409,15 @@ class SdfCanvas {
     }
 
     static #intToFloatBits(i) {
-        const buf = new ArrayBuffer(4);    // buf is just raw memory: 4 bytes; to read/write numbers, you need a view like Uint32Array or Float32Array.
-        new Uint32Array(buf)[0] = i >>> 0; // This creates a typed array view over buf; it does not copy memory; modifying the typed array directly modifies the underlying buffer
-        return new Float32Array(buf)[0];   // reinterpret as float
+        this.#intToFloatBitsUint32View[0] = i;      // This uses a typed array view over buf; it does not copy memory; modifying the typed array directly modifies the underlying buffer
+        return this.#intToFloatBitsFloat32View[0];  // reinterpret as float
     }
 
     static #parseCSSColor(css) {
+        if (this.#cssColorCache.has(css)) {
+            return this.#cssColorCache.get(css);
+        }
+
         // Create a persistent canvas for parsing
         if (!this.#resolveColorCtx) {
             const canvas = new OffscreenCanvas(1, 1);
@@ -413,14 +431,17 @@ class SdfCanvas {
 
         // Grab the computed RGBA values
         const [r, g, b, a] = this.#resolveColorCtx.getImageData(0, 0, 1, 1).data;
-        return { r: r / 255, g: g / 255, b: b / 255, a: a / 255 };
+        const resultingColor = { r: r / 255, g: g / 255, b: b / 255, a: a / 255 };
+
+        this.#cssColorCache.set(css, resultingColor);
+        return resultingColor;
     }
 
     // ╔══════════════════════════════════════════════════════════╗
     // ║                        SdfCanvas                         ║
     // ╚══════════════════════════════════════════════════════════╝
     // Public members
-    renderLayers;
+    #renderLayers;
     #ready; // no setter
     #downscaleFactorX;
     #downscaleFactorY;
@@ -436,6 +457,7 @@ class SdfCanvas {
     #canvasName;
     #canvas;
     #gl;
+    #bitmask;
     #programInfo;
     #buffers;
     #numCommands;
@@ -454,6 +476,15 @@ class SdfCanvas {
     // Getters and Setters
     get canvas() {
         return this.#canvas;
+    }
+
+    get renderLayers() {
+        return this.#renderLayers;
+    }
+
+    set renderLayers(val) {
+        this.#bitmask.updateArray(val);
+        this.#renderLayers = val;
     }
 
     get ready() {
@@ -513,7 +544,8 @@ class SdfCanvas {
             onCompilationComplete = undefined,
         } = options;
 
-        this.renderLayers = renderLayers;
+        this.#renderLayers = renderLayers;
+        this.#bitmask = new BitMask(this.#renderLayers);
         this.#downscaleFactorX = downscaleFactorX;
         this.#downscaleFactorY = downscaleFactorY;
         this.topFace = topFace;
@@ -834,7 +866,7 @@ class SdfCanvas {
         return true;
     }
 
-    #processElement(element, rect, computedStyle, mat, halfWidth, halfHeight, halfDepth, offsetX, offsetY, offsetZ, diffuseColor, specularColor, ambientColor, originalTz) {
+    #processElement(element, rect, computedStyle, mat, halfWidth, halfHeight, halfDepth, extrude, offsetX, offsetY, offsetZ, diffuseColor, specularColor, ambientColor, kd, ks, p, ka, textRects, originalTz) {
         if (!this.#ready) {
             return false;
         }
@@ -858,19 +890,19 @@ class SdfCanvas {
         this.#shadingBuffer[this.#geometryBufferIdx + 0] = diffuseColor.r;
         this.#shadingBuffer[this.#geometryBufferIdx + 1] = diffuseColor.g;
         this.#shadingBuffer[this.#geometryBufferIdx + 2] = diffuseColor.b;
-        this.#shadingBuffer[this.#geometryBufferIdx + 3] = parseFloat(computedStyle.getPropertyValue("--kd")); // diffuse material property
+        this.#shadingBuffer[this.#geometryBufferIdx + 3] = kd; // diffuse material property
 
         this.#shadingBuffer[this.#geometryBufferIdx + 4] = specularColor.r;
         this.#shadingBuffer[this.#geometryBufferIdx + 5] = specularColor.g;
         this.#shadingBuffer[this.#geometryBufferIdx + 6] = specularColor.b;
-        this.#shadingBuffer[this.#geometryBufferIdx + 7] = parseFloat(computedStyle.getPropertyValue("--ks")); // diffuse material property
+        this.#shadingBuffer[this.#geometryBufferIdx + 7] = ks; // specular material property
 
-        this.#shadingBuffer[this.#geometryBufferIdx + 8] = parseFloat(computedStyle.getPropertyValue("--p")); // specular exponent
+        this.#shadingBuffer[this.#geometryBufferIdx + 8] = p; // specular exponent
 
         this.#shadingBuffer[this.#geometryBufferIdx + 12] = ambientColor.r;
         this.#shadingBuffer[this.#geometryBufferIdx + 13] = ambientColor.g;
         this.#shadingBuffer[this.#geometryBufferIdx + 14] = ambientColor.b;
-        this.#shadingBuffer[this.#geometryBufferIdx + 15] = parseFloat(computedStyle.getPropertyValue("--ka")); // diffuse material property
+        this.#shadingBuffer[this.#geometryBufferIdx + 15] = ka; // ambient material property
 
         this.#geometryBufferIdx += 4 * 4;
 
@@ -893,7 +925,7 @@ class SdfCanvas {
                 this.#geometryBuffer[this.#geometryBufferIdx + 0] = halfWidth; // width 
                 this.#geometryBuffer[this.#geometryBufferIdx + 1] = halfHeight; // height 
                 this.#geometryBuffer[this.#geometryBufferIdx + 2] = halfDepth; // depth
-                this.#geometryBuffer[this.#geometryBufferIdx + 3] = parseFloat(computedStyle.getPropertyValue("--extrude")) * oneOverX; // rounding
+                this.#geometryBuffer[this.#geometryBufferIdx + 3] = extrude; // rounding
                 break;
             case SdfCommands.BOX:
                 let w = halfWidth;
@@ -948,13 +980,12 @@ class SdfCanvas {
                 }
 
                 this.#geometryBuffer[this.#geometryBufferIdx + 8] = SdfCanvas.#intToFloatBits(borderType); // border radius
-                this.#geometryBuffer[this.#geometryBufferIdx + 9] = parseFloat(computedStyle.getPropertyValue("--extrude")) * oneOverX; // rounding
+                this.#geometryBuffer[this.#geometryBufferIdx + 9] = extrude; // rounding
                 break;
             case SdfCommands.TEXT:
                 // The text expects an array of letters where the x,y,z position is at the same place as the origin of the letters in "glyph-space"
                 // The scale is how big the texture is in world space (including padding), send inverse scale so that we can multiply by it to get to glyph-space 
-                const rects = element.getWordRects();
-                const letterHeight = element.measureHeight(rects[0][0]) * oneOverX;
+                const letterHeight = element.measureHeight(textRects[0][0]) * oneOverX;
                 const glpyhSpaceScale = letterHeight / SdfCanvas.glyphsUnpaddedHeight; // how much one unit of "glyph-space" is in world-space 
                 this.#geometryBuffer[this.#geometryBufferIdx + 0] = SdfCanvas.#intToFloatBits(element.numLetters); // amount of letters
                 this.#geometryBuffer[this.#geometryBufferIdx + 1] = 1 / (SdfCanvas.glyphsPaddedWidth * glpyhSpaceScale); // inverse letter scale 
@@ -968,7 +999,7 @@ class SdfCanvas {
                 let letterIdx = 0;
                 let globalWordTOffset = 0;
                 textOuterLoop:
-                for (const [currentText, currentRect] of rects) {
+                for (const [currentText, currentRect] of textRects) {
                     // Get the screen/world space X and Y for the word's center
                     const currentOffsetX = (currentRect.left + currentRect.width * 0.5) * oneOverX;
                     const currentOffsetY = (currentRect.top + currentRect.height * 0.5) * oneOverX;
@@ -1013,7 +1044,7 @@ class SdfCanvas {
                             this.#geometryBuffer[savedGeometryBufferIdx + 10] = -wordCenterLocal[1] - letterHeight * 0.5 + SdfCanvas.GLYPHS_PADDING * glpyhSpaceScale; // ty
                             this.#geometryBuffer[savedGeometryBufferIdx + 11] = -wordCenterLocal[2]; // tz
 
-                            this.#geometryBuffer[this.#geometryBufferIdx + 4 + letterIdx * 4 + 0] = parseFloat(computedStyle.getPropertyValue("--extrude")) * oneOverX; // rounding
+                            this.#geometryBuffer[this.#geometryBufferIdx + 4 + letterIdx * 4 + 0] = extrude; // rounding
                             this.#geometryBuffer[this.#geometryBufferIdx + 4 + letterIdx * 4 + 1] = 0; // still unused
                             this.#geometryBuffer[this.#geometryBufferIdx + 4 + letterIdx * 4 + 2] = 0; // still unused
 
@@ -1059,7 +1090,7 @@ class SdfCanvas {
                 }
                 this.#geometryBuffer[this.#geometryBufferIdx + 0] = radius;
                 this.#geometryBuffer[this.#geometryBufferIdx + 1] = height;
-                this.#geometryBuffer[this.#geometryBufferIdx + 2] = parseFloat(computedStyle.getPropertyValue("--extrude")) * oneOverX; // rounding
+                this.#geometryBuffer[this.#geometryBufferIdx + 2] = extrude; // rounding
                 this.#geometryBuffer[this.#geometryBufferIdx + 3] = 0;
                 break;
             case SdfCommands.TRIANGLE:
@@ -1080,15 +1111,15 @@ class SdfCanvas {
                 this.#geometryBuffer[this.#geometryBufferIdx + 4] = cX * oneOverX;
                 this.#geometryBuffer[this.#geometryBufferIdx + 5] = cY * oneOverX;
                 this.#geometryBuffer[this.#geometryBufferIdx + 6] = halfDepth;
-                this.#geometryBuffer[this.#geometryBufferIdx + 7] = parseFloat(computedStyle.getPropertyValue("--extrude")) * oneOverX; // rounding
+                this.#geometryBuffer[this.#geometryBufferIdx + 7] = extrude; // rounding
                 break;
             case SdfCommands.CUSTOM:
-                const elementIdx = Math.max(Math.min(SdfCommands.CUSTOM_START + parseInt(element.dataset.customIndex), this.#lastCustomIdx), SdfCommands.CUSTOM_START);
+                const elementIdx = Math.max(Math.min(SdfCommands.CUSTOM_START + element.customIndex, this.#lastCustomIdx), SdfCommands.CUSTOM_START);
                 this.#commandBuffer[savedCommandBufferIdx] = elementIdx; // clamped to the appropriate range
 
                 this.#geometryBuffer[this.#geometryBufferIdx + 0] = 1 / (parseFloat(computedStyle.getPropertyValue("--scale")) * oneOverX);
                 this.#geometryBuffer[this.#geometryBufferIdx + 1] = halfDepth;
-                this.#geometryBuffer[this.#geometryBufferIdx + 2] = parseFloat(computedStyle.getPropertyValue("--extrude")) * oneOverX; // rounding
+                this.#geometryBuffer[this.#geometryBufferIdx + 2] = extrude; // rounding
                 break;
         }
         this.#geometryBufferIdx += SdfCanvas.#getElementSize(element) * 4;
@@ -1223,8 +1254,7 @@ class SdfCanvas {
     }
 
     #containedInRenderLayers(element) {
-        const elementRenderLayers = element.dataset.renderLayers.split(" ").map((s) => parseInt(s));
-        return this.renderLayers.some(item => elementRenderLayers.includes(item));
+        return (element.bitmask.value & this.#bitmask.value) !== 0;
     }
 
     #resizeCanvasToDisplaySize(targetWidth, targetHeight) {
