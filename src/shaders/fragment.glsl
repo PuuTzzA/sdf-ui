@@ -3,9 +3,9 @@ precision highp float;
 
 #insert DEFINES
 
-#define MAX_NUM_COMMANDS 1024
-#define MAX_SIZE_ELEMENT_BUFFER 1024
-#define MAX_NUM_LIGHTS 128
+#define MAX_NUM_COMMANDS 512
+#define MAX_SIZE_ELEMENT_BUFFER 512
+#define MAX_NUM_LIGHTS 64
 #define VEC4_PER_LIGHT 3
 #define EPSILON 1e-4
 #define MAX_FLOAT 3.402823466e+38f

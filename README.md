@@ -9,6 +9,7 @@ Some of the capabilities are shown [here](https://puutzza.github.io/sdf-ui/).
   - [Table of Contents](#table-of-contents)
   - [Technology](#technology)
   - [SdfCanvas](#sdfcanvas)
+    - [Example](#example)
     - [Coordinate System and Camera](#coordinate-system-and-camera)
     - [Usage](#usage)
     - [Public Members and Functions](#public-members-and-functions)
@@ -35,6 +36,9 @@ SdfUi uses only HTML, CSS, JavaScript, and WebGL to create and render the scene.
 ## SdfCanvas
 `SdfCanvas` is the central class of this framework that controls most of the functionality.
 
+### Example 
+To see how this framework can be used, look [here](./example/sdf.js) under the sections **Sdf Canvas** and **Loop**.
+
 ### Coordinate System and Camera
 Each `SdfCanvas` is bound to a [canvas](https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API). The origin of the created space is at the top left. The x-axis increases to the left, the y-axis to the bottom, and the z-axis towards the user (out of the screen). 
 
@@ -58,7 +62,6 @@ const options = {
     renderLayers: [0],                // Which layers are rendered by this canvas (see section Render Layers)
     downscaleFactorX: 2,              // Factor to downscale the horizontal resolution
     downscaleFactorY: 2,              // Factor to downscale the vertical resolution
-    topFace: false,                   // Controls if the --z value of the elements is the depth of the top face or the center of the object
     cameraZ: 10,                      // Controls the z-coordinate of the camera
     useAA: false,                     // Enables Anti-Aliasing
     twoDMode: false,                  // Enables the 2D mode
@@ -82,11 +85,23 @@ static layers = [
 ]
 
 /**
+ * Controls if the --z value of the elements is the depth of the top face or 
+ * the center of the object.
+ */
+static topFace = false;
+
+/**
 * Performs the passed function for every tracked element.
 * Usefull for e.g. adding or removing css classes.
 * @param {Function} f - The callback function to execute for each element.
 */
 static performForEachElement(f);
+
+/**
+ * Updates the buffers (geometry, light) of all instanciated canvasses 
+ * to make them ready for drawing.
+ */
+static update()
 
 /**
  * Boolean to check if the canvas is ready (e.g., compilation complete).
@@ -95,7 +110,9 @@ get ready();
 
 /**
  * Initializes WebGL.
- * @param {number} compilePolicy - If compilation should continue even if background compilation is not available. Should be SdfCanvas.COMPILE_POLICY_ONLY_PARALLEL or SdfCanvas.COMPILE_POLICY_ALSO_BLOCKING
+ * @param {number} compilePolicy - If compilation should continue even if background
+ * compilation is not available. Should be SdfCanvas.COMPILE_POLICY_ONLY_PARALLEL 
+ * or SdfCanvas.COMPILE_POLICY_ALSO_BLOCKING
  * @returns {Promise<boolean>} Boolean if compilation was successful.
  */
 async initWebgl(compilePolicy = SdfCanvas.COMPILE_POLICY_ALSO_BLOCKING);
@@ -103,12 +120,14 @@ async initWebgl(compilePolicy = SdfCanvas.COMPILE_POLICY_ALSO_BLOCKING);
 /**
  * Renders the WebGL scene.
  * If a scissor bounding box is provided, the WebGL scissor test is enabled, 
- * restricting fragment shader execution and clearing operations to that specific 
+ * restricting fragment shader execution and clearing operations to 
+ * that specific 
  * rectangular area. The scissor coordinates are expected to be in standard DOM 
  * space (top-down Y axis) and are automatically mapped to WebGL buffer space.
  *  
  * @param {{x: number, y: number, w: number, h: number} | null} [scissor=null] - The bounding box for the scissor test.
- * For this function to work correctly, if `scissor` is not null, it MUST be an object containing the following numeric properties:
+ * For this function to work correctly, if `scissor` is not null, 
+ * it MUST be an object containing the following numeric properties:
  * - `x`: The X coordinate of the top-left corner in DOM pixels.
  * - `y`: The Y coordinate of the top-left corner in DOM pixels.
  * - `w`: The width of the scissor box in DOM pixels.

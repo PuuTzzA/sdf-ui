@@ -8,9 +8,9 @@ class SdfCanvas {
     // ╔══════════════════════════════════════════════════════════╗
     // ║                       Constants                          ║
     // ╚══════════════════════════════════════════════════════════╝
-    static MAX_NUM_COMMANDS = 1024; // maximum number of commands per canvas
-    static MAX_SIZE_ELEMENT_BUFFER = 1024; // number of vec4 in the buffer
-    static MAX_NUM_LIGHTS = 128; // maximum number of lights per canvas 
+    static MAX_NUM_COMMANDS = 512; // maximum number of commands per canvas
+    static MAX_SIZE_ELEMENT_BUFFER = 512; // number of vec4 in the buffer
+    static MAX_NUM_LIGHTS = 64; // maximum number of lights per canvas 
 
     static VEC4_PER_LIGHT = 3; // amount of vec4 used for each light
 
@@ -28,7 +28,7 @@ class SdfCanvas {
     static GLYPH_TEXTURE_RESOLUTION = 1028; // Resolution along the longer axis
     static NUM_GLYPHS_BUFFERED = 36;
     static GLYPHS_MAX_BOUNDING_BOX = [[-45, -200], [135, 700]]; // box which ALL glyphs fall into in the format [[left, bot], [right, top]]
-    static GLYPHS_PADDING = 200; // padding that is applied to all sides of the max bounding box
+    static GLYPHS_PADDING = 400; // padding that is applied to all sides of the max bounding box
 
     static glyphsUnpaddedHeight = this.GLYPHS_MAX_BOUNDING_BOX[1][1] - this.GLYPHS_MAX_BOUNDING_BOX[0][1];
     static glyphsUnpaddedWidth = this.GLYPHS_MAX_BOUNDING_BOX[1][0] - this.GLYPHS_MAX_BOUNDING_BOX[0][0];
@@ -116,6 +116,9 @@ class SdfCanvas {
     // ╚══════════════════════════════════════════════════════════╝
     static customElements = [];
 
+    /**
+    * Updates the buffers (geometry, light) of all instanciated canvasses to make them ready for drawing.
+    */
     static topFace = false;
 
     static #instantiatedCanvases = [];
@@ -148,7 +151,6 @@ class SdfCanvas {
     static addTrackedElement(element) {
         this.#trackedElements.push(element);
         this.#trackedElements.sort((a, b) => (a.layerIndex - b.layerIndex));
-        this.#updateLayers();
     }
 
     static removeTrackedElement(element) {
@@ -188,6 +190,9 @@ class SdfCanvas {
         })
     }
 
+    /**
+     * Updates the buffers (geometry, light) of all instanciated canvasses to make them ready for drawing.
+     */
     static update() {
         this.#instantiatedCanvases.forEach(canvas => {
             canvas.#startUpdate();
@@ -370,12 +375,17 @@ class SdfCanvas {
                 currentNum++;
             } else {
                 this.#layers[currentIdx].elementsInLayer = currentNum;
+                const newLayerIdx = parseInt(e.layerIndex);
 
-                for (let i = currentIdx + 1; i < parseInt(e.layerIndex); i++) {
+                if (newLayerIdx >= this.#layers.length) {
+                    return;
+                }
+
+                for (let i = currentIdx + 1; i < newLayerIdx; i++) {
                     this.#layers[i].elementsInLayer = 0;
                 }
 
-                currentIdx = parseInt(e.layerIndex);
+                currentIdx = newLayerIdx;
                 currentNum = 1;
             }
         });
@@ -1041,7 +1051,7 @@ class SdfCanvas {
                         if (letterIdx == 0) {
                             // the first letter is the reference point and for all the other letters an offset to the first one is stored
                             this.#geometryBuffer[savedGeometryBufferIdx + 9] = -wordCenterLocal[0] - (wordLeftEdgeLocalX + currentSubstringWidth);; // tx, column 4 [tx, ty, tz, 1]^T
-                            this.#geometryBuffer[savedGeometryBufferIdx + 10] = -wordCenterLocal[1] - letterHeight * 0.5 + SdfCanvas.GLYPHS_PADDING * glpyhSpaceScale; // ty
+                            this.#geometryBuffer[savedGeometryBufferIdx + 10] = -wordCenterLocal[1] - letterHeight * 0.5 - SdfCanvas.GLYPHS_MAX_BOUNDING_BOX[0][1] * glpyhSpaceScale;// ty
                             this.#geometryBuffer[savedGeometryBufferIdx + 11] = -wordCenterLocal[2]; // tz
 
                             this.#geometryBuffer[this.#geometryBufferIdx + 4 + letterIdx * 4 + 0] = extrude; // rounding
