@@ -62,7 +62,6 @@ class PseudoSdfCanvas {
         this.twoDMode = twoDMode;
         this.customShadeFunction = customShadeFunction;
 
-        console.log(this.#bitmask.value)
         // Initialize JavaScript typed arrays for this specific layer
         this.commandBuffer = new Int32Array(SdfCanvas.MAX_NUM_COMMANDS * 4);
         this.geometryBuffer = new Float32Array(SdfCanvas.MAX_SIZE_ELEMENT_BUFFER * 4);
@@ -179,7 +178,6 @@ class PseudoSdfCanvas {
         // Element specific data
         switch (elementType) {
             case SdfCommands.SPHERE:
-                // console.log("shpere", parseFloat(computedStyle.getPropertyValue("--r")) * oneOverX * 0.5)
                 this.geometryBuffer[this.#geometryBufferIdx + 0] = parseFloat(computedStyle.getPropertyValue("--r")) * oneOverX * 0.5; // radius 
                 break;
             case SdfCommands.BOX_SIMPLE:
@@ -470,7 +468,6 @@ class PseudoSdfCanvas {
     }
 
     endUpdate() {
-        // console.log(this.numCommands, this.numLights)
         this.numCommands = this.#commandBufferIdx / 4;
         this.numLights = this.#lightBufferIdx / (SdfCanvas.VEC4_PER_LIGHT * 4);
     }
