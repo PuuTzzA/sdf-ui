@@ -228,7 +228,7 @@ float opRound(in float primitive, in float rad) {
     return primitive - rad;
 }
 
-vec3 opTwist(vec3 p, vec3 axis, float k, float start, float end) {
+vec3 opTwist(vec3 p, vec3 axis, float k, float start, float end, float startOffset) {
     axis = normalize(axis);
     
     float distAlongAxis = dot(p, axis);
@@ -248,7 +248,7 @@ vec3 opTwist(vec3 p, vec3 axis, float k, float start, float end) {
     float effectiveDist = min(absDist, start) + delta * smoothCap;
     effectiveDist *= sign(distAlongAxis);
 
-    float angle = k * effectiveDist;
+    float angle = startOffset + k * effectiveDist;
 
     float c = cos(angle);
     float s = sin(angle);
@@ -479,7 +479,7 @@ Surface map(vec3 p) {
             else if (command == 202) {
                 vec3 pivot = geometryData[elementIdx].xyz;
                 pos -= pivot;
-                pos = opTwist(pos, geometryData[elementIdx + 1].xyz, geometryData[elementIdx].w, geometryData[elementIdx + 1].w, geometryData[elementIdx + 2].x);
+                pos = opTwist(pos, geometryData[elementIdx + 1].xyz, geometryData[elementIdx].w, geometryData[elementIdx + 1].w, geometryData[elementIdx + 2].x, geometryData[elementIdx + 2].y);
                 pos += pivot;
             }
             continue;

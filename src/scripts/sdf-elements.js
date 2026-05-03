@@ -75,7 +75,6 @@ class ASdfBaseElement extends HTMLElement {
         this.dataset.active = value;
         this.#active = value;
     }
-
 }
 
 // Sdf Elements
@@ -300,7 +299,10 @@ class SdfText extends ASdfGeometryElement {
         let maxRight = -Infinity;
         let maxBottom = -Infinity;
 
-        const letterHeight = this.measureHeight("a");
+        let letterHeight = this.measureHeight("a");
+        const halfXHeight = letterHeight / SdfCanvas.glyphsUnpaddedHeight * SdfCanvas.GLYPHS_X_HEIGH / 2; // how much half of the x-height is in world-space
+        letterHeight = letterHeight / SdfCanvas.glyphsUnpaddedHeight * SdfCanvas.GLYPHS_MAX_BOUNDING_BOX[1][1]; // how much the Cap Height is in world-space 
+
         for (const [word, rect] of wordRects) {
             const measuredWidth = this.measure(word);
 
@@ -321,7 +323,7 @@ class SdfText extends ASdfGeometryElement {
 
         return {
             x: width * 0.5,
-            y: height * 0.5 - letterHeight,
+            y: (height - letterHeight) / 2 - halfXHeight,
         };
     }
 }

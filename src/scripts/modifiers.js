@@ -1,7 +1,11 @@
 import { SdfCommands } from "./sdf-commands.js";
 
 class AModifier {
-    constructor() { }
+    active;
+
+    constructor(active = true) {
+        this.active = active;
+    }
 
     getModifierType() {
         throw "Cannot get modifier type on abstract base class.";
@@ -27,33 +31,25 @@ class Twist extends AModifier {
 
     target;
 
-    constructor(target = null) {
-        super();
+    constructor(target = null, active = true) {
+        super(active);
         this.target = target;
     }
 
     // getters and setters 
-    get amount() {
-        const computedStyle = getComputedStyle(this.target);
+    get computedStyle() {
+        return getComputedStyle(this.target);
+    }
+
+    calculateAmount(computedStyle) {
         const amount = parseFloat(computedStyle.getPropertyValue("--twist-rate"));
         const rootFontSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
-        return 0.5 * Math.PI * amount / rootFontSize;
+        return Math.PI * amount / rootFontSize;
     }
 
-    get axis() {
-        const computedStyle = getComputedStyle(this.target);
+    calculateAxis(computedStyle) {
         const axis = computedStyle.getPropertyValue('--twist-axis');
         return axis.split(' ').map(val => parseFloat(val));
-    }
-
-    get start() {
-        const computedStyle = getComputedStyle(this.target);
-        return parseFloat(computedStyle.getPropertyValue('--twist-start'));
-    }
-
-    get end() {
-        const computedStyle = getComputedStyle(this.target);
-        return parseFloat(computedStyle.getPropertyValue('--twist-end'));
     }
 
     getModifierType() {

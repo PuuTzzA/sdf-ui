@@ -196,7 +196,7 @@ body {
     margin-top: 0rem;
 
     --twist-axis: 0 1 0;
-    --twist-rate: 0.2;
+    --twist-rate: 0.1;
     --twist-start: 5rem;
     --twist-end: 15rem;
 }

@@ -166,9 +166,11 @@ class PseudoSdfCanvas {
         this.#geometryBufferIdx += 4 * 4;
 
         // Add modifiers
-        if (!this.#processModifiers(element, elementType, computedStyle, savedGeometryBufferIdx)) {
-            return false;
-        };
+        if (!this.twoDMode) {
+            if (!this.#processModifiers(element, elementType, computedStyle, savedGeometryBufferIdx)) {
+                return false;
+            };
+        }
 
         const savedCommandBufferIdx = this.#commandBufferIdx;
         if (!this.#addToCommandBufferIfSize(elementType, SdfCanvas.getElementSize(element))) {
@@ -390,6 +392,11 @@ class PseudoSdfCanvas {
         const oneOverX = 1 / window.innerWidth;
         for (let modifierIdx = 0; modifierIdx < modifiers.length; modifierIdx++) {
             const modifier = modifiers[modifierIdx];
+
+            if (!modifier.active) {
+                continue;
+            }
+
             const modifierType = modifier.getModifierType();
 
             if (!this.#addToCommandBufferIfSize(modifierType, modifier.getModifierSize())) {
@@ -422,17 +429,21 @@ class PseudoSdfCanvas {
 
             switch (modifierType) {
                 case SdfCommands.TWIST:
+                    const computedStyle = modifier.computedStyle;
+
                     this.geometryBuffer[this.#geometryBufferIdx + 0] = targetOffsetX; // ofset
                     this.geometryBuffer[this.#geometryBufferIdx + 1] = targetOffsetY; // ofset
                     this.geometryBuffer[this.#geometryBufferIdx + 2] = targetOffsetZ; // ofset
-                    this.geometryBuffer[this.#geometryBufferIdx + 3] = modifier.amount / oneOverX; // amount
+                    this.geometryBuffer[this.#geometryBufferIdx + 3] = modifier.calculateAmount(computedStyle) / oneOverX; // amount
 
-                    this.geometryBuffer[this.#geometryBufferIdx + 4] = modifier.axis[0]; // axis
-                    this.geometryBuffer[this.#geometryBufferIdx + 5] = modifier.axis[1]; // axis
-                    this.geometryBuffer[this.#geometryBufferIdx + 6] = modifier.axis[2]; // axis
-                    this.geometryBuffer[this.#geometryBufferIdx + 7] = modifier.start * oneOverX; // start
+                    const axis = modifier.calculateAxis(computedStyle);
+                    this.geometryBuffer[this.#geometryBufferIdx + 4] = axis[0]; // axis
+                    this.geometryBuffer[this.#geometryBufferIdx + 5] = axis[1]; // axis
+                    this.geometryBuffer[this.#geometryBufferIdx + 6] = axis[2]; // axis
+                    this.geometryBuffer[this.#geometryBufferIdx + 7] = parseFloat(computedStyle.getPropertyValue('--twist-start')) * oneOverX; // start
 
-                    this.geometryBuffer[this.#geometryBufferIdx + 8] = modifier.end * oneOverX; // end
+                    this.geometryBuffer[this.#geometryBufferIdx + 8] = parseFloat(computedStyle.getPropertyValue('--twist-end')) * oneOverX; // end
+                    this.geometryBuffer[this.#geometryBufferIdx + 9] = parseFloat(computedStyle.getPropertyValue('--twist-start-offset')) * Math.PI / 180; // start offset
                     break;
             }
 

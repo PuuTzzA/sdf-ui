@@ -377,7 +377,7 @@ Most of the properties (both of geometry and shading) of the SDF elements are co
 
 >[!NOTE]
 >All the custom CSS values have `inherit: false`. 
->To animate the custom properties you have to explicitly use `transition: --property 0.1s;` (`transition: all 0.1s;` does not work).
+>To animate the custom properties you have to explicitly use `transition: --property 0.1s;` (`transition: all 0.1s;` does not work). Also consider that `transition` calls do *not* merge, i.e. the last `transition` overwrites the ones before, even if they are for different properties. You can combine them like so: `transition: --z 4s ease, --diffuse-color 3 ease;`
 
 ## Supported Elements
 
@@ -507,23 +507,35 @@ Lights are controlled similar to elements (they also support the `data-render-la
 | `--radius`          | Represents the radius of the light for point lights. Things further away than this are not illuminated by this light.      |
 
 ## Modifiers
-You can add modifiers to SDF elements to alter their appearance. As of now, there is only one supported modifier. You can add modifiers to elements like so:
+You can add modifiers to SDF elements to alter their appearance. As of now, there is only one supported modifier. Modifiers are only active if `twoDMode == false`. You can add modifiers to elements like so:
 
 ```js
 const sdfElement = document.querySelector("#element-name");
 const target = document.querySelector("#target");
-sdfElement.addModifier(new Twist(target));
+const modifier = new Twist(target);
+sdfElement.addModifier(modifier);
+
+// To remove call:
+sdfElement.removeModifier(modifier);
+```
+
+Modifiers also have an `active` property to turn them on and off. You can set it by passing a variable in the constructor or by just accessing the member-variable. The default value is `true`.
+
+```js
+const modifier = new Twist(target, false);
+modifier.active = true;
 ```
 
 ### Twist
 Add a twist to the selected element. The twist is controlled by a **target** element, which is an HTML element passed into the constructor. This target element expects the following CSS properties:
 
-| CSS Property    | Description                                                                                                                           |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `--twist-axis`  | 3D vector that controls the axis around which the twist is applied (e.g., `--twist-axis: 0 1 0;`).                                    |
-| `--twist-rate`  | The twist rate. Measured in revolutions per `rem`. A rate of `0.1` means a `10rem` element twists exactly once around `--twist-axis`. |
-| `--twist-start` | The distance along the twist axis up to which the twist is applied normally. From here to `--twist-end`, the twist tapers off.        |
-| `--twist-end`   | The distance where the twist tapers off and stops entirely.                                                                           |
+| CSS Property           | Description                                                                                                                           |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `--twist-axis`         | 3D vector that controls the axis around which the twist is applied (e.g., `--twist-axis: 0 1 0;`).                                    |
+| `--twist-rate`         | The twist rate. Measured in revolutions per `rem`. A rate of `0.1` means a `10rem` element twists exactly once around `--twist-axis`. |
+| `--twist-start`        | The distance along the twist axis up to which the twist is applied normally. From here to `--twist-end`, the twist tapers off.        |
+| `--twist-end`          | The distance where the twist tapers off and stops entirely.                                                                           |
+| `--twist-start-offset` | The angle at the origin (the position of the target). Measured in `degrees`.                                                          |
 
 ## Shading
 

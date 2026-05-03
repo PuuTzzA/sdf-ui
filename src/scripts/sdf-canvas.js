@@ -28,6 +28,7 @@ class SdfCanvas {
     static GLYPH_TEXTURE_RESOLUTION = 1028; // Resolution along the longer axis
     static NUM_GLYPHS_BUFFERED = 36;
     static GLYPHS_MAX_BOUNDING_BOX = [[-45, -200], [135, 700]]; // box which ALL glyphs fall into in the format [[left, bot], [right, top]]
+    static GLYPHS_X_HEIGH = 500; // needed for the twist offset (see getOffsetToCenter)
     static GLYPHS_PADDING = 400; // padding that is applied to all sides of the max bounding box
 
     static glyphsUnpaddedHeight = this.GLYPHS_MAX_BOUNDING_BOX[1][1] - this.GLYPHS_MAX_BOUNDING_BOX[0][1];
