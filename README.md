@@ -299,11 +299,12 @@ uniform int uNumLights; // number of lights in the array
 
 // You can get the values of individual lights like so:
 int   lightIdx   = 0;
-vec3  lightPos   = lightData[lightIdx].xyz; // this stores the light direction if the light is a directional light
-vec3  lightColor = unpackColor(lightData[lightIdx].w);
-float intensity  = lightData[lightIdx + 1].x;
-float radius     = lightData[lightIdx + 1].y;
-float lightType  = lightData[lightIdx + 1].z; // 0 for point light, 1 for directional light
+
+vec3 lightPos   = lightData[dataIdx].xyz; // this stores the light direction if the light is a directional light
+vec3 lightColor = lightData[dataIdx + 1].xyz;
+float intensity = lightData[dataIdx + 2].x;
+float radius    = lightData[dataIdx + 2].y;
+float lightType = lightData[dataIdx + 2].z; // 0 for point light, 1 for directional light
 ```
 * **customElements:** You can define custom elements by setting the **static** `customElements` member variable of the `SdfCanvas` object. This is an array of arrays of 2D points that define the vertices of custom elements in object space. See below how to use the custom elements.
 ```js
