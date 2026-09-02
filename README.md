@@ -160,6 +160,11 @@ async initWebgl(compilePolicy = SdfCanvas.COMPILE_POLICY_ALSO_BLOCKING);
 draw(scissor = null);
 
 /**
+ * Clears the canvas. 
+ */
+clear();
+
+/**
  * @param {boolean} background - (default = false) Specifies if to apply it to the foreground or background canvas.
  */
 getDownscaleFactorX(background = false);
