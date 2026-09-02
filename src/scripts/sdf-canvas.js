@@ -962,6 +962,17 @@ class SdfCanvas {
         }
     }
 
+    clear() {
+        if (!this.#ready) return;
+        const gl = this.#gl;
+
+        gl.disable(gl.SCISSOR_TEST);
+        gl.enable(gl.DEPTH_TEST);
+        gl.depthFunc(gl.LEQUAL);
+        gl.clearColor(0.0, 0.0, 0.0, 1.0);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    }
+
     #drawLayer(layer) {
         const gl = this.#gl;
         const progInfo = layer.programInfo;
