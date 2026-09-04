@@ -115,7 +115,19 @@ static layers = [
 static topFace = false;
 
 /**
-* Performs the passed function for every tracked element.
+ * Adds an html element which is not a sdf-element to a tracked-non-sdf-elements set. 
+ * The elements in this set are not used except in the performForEachElement function.
+ */
+static addTrackedNonSdfElement(element);
+
+/**
+ * Removes an element from the tracked-non-sdf-elements set.
+ */
+static removeTrackedNonSdfElement(element); 
+
+/**
+* Performs the passed function for every tracked sdf element and every element in the 
+* tracked-non-sdf-elements set.
 * Usefull for e.g. adding or removing css classes.
 * @param {Function} f - The callback function to execute for each element.
 */
@@ -125,7 +137,7 @@ static performForEachElement(f);
  * Updates the buffers (geometry, light) of all instanciated canvasses 
  * to make them ready for drawing.
  */
-static update()
+static update();
 
 /**
  * Boolean to check if the canvas is ready (e.g., compilation complete).

@@ -126,6 +126,8 @@ class SdfCanvas {
 
     static #trackedElements = [];
 
+    static #trackedNonSdfElements = new Set();
+
     static #trackedLights = [];
 
     static #layers = [
@@ -168,6 +170,21 @@ class SdfCanvas {
         this.#updateLayers();
     }
 
+    /**
+    * Adds an html element which is not a sdf-element to a tracked-non-sdf-elements set. 
+    * The elements in this set are not used except in the performForEachElement function.
+    */
+    static addTrackedNonSdfElement(element) {
+        this.#trackedNonSdfElements.add(element);
+    }
+
+    /**
+    * Removes an element from the tracked-non-sdf-elements set.
+    */
+    static removeTrackedNonSdfElement(element) {
+        this.#trackedNonSdfElements.delete(element);
+    }
+
     static addTrackedLight(light) {
         this.#trackedLights.push(light);
     }
@@ -181,7 +198,8 @@ class SdfCanvas {
     }
 
     /**
-    * Performs the passed function for every tracked element.
+    * Performs the passed function for every tracked sdf element and every element in the 
+    * tracked-non-sdf-elements set.
     * Usefull for e.g. adding or removing css classes.
     * @param {Function} f - The callback function to execute for each element.
     */
@@ -189,6 +207,10 @@ class SdfCanvas {
         this.#trackedElements.forEach((e) => {
             f(e);
         })
+
+        for (const item of this.#trackedNonSdfElements) {
+            f(item);
+        }
     }
 
     /**
