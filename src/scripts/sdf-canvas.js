@@ -154,6 +154,7 @@ class SdfCanvas {
     static addTrackedElement(element) {
         this.#trackedElements.push(element);
         this.#trackedElements.sort((a, b) => (a.layerIndex - b.layerIndex));
+        this.#updateLayers();
     }
 
     static removeTrackedElement(element) {
